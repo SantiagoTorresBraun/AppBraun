@@ -1,0 +1,606 @@
+/* VARIABLES DE COLOR OFICIALES DE BRAUN */
+:root {
+    --color-primary: #b71c1c;      /* Rojo Braun */
+    --color-primary-dark: #800000; /* Rojo Oscuro */
+    --color-bg-light: #f5f5f7;     /* Fondo gris claro AppSheet */
+    --color-card-bg: #ffffff;      /* Blanco para tarjetas */
+    --color-text-dark: #333333;    /* Texto principal */
+    --color-text-muted: #666666;   /* Texto secundario */
+    --color-border: #e0e0e0;       /* Bordes de tablas y campos */
+    --color-success: #2e7d32;      /* Aceptado (Verde) */
+    --color-warning: #ef6c00;      /* Observado (Naranja) */
+    --color-danger: #c62828;       /* Rechazado (Rojo) */
+}
+
+/* REGLAS GENERALES Y RESPONSIVE */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+
+body {
+    background-color: var(--color-bg-light);
+    color: var(--color-text-dark);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* BARRA SUPERIOR (HEADER) */
+header {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+
+#status-badge {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+#status-badge.online { background-color: var(--color-success); }
+#status-badge.offline { background-color: var(--color-warning); }
+
+
+/* 1. PANTALLA DE LOGIN CON FONDO ESTILO BIENVENIDA BRAUN */
+#view-login {
+    background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), 
+                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+    background-size: cover;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 5px solid var(--color-primary);
+    padding: 40px 30px;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+.login-logo h2 {
+    color: var(--color-text-dark);
+    font-size: 1.8rem;
+    margin-top: 10px;
+    margin-bottom: 30px;
+    font-weight: 400;
+}
+
+
+/* 2. MENÚ PRINCIPAL EN CUADRÍCULA (GRID) - IGUAL A TU CAPTURA */
+.welcome-text {
+    font-size: 1.3rem;
+    margin-bottom: 25px;
+    color: var(--color-text-dark);
+    font-weight: 500;
+}
+
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.menu-item {
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 30px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-height: 180px;
+}
+
+.menu-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    border-color: var(--color-primary);
+}
+
+.menu-icon {
+    font-size: 3.5rem;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Colores personalizados de iconos basados en tus capturas */
+.menu-item span {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-text-dark);
+}
+
+.menu-item small {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+}
+
+.menu-item.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.menu-item.disabled:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: var(--color-border);
+}
+
+/* Colores para iconos */
+.bg-red { color: #e65100; } /* Camión Carga Naranja */
+.bg-orange { color: #ef6c00; }
+.bg-darkred { color: #b71c1c; }
+.bg-gray { color: #9e9e9e; }
+
+
+/* 3. SELECTOR DE PESTAÑAS (NUEVO / HISTORIAL) */
+.tab-bar {
+    display: flex;
+    background-color: white;
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 54px;
+    z-index: 90;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 15px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+
+/* 4. ELEMENTOS DE FORMULARIO ESTILO APPSHEET */
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group input[type="date"],
+.form-group input[type="number"],
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: white;
+    outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(183, 28, 28, 0.1);
+}
+
+.form-group-row {
+    display: flex;
+    gap: 15px;
+}
+.form-group-row .form-group {
+    flex: 1;
+}
+
+
+/* SECCIÓN DE CHECKLISTS E INTERRUPTORES SI/NO */
+h3 {
+    margin: 25px 0 15px 0;
+    font-size: 1.1rem;
+    color: var(--color-primary);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 5px;
+}
+
+.checklist-item {
+    background: white;
+    padding: 12px 15px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.checklist-item p {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Selectores de Botón Alternador SI / NO */
+.si-no-toggle, .status-selector {
+    display: flex;
+    background: #eee;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.si-no-toggle input, .status-selector input {
+    display: none;
+}
+
+.si-no-toggle label, .status-selector label {
+    padding: 8px 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.85rem;
+    border-radius: 3px;
+    color: var(--color-text-muted);
+}
+
+.si-no-toggle input:checked + label,
+.status-selector input:checked + label {
+    background: white;
+    color: var(--color-primary);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+
+/* FILTROS Y TABLA DE HISTORIAL (OPTIMIZADO PARA PC) */
+.filter-card {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.filter-card h4 {
+    margin-bottom: 12px;
+    color: var(--color-text-muted);
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.filter-grid input, .filter-grid select {
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    width: 100%;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.95rem;
+}
+
+.data-table th {
+    background-color: #f8f9fa;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    padding: 14px 16px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.data-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-dark);
+}
+
+.data-table tr:hover {
+    background-color: #fdfdfd;
+}
+
+/* ETIQUETAS DE ESTADO */
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+.badge.aceptado { background-color: #e8f5e9; color: var(--color-success); }
+.badge.observado { background-color: #fff3e0; color: var(--color-warning); }
+.badge.rechazado { background-color: #ffebee; color: var(--color-danger); }
+
+
+/* BOTONES GENERALES */
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+    padding: 14px;
+    width: 100%;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: var(--color-primary-dark);
+}
+
+.btn-logout {
+    background: none;
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 40px;
+    display: inline-block;
+}
+
+.btn-table-action {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 5px;
+}
+
+/* CAJA DE FOTOS */
+.photo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.photo-box {
+    background: white;
+    border: 1px dashed var(--color-border);
+    padding: 15px;
+    text-align: center;
+    border-radius: 4px;
+}
+
+.photo-box input { display: none; }
+.photo-box label {
+    display: block;
+    cursor: pointer;
+    color: var(--color-primary);
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.preview {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-top: 5px;
+}
+/* ESTILOS DE ADICIÓN DINÁMICA DE PRODUCTOS Y CONTRATOS */
+.section-dynamic-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 25px;
+    margin-bottom: 10px;
+}
+
+.btn-secondary-add {
+    background-color: #f5f5f7;
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+.btn-secondary-add:hover {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.dynamic-item-card {
+    background: #fafafa;
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-primary);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.dynamic-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 12px;
+    border-bottom: 1px dashed var(--color-border);
+    padding-bottom: 4px;
+}
+
+.btn-remove-item {
+    background: none;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.signature-pad {
+    width: 100%;
+    height: 150px;
+    background-color: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    margin-top: 5px;
+    touch-action: none; /* Crucial para bloquear el scroll del celular al firmar */
+}
+
+.btn-clear {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    margin-top: 4px;
+    text-decoration: underline;
+}
+
+/* CAMPOS TIPO ENUM (SELECT) CON BOTONES DE AGREGAR / QUITAR OPCIÓN */
+.enum-row {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.enum-row select.enum-select {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: white;
+    outline: none;
+}
+
+.enum-row select.enum-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(183, 28, 28, 0.1);
+}
+
+.btn-enum-add, .btn-enum-remove {
+    width: 40px;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: #f5f5f7;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+.btn-enum-add {
+    color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.btn-enum-remove {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+/* CAMPOS CALCULADOS (SOLO LECTURA) DENTRO DE LAS TARJETAS DINÁMICAS */
+.campo-calculado {
+    background-color: #f0f0f0 !important;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    cursor: not-allowed;
+}
+
+.archivo-preview {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+}
+
+/* BOTÓN DE ACTUALIZAR EN EL HEADER (SIEMPRE VISIBLE) */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#btn-refrescar {
+    font-size: 1.05rem;
+}
+
+/* BADGE DE REGISTROS TODAVÍA NO SINCRONIZADOS CON EL SERVIDOR */
+.badge-pendiente {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-warning);
+    background-color: #fff3e0;
+    padding: 2px 6px;
+    border-radius: 3px;
+}

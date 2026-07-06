@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Braun - Sistema de Control</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+    <header id="main-header" class="hidden">
+        <button id="btn-back" class="nav-btn"><i class="fas fa-arrow-left"></i></button>
+        <h1 id="header-title">Braun</h1>
+        <div class="header-actions">
+            <button id="btn-refrescar" class="nav-btn" title="Actualizar datos"><i class="fas fa-sync-alt"></i></button>
+            <span id="status-badge" class="online">Online</span>
+        </div>
+    </header>
+
+    <section id="view-login" class="view">
+        <div class="login-card">
+            <div class="login-logo">
+                <i class="fas fa-seedling" style="font-size: 3rem; color: #b71c1c;"></i>
+                <h2>Braun Agro</h2>
+            </div>
+            <form id="form-login">
+                <div class="form-group">
+                    <label><i class="fas fa-envelope"></i> Correo Electrónico</label>
+                    <input type="email" id="login-email" placeholder="operario@braun.com" required>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> Contraseña</label>
+                    <input type="password" id="login-password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-primary">Iniciar Sesión</button>
+            </form>
+        </div>
+    </section>
+
+    <section id="view-menu-principal" class="view hidden">
+        <div class="container">
+            <h2 class="welcome-text">¡Hola! Selecciona un módulo</h2>
+            <div class="menu-grid">
+                <div class="menu-item" onclick="cambiarVista('view-submenu-carga')">
+                    <div class="menu-icon bg-red"><i class="fas fa-truck-ramp-box"></i></div>
+                    <span>Control de Carga</span>
+                </div>
+                <div class="menu-item disabled">
+                    <div class="menu-icon bg-gray"><i class="fas fa-vial"></i></div>
+                    <span>Control de Calidad<br><small>(Próximamente)</small></span>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="cerrarSesion()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+        </div>
+    </section>
+
+    <section id="view-submenu-carga" class="view hidden">
+        <div class="container">
+            <h3>Módulos de Carga</h3>
+            <div class="menu-grid">
+                <div class="menu-item" onclick="abrirModuloCarga('PT')">
+                    <div class="menu-icon bg-darkred"><i class="fas fa-box-open"></i></div>
+                    <span>Producto Terminado (PT)</span>
+                </div>
+                <div class="menu-item disabled">
+                    <div class="menu-icon bg-gray"><i class="fas fa-leaf"></i></div>
+                    <span>Materia Prima (MP)<br><small>(Próximamente)</small></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="view-modulo-carga" class="view hidden">
+        <div class="tab-bar">
+            <button id="tab-btn-nuevo" class="tab-btn active" onclick="switchTab('nuevo')"><i class="fas fa-plus"></i> Nuevo Registro</button>
+            <button id="tab-btn-historial" class="tab-btn" onclick="switchTab('historial')"><i class="fas fa-history"></i> Historial / Buscar</button>
+        </div>
+
+        <div class="container">
+            
+            <div id="tab-content-nuevo" class="tab-content">
+                <form id="form-carga">
+
+                    <h3>Datos Generales (<span id="lbl-tipo-carga-actual">PT</span>)</h3>
+                    <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
+
+                    <div class="section-dynamic-header">
+                        <h3>Cargar de Mercadería</h3>
+                        <button type="button" class="btn-secondary-add" onclick="agregarFilaProducto()"><i class="fas fa-plus"></i> Añadir Producto</button>
+                    </div>
+                    <div id="wrapper-productos-dinamicos"></div>
+
+                    <div class="form-group"><label for="chofer">Nombre y Apellido del chofer</label><input type="text" id="chofer" required></div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="patente-chasis">Patente Chasis</label><input type="text" id="patente-chasis" required></div>
+                        <div class="form-group"><label for="patente-acoplado">Patente Acoplado</label><input type="text" id="patente-acoplado"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Firma Chofer</label>
+                        <canvas id="canvas-firma-chofer" class="signature-pad"></canvas>
+                        <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-chofer')">Limpiar Firma</button>
+                    </div>
+
+                    <div class="section-dynamic-header">
+                        <h3>Contrato Comercial</h3>
+                        <button type="button" class="btn-secondary-add" onclick="agregarFilaContrato()"><i class="fas fa-plus"></i> Añadir Contrato</button>
+                    </div>
+                    <div id="wrapper-contratos-dinamicos"></div>
+
+                    <h3>Lista de Verificación</h3>
+                    <div class="checklist-item"><p>¿Aplica etiqueta?</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="etiqueta-si" name="aplica_etiqueta" value="SI" checked><label for="etiqueta-si">SI</label>
+                            <input type="radio" id="etiqueta-no" name="aplica_etiqueta" value="NO"><label for="etiqueta-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Lona cubre y protege la carga</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="lona-si" name="lona_protege" value="SI" checked><label for="lona-si">SI</label>
+                            <input type="radio" id="lona-no" name="lona_protege" value="NO"><label for="lona-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Piso chasis/acoplado libre de suciedad y otros granos</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="piso-si" name="piso_suciedad" value="SI" checked><label for="piso-si">SI</label>
+                            <input type="radio" id="piso-no" name="piso_suciedad" value="NO"><label for="piso-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Piso y paredes chasis / acoplado libre de óxido</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="oxido-si" name="libre_oxido" value="SI" checked><label for="oxido-si">SI</label>
+                            <input type="radio" id="oxido-no" name="libre_oxido" value="NO"><label for="oxido-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Chasis y acoplados secos y exentos de insectos</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="secos-si" name="secos_insectos" value="SI" checked><label for="secos-si">SI</label>
+                            <input type="radio" id="secos-no" name="secos_insectos" value="NO"><label for="secos-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Chasis y acoplados exentos de proliferación de hongos</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="hongos-si" name="exentos_hongos" value="SI" checked><label for="hongos-si">SI</label>
+                            <input type="radio" id="hongos-no" name="exentos_hongos" value="NO"><label for="hongos-no">NO</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Se instaló aislante en el piso para proteger la carga</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="aislante-si" name="aislante_piso" value="SI" checked><label for="aislante-si">SI</label>
+                            <input type="radio" id="aislante-no" name="aislante_piso" value="NO"><label for="aislante-no">NO</label>
+                        </div>
+                    </div>
+
+                    <h3>Control Operativo</h3>
+                    <div class="form-group">
+                        <label>ESTATUS</label>
+                        <div class="status-selector">
+                            <input type="radio" id="st-aceptado" name="estatus" value="ACEPTADO" checked><label for="st-aceptado">ACEPTADO</label>
+                            <input type="radio" id="st-observado" name="estatus" value="OBSERVADO"><label for="st-observado">OBSERVADO</label>
+                            <input type="radio" id="st-rechazado" name="estatus" value="RECHAZADO"><label for="st-rechazado">RECHAZADO</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Firma Control</label>
+                        <canvas id="canvas-firma-control" class="signature-pad"></canvas>
+                        <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-control')">Limpiar Firma</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="elaboro">Elaboró</label>
+                        <div class="enum-row">
+                            <select id="elaboro" class="enum-select" data-enum="elaboro" required></select>
+                            <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                            <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group"><label for="indicaciones">Indicaciones para la Descarga</label><input type="text" id="indicaciones"></div>
+                    <div class="form-group"><label for="kg-cargados">Total Kg Cargados</label><input type="number" id="kg-cargados" value="0"></div>
+
+                    <h3>Registro Fotográfico (Obligatorio 8 fotos)</h3>
+                    <div class="photo-grid">
+                        <div class="photo-box"><label for="f-frente">1. Frente</label><input type="file" id="f-frente" accept="image/*" capture="environment"><div class="preview" id="p-frente">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-culo">2. Culo</label><input type="file" id="f-culo" accept="image/*" capture="environment"><div class="preview" id="p-culo">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-int-chasis">3. Int. Chasis</label><input type="file" id="f-int-chasis" accept="image/*" capture="environment"><div class="preview" id="p-int-chasis">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-int-acop">4. Int. Acoplado</label><input type="file" id="f-int-acop" accept="image/*" capture="environment"><div class="preview" id="p-int-acop">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-proceso">5. Proceso Carga</label><input type="file" id="f-proceso" accept="image/*" capture="environment"><div class="preview" id="p-proceso">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-etiqueta">6. Etiqueta Bolsa</label><input type="file" id="f-etiqueta" accept="image/*" capture="environment"><div class="preview" id="p-etiqueta">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-cargado">7. Camión Cargado</label><input type="file" id="f-cargado" accept="image/*" capture="environment"><div class="preview" id="p-cargado">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="f-balanza">8. Ticket Balanza</label><input type="file" id="f-balanza" accept="image/*" capture="environment"><div class="preview" id="p-balanza">📸 Sin foto</div></div>
+                    </div>
+
+                    <h3>Envío por Correo</h3>
+                    <div class="form-group"><label for="correo-envio">Correo</label><input type="email" id="correo-envio" placeholder="destinatario@ejemplo.com"></div>
+                    <div class="form-group"><label for="estado-correo">Estado_Correo</label><input type="text" id="estado-correo" readonly value="Sin enviar"></div>
+                    <button type="button" class="btn-secondary-add" style="width:100%; margin-bottom:20px;" onclick="enviarPorCorreo()"><i class="fas fa-paper-plane"></i> Enviar por Correo</button>
+
+                    <div id="offline-records" class="hidden">
+                        <ul id="records-list"></ul>
+                    </div>
+
+                    <button type="submit" id="btn-guardar-control" class="btn-primary" style="margin-top:20px;">Guardar Control Completo</button>
+                    <button type="button" id="btn-cancelar-edicion" class="btn-logout hidden" style="width:100%; margin-top:10px; margin-bottom:50px;" onclick="cancelarEdicion()">Cancelar Edición</button>
+                </form>
+            </div>
+
+            <div id="tab-content-historial" class="tab-content hidden">
+                <div class="filter-card">
+                    <h4><i class="fas fa-filter"></i> Filtros de Búsqueda</h4>
+                    <div class="filter-grid">
+                        <input type="text" id="filter-search" placeholder="Buscar por producto o contrato...">
+                        <input type="date" id="filter-fecha">
+                        <select id="filter-status">
+                            <option value="">-- Todos los Estados --</option>
+                            <option value="ACEPTADO">ACEPTADO</option>
+                            <option value="OBSERVADO">OBSERVADO</option>
+                            <option value="RECHAZADO">RECHAZADO</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Producto/s</th>
+                                <th>Contrato/s Comercial</th>
+                                <th>Estatus</th>
+                                <th>Kg</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial-body">
+                            <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <script src="app.js"></script>
+</body>
+</html>
