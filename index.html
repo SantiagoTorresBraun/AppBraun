@@ -11,7 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-
+ 
     <header id="main-header" class="hidden">
         <button id="btn-back" class="nav-btn"><i class="fas fa-arrow-left"></i></button>
         <h1 id="header-title">Braun</h1>
@@ -20,11 +20,11 @@
             <span id="status-badge" class="online">Online</span>
         </div>
     </header>
-
+ 
     <section id="view-login" class="view">
         <div class="login-card">
             <div class="login-logo">
-                <img src="https://lh3.googleusercontent.com/d/12r4nI8d7ES0t_9nTzqZfKBwND7Wc-Pu2" alt="Logo Braun" class="app-login-logo">
+                <img src="logo-braun.png" alt="Logo Braun" class="app-login-logo">
             </div>
             <form id="form-login">
                 <div class="form-group">
@@ -39,7 +39,7 @@
             </form>
         </div>
     </section>
-
+ 
     <section id="view-menu-principal" class="view hidden">
         <div class="container">
             <h2 class="welcome-text">¡Hola! Selecciona un módulo</h2>
@@ -56,7 +56,7 @@
             <button class="btn-logout" onclick="cerrarSesion()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
         </div>
     </section>
-
+ 
     <section id="view-submenu-carga" class="view hidden">
         <div class="container">
             <h3>Módulos de Carga</h3>
@@ -72,45 +72,45 @@
             </div>
         </div>
     </section>
-
+ 
     <section id="view-modulo-carga" class="view hidden">
         <div class="tab-bar">
             <button id="tab-btn-nuevo" class="tab-btn active" onclick="switchTab('nuevo')"><i class="fas fa-plus"></i> Nuevo Registro</button>
             <button id="tab-btn-historial" class="tab-btn" onclick="switchTab('historial')"><i class="fas fa-history"></i> Historial / Buscar</button>
         </div>
-
+ 
         <div class="container">
             
             <div id="tab-content-nuevo" class="tab-content">
                 <form id="form-carga">
-
+ 
                     <h3>Datos Generales (<span id="lbl-tipo-carga-actual">PT</span>)</h3>
                     <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
-
+ 
                     <div class="section-dynamic-header">
                         <h3>Cargar de Mercadería</h3>
                         <button type="button" class="btn-secondary-add" onclick="agregarFilaProducto()"><i class="fas fa-plus"></i> Añadir Producto</button>
                     </div>
                     <div id="wrapper-productos-dinamicos"></div>
-
+ 
                     <div class="form-group"><label for="chofer">Nombre y Apellido del chofer</label><input type="text" id="chofer" required></div>
                     <div class="form-group-row">
                         <div class="form-group"><label for="patente-chasis">Patente Chasis</label><input type="text" id="patente-chasis" required></div>
                         <div class="form-group"><label for="patente-acoplado">Patente Acoplado</label><input type="text" id="patente-acoplado"></div>
                     </div>
-
+ 
                     <div class="form-group">
                         <label>Firma Chofer</label>
                         <canvas id="canvas-firma-chofer" class="signature-pad"></canvas>
                         <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-chofer')">Limpiar Firma</button>
                     </div>
-
+ 
                     <div class="section-dynamic-header">
                         <h3>Contrato Comercial</h3>
                         <button type="button" class="btn-secondary-add" onclick="agregarFilaContrato()"><i class="fas fa-plus"></i> Añadir Contrato</button>
                     </div>
                     <div id="wrapper-contratos-dinamicos"></div>
-
+ 
                     <h3>Lista de Verificación</h3>
                     <div class="checklist-item"><p>¿Aplica etiqueta?</p>
                         <div class="si-no-toggle">
@@ -154,7 +154,7 @@
                             <input type="radio" id="aislante-no" name="aislante_piso" value="NO"><label for="aislante-no">NO</label>
                         </div>
                     </div>
-
+ 
                     <h3>Control Operativo</h3>
                     <div class="form-group">
                         <label>ESTATUS</label>
@@ -164,13 +164,13 @@
                             <input type="radio" id="st-rechazado" name="estatus" value="RECHAZADO"><label for="st-rechazado">RECHAZADO</label>
                         </div>
                     </div>
-
+ 
                     <div class="form-group">
                         <label>Firma Control</label>
                         <canvas id="canvas-firma-control" class="signature-pad"></canvas>
                         <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-control')">Limpiar Firma</button>
                     </div>
-
+ 
                     <div class="form-group">
                         <label for="elaboro">Elaboró</label>
                         <div class="enum-row">
@@ -179,10 +179,10 @@
                             <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
                         </div>
                     </div>
-
+ 
                     <div class="form-group"><label for="indicaciones">Indicaciones para la Descarga</label><input type="text" id="indicaciones"></div>
                     <div class="form-group"><label for="kg-cargados">Total Kg Cargados</label><input type="number" id="kg-cargados" value="0"></div>
-
+ 
                     <h3>Registro Fotográfico (Obligatorio 8 fotos)</h3>
                     <div class="photo-grid">
                         <div class="photo-box"><label for="f-frente">1. Frente</label><input type="file" id="f-frente" accept="image/*" capture="environment"><div class="preview" id="p-frente">📸 Sin foto</div></div>
@@ -194,21 +194,21 @@
                         <div class="photo-box"><label for="f-cargado">7. Camión Cargado</label><input type="file" id="f-cargado" accept="image/*" capture="environment"><div class="preview" id="p-cargado">📸 Sin foto</div></div>
                         <div class="photo-box"><label for="f-balanza">8. Ticket Balanza</label><input type="file" id="f-balanza" accept="image/*" capture="environment"><div class="preview" id="p-balanza">📸 Sin foto</div></div>
                     </div>
-
+ 
                     <h3>Envío por Correo</h3>
                     <div class="form-group"><label for="correo-envio">Correo</label><input type="email" id="correo-envio" placeholder="destinatario@ejemplo.com"></div>
                     <div class="form-group"><label for="estado-correo">Estado_Correo</label><input type="text" id="estado-correo" readonly value="Sin enviar"></div>
                     <button type="button" class="btn-secondary-add" style="width:100%; margin-bottom:20px;" onclick="enviarPorCorreo()"><i class="fas fa-paper-plane"></i> Enviar por Correo</button>
-
+ 
                     <div id="offline-records" class="hidden">
                         <ul id="records-list"></ul>
                     </div>
-
+ 
                     <button type="submit" id="btn-guardar-control" class="btn-primary" style="margin-top:20px;">Guardar Control Completo</button>
                     <button type="button" id="btn-cancelar-edicion" class="btn-logout hidden" style="width:100%; margin-top:10px; margin-bottom:50px;" onclick="cancelarEdicion()">Cancelar Edición</button>
                 </form>
             </div>
-
+ 
             <div id="tab-content-historial" class="tab-content hidden">
                 <div class="filter-card">
                     <h4><i class="fas fa-filter"></i> Filtros de Búsqueda</h4>
@@ -223,7 +223,7 @@
                         </select>
                     </div>
                 </div>
-
+ 
                 <div class="table-responsive">
                     <table class="data-table">
                         <thead>
@@ -242,10 +242,10 @@
                     </table>
                 </div>
             </div>
-
+ 
         </div>
     </section>
-
+ 
     <script src="app.js"></script>
 </body>
 </html>
