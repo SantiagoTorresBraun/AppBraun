@@ -16,6 +16,7 @@
         <button id="btn-back" class="nav-btn"><i class="fas fa-arrow-left"></i></button>
         <h1 id="header-title">Braun</h1>
         <div class="header-actions">
+            <button id="btn-ticketera-header" class="nav-btn" title="Abrir Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>
             <button id="btn-refrescar" class="nav-btn" title="Actualizar datos"><i class="fas fa-sync-alt"></i></button>
             <span id="status-badge" class="online">Online</span>
         </div>
@@ -41,55 +42,252 @@
     </section>
  
     <section id="view-menu-principal" class="view hidden">
-        <div class="container">
-            <h2 class="welcome-text">¡Hola! Selecciona un módulo</h2>
-            <div class="menu-grid">
-                <div class="menu-item" onclick="cambiarVista('view-submenu-carga')">
-                    <div class="menu-icon bg-red"><i class="fas fa-truck-ramp-box"></i></div>
-                    <span>Control de Carga</span>
-                </div>
-                <div class="menu-item disabled">
-                    <div class="menu-icon bg-gray"><i class="fas fa-vial"></i></div>
-                    <span>Control de Calidad<br><small>(Próximamente)</small></span>
+        <div class="container menu-principal-container">
+            <!-- Encabezado Premium del Menú -->
+            <div class="menu-header">
+                <div class="header-logo-section">
+                    <img src="ruta/al/logo.png" alt="Braun Relaciones Comerciales" class="header-logo">
+                    <div class="header-text-fallback">
+                        <h1 class="brand-title">Braun</h1>
+                        <p class="brand-subtitle">Relaciones Comerciales</p>
+                    </div>
                 </div>
             </div>
-            <button class="btn-logout" onclick="cerrarSesion()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+
+            <!-- Texto de Bienvenida Elegante -->
+            <div class="welcome-section">
+                <h2 class="welcome-text">¡Hola! Selecciona un módulo</h2>
+                <p class="welcome-subtext">Gestiona tus operaciones de manera rápida y profesional</p>
+            </div>
+
+            <!-- Grid de Módulos Rediseñado -->
+            <div class="menu-grid premium-grid">
+                <!-- Control de Carga -->
+                <div class="menu-card active" onclick="cambiarVista('view-submenu-carga')">
+                    <div class="card-header">
+                        <div class="card-icon cargo-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M18 18.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM9 18.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+                                <path d="M20 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm0 10H4v-8h16v8z"/>
+                                <rect x="1" y="4" width="2" height="4" fill="currentColor"/>
+                                <rect x="21" y="4" width="2" height="4" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Control de Carga</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Gestiona y registra todas tus cargas con precisión</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
+                <!-- Control de Calidad -->
+                <div class="menu-card disabled-card">
+                    <div class="disabled-overlay">
+                        <span class="coming-soon-badge">Próximamente</span>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon quality-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Control de Calidad</h3>
+                            <span class="card-badge coming-badge">En desarrollo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Validación y control de calidad de productos</p>
+                    </div>
+                </div>
+
+                <!-- Ticketera -->
+                <div class="menu-card active" onclick="abrirTicketera()">
+                    <div class="card-header">
+                        <div class="card-icon support-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-2.96-3.83c-.375-.48-.102-1.083.378-1.458.48-.375 1.083-.102 1.458.378l1.71 2.21 1.99-2.57c.42-.54 1.23-.63 1.77-.23.54.4.63 1.21.23 1.75z"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Ticketera</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Sistema de soporte y gestión de tickets</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección de Acciones Inferiores -->
+            <div class="menu-footer">
+                <button class="btn-logout-premium" onclick="cerrarSesion()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Cerrar Sesión</span>
+                </button>
+            </div>
         </div>
     </section>
  
     <section id="view-submenu-carga" class="view hidden">
-        <div class="container">
-            <h3>Módulos de Carga</h3>
-            <div class="menu-grid">
-                <div class="menu-item" onclick="abrirModuloCarga('PT')">
-                    <div class="menu-icon bg-darkred"><i class="fas fa-box-open"></i></div>
-                    <span>Producto Terminado (PT)</span>
+        <div class="container submenu-container">
+            <div class="submenu-header">
+                <h2 class="submenu-title">Selecciona el Tipo de Carga</h2>
+                <p class="submenu-subtitle">Elige entre Materia Prima o Producto Terminado</p>
+            </div>
+
+            <div class="menu-grid premium-grid">
+                <!-- Producto Terminado (PT) -->
+                <div class="menu-card active" onclick="abrirModuloCarga('PT')">
+                    <div class="card-header">
+                        <div class="card-icon cargo-icon">
+                            <svg viewBox="0 0 200 140" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Caja PT -->
+                                <rect x="30" y="30" width="80" height="50" fill="#ffffff" stroke="currentColor" stroke-width="3" rx="4"/>
+                                <text x="70" y="65" font-size="28" font-weight="bold" text-anchor="middle" fill="currentColor">PT</text>
+                                <!-- Camión -->
+                                <rect x="10" y="75" width="120" height="35" fill="none" stroke="currentColor" stroke-width="2.5" rx="3"/>
+                                <circle cx="40" cy="115" r="10" fill="currentColor"/>
+                                <circle cx="110" cy="115" r="10" fill="currentColor"/>
+                                <rect x="115" y="80" width="25" height="20" fill="currentColor" rx="2"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Producto Terminado</h3>
+                            <span class="card-badge active-badge">PT</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Registra cargas de productos finales listos para distribución</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
                 </div>
-                <div class="menu-item disabled">
-                    <div class="menu-icon bg-gray"><i class="fas fa-leaf"></i></div>
-                    <span>Materia Prima (MP)<br><small>(Próximamente)</small></span>
+
+                <!-- Materia Prima (MP) -->
+                <div class="menu-card disabled-card">
+                    <div class="disabled-overlay">
+                        <span class="coming-soon-badge">Próximamente</span>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon cargo-icon">
+                            <svg viewBox="0 0 200 140" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Caja MP -->
+                                <rect x="30" y="30" width="80" height="50" fill="#ffffff" stroke="currentColor" stroke-width="3" rx="4"/>
+                                <text x="70" y="65" font-size="28" font-weight="bold" text-anchor="middle" fill="currentColor">MP</text>
+                                <!-- Camión -->
+                                <rect x="10" y="75" width="120" height="35" fill="none" stroke="currentColor" stroke-width="2.5" rx="3"/>
+                                <circle cx="40" cy="115" r="10" fill="currentColor"/>
+                                <circle cx="110" cy="115" r="10" fill="currentColor"/>
+                                <rect x="115" y="80" width="25" height="20" fill="currentColor" rx="2"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Materia Prima</h3>
+                            <span class="card-badge coming-badge">MP</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Gestiona y registra las materias primas recibidas</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
  
     <section id="view-modulo-carga" class="view hidden">
-        <div class="tab-bar">
-            <button id="tab-btn-nuevo" class="tab-btn active" onclick="switchTab('nuevo')"><i class="fas fa-plus"></i> Nuevo Registro</button>
-            <button id="tab-btn-historial" class="tab-btn" onclick="switchTab('historial')"><i class="fas fa-history"></i> Historial / Buscar</button>
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2>Historial de Cargas</h2>
+                    <p class="header-subtitle">Consulta y gestiona todos tus registros</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="switchTab('nuevo')">
+                    <i class="fas fa-plus"></i> Nuevo Registro
+                </button>
+            </div>
         </div>
- 
-        <div class="container">
-            
-            <div id="tab-content-nuevo" class="tab-content">
+
+        <div class="container modulo-carga-container">
+            <!-- FILTROS PREMIUM -->
+            <div class="filters-section">
+                <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="filter-fecha-desde">Desde</label>
+                        <input type="date" id="filter-fecha-desde" placeholder="Fecha inicio">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-fecha-hasta">Hasta</label>
+                        <input type="date" id="filter-fecha-hasta" placeholder="Fecha fin">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-status">Estado</label>
+                        <select id="filter-status">
+                            <option value="">Todos los Estados</option>
+                            <option value="ACEPTADO">✓ Aceptado</option>
+                            <option value="OBSERVADO">! Observado</option>
+                            <option value="RECHAZADO">✕ Rechazado</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-search">Búsqueda Rápida</label>
+                        <input type="text" id="filter-search" placeholder="Producto, contrato...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLA DE HISTORIAL -->
+            <div id="tab-content-historial" class="tab-content historial-section">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Producto/s</th>
+                                <th>Contrato/s Comercial</th>
+                                <th>Estatus</th>
+                                <th>Kg</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial-body">
+                            <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- FORMULARIO NUEVO REGISTRO (OCULTO POR DEFECTO) -->
+            <div id="tab-content-nuevo" class="tab-content hidden nuevo-registro-section">
+                <div class="form-header-nuevo">
+                    <h3>Crear Nuevo Registro de Carga</h3>
+                    <p class="form-subtitle">Ingresa los datos generales de tu carga</p>
+                </div>
+
                 <form id="form-carga">
- 
                     <h3>Datos Generales (<span id="lbl-tipo-carga-actual">PT</span>)</h3>
                     <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
  
                     <div class="section-dynamic-header">
                         <h3>Cargar de Mercadería</h3>
-                        <button type="button" class="btn-secondary-add" onclick="agregarFilaProducto()"><i class="fas fa-plus"></i> Añadir Producto</button>
+                        <div class="section-actions-group">
+                            <button type="button" class="btn-gestionar-opciones" onclick="abrirGestorOpciones()" title="Gestionar opciones de Productos, Calibres, Tipos y Envases">
+                                <i class="fas fa-cog"></i> Opciones
+                            </button>
+                            <button type="button" class="btn-secondary-add" onclick="agregarFilaProducto()"><i class="fas fa-plus"></i> Añadir Producto</button>
+                        </div>
                     </div>
                     <div id="wrapper-productos-dinamicos"></div>
  
@@ -208,44 +406,180 @@
                     <button type="button" id="btn-cancelar-edicion" class="btn-logout hidden" style="width:100%; margin-top:10px; margin-bottom:50px;" onclick="cancelarEdicion()">Cancelar Edición</button>
                 </form>
             </div>
- 
-            <div id="tab-content-historial" class="tab-content hidden">
-                <div class="filter-card">
-                    <h4><i class="fas fa-filter"></i> Filtros de Búsqueda</h4>
-                    <div class="filter-grid">
-                        <input type="text" id="filter-search" placeholder="Buscar por producto o contrato...">
-                        <input type="date" id="filter-fecha">
-                        <select id="filter-status">
-                            <option value="">-- Todos los Estados --</option>
-                            <option value="ACEPTADO">ACEPTADO</option>
-                            <option value="OBSERVADO">OBSERVADO</option>
-                            <option value="RECHAZADO">RECHAZADO</option>
-                        </select>
-                    </div>
-                </div>
- 
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Producto/s</th>
-                                <th>Contrato/s Comercial</th>
-                                <th>Estatus</th>
-                                <th>Kg</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-historial-body">
-                            <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">Cargando registros...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
- 
         </div>
     </section>
- 
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: DETALLES DE CARGA (VISTA SOLO LECTURA) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-detalle-carga" class="view hidden">
+        <div class="detalle-header">
+            <div class="detalle-title-section">
+                <h2>Detalles de Carga</h2>
+                <p class="detalle-subtitle">Información completa del registro</p>
+            </div>
+            <button class="btn-cerrar-detalle" onclick="cerrarDetalleCarga()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="container detalle-container">
+            <div class="detalle-content">
+                <!-- Información General -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Información General</h3>
+                    <div class="detalle-grid">
+                        <div class="detalle-item">
+                            <label>Fecha</label>
+                            <div class="detalle-value" id="det-fecha">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Tipo de Carga</label>
+                            <div class="detalle-value" id="det-tipo">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Estado</label>
+                            <div class="detalle-value" id="det-estado">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Total Kg</label>
+                            <div class="detalle-value" id="det-kg">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Productos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Productos Cargados</h3>
+                    <div class="detalle-list" id="det-productos">
+                        <p style="color: #999;">No hay productos</p>
+                    </div>
+                </div>
+
+                <!-- Datos del Chofer -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Datos del Chofer</h3>
+                    <div class="detalle-grid">
+                        <div class="detalle-item">
+                            <label>Nombre y Apellido</label>
+                            <div class="detalle-value" id="det-chofer">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Patente Chasis</label>
+                            <div class="detalle-value" id="det-chasis">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Patente Acoplado</label>
+                            <div class="detalle-value" id="det-acoplado">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contratos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Contratos Comerciales</h3>
+                    <div class="detalle-list" id="det-contratos">
+                        <p style="color: #999;">No hay contratos</p>
+                    </div>
+                </div>
+
+                <!-- Controles -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Verificaciones de Calidad</h3>
+                    <div class="detalle-checklist" id="det-verificaciones">
+                        <p style="color: #999;">No hay datos</p>
+                    </div>
+                </div>
+
+                <!-- Fotos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Registro Fotográfico</h3>
+                    <div class="detalle-foto-grid" id="det-fotos">
+                        <p style="color: #999;">No hay fotos</p>
+                    </div>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="detalle-actions">
+                    <button class="btn-accion editar" onclick="abrirEdicionDesdeDetalle()" title="Editar este registro">
+                        <i class="fas fa-pen"></i> Editar
+                    </button>
+                    <button class="btn-accion pdf" onclick="generarPDFDesdeDetalle()" title="Descargar PDF">
+                        <i class="fas fa-file-pdf"></i> Descargar PDF
+                    </button>
+                    <button class="btn-accion eliminar" onclick="eliminarDesdeDetalle()" title="Eliminar este registro">
+                        <i class="fas fa-trash"></i> Eliminar
+                    </button>
+                    <button class="btn-accion volver" onclick="cerrarDetalleCarga()">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: TICKETERIA SIMPLE (INICIADA POR app.js con cambiarVista) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-ticketera" class="view hidden">
+        <div class="container ticketera-container">
+            <div class="tab-bar" style="display:flex; align-items:center; justify-content:space-between;">
+                <h3 style="margin:0; padding:12px 16px;">Ticketera Simple</h3>
+                <div style="padding-right:12px;">
+                    <button class="btn-logout" onclick="cambiarVista('view-menu-principal')">← Volver al Menú</button>
+                </div>
+            </div>
+
+            <div class="ticketera-grid">
+                <div class="ticketera-form">
+                    <form id="form-ticketera">
+                        <div class="form-group"><label for="ticket-nombre">Nombre solicitante</label><input type="text" id="ticket-nombre" required></div>
+                        <div class="form-group"><label for="ticket-correo">Correo solicitante</label><input type="email" id="ticket-correo" required></div>
+                        <div class="form-group"><label for="ticket-responsable">Responsable asignado</label>
+                            <select id="ticket-responsable" class="enum-select" data-enum="responsables"></select>
+                        </div>
+                        <div class="form-group"><label>Prioridad</label>
+                            <div class="si-no-toggle">
+                                <input type="radio" id="prio-baja" name="ticket-prioridad" value="Baja" checked><label for="prio-baja">Baja</label>
+                                <input type="radio" id="prio-media" name="ticket-prioridad" value="Media"><label for="prio-media">Media</label>
+                                <input type="radio" id="prio-alta" name="ticket-prioridad" value="Alta"><label for="prio-alta">Alta</label>
+                            </div>
+                        </div>
+                        <div class="form-group"><label for="ticket-detalle">Detalle de la solicitud</label><textarea id="ticket-detalle" rows="5" placeholder="Describí el problema..."></textarea></div>
+                        <div class="form-group"><label for="ticket-archivo">Adjuntar archivo (opcional)</label><input type="file" id="ticket-archivo" accept="image/*,.pdf"><div id="ticket-preview" class="archivo-preview">Sin archivo</div></div>
+
+                        <div style="display:flex; gap:10px; margin-top:10px;">
+                            <button type="submit" class="btn-primary">Crear Ticket</button>
+                            <button type="button" class="btn-logout" onclick="resetTicketForm()">Limpiar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="ticketera-list">
+                    <h4>Historial de Tickets</h4>
+                    <div class="table-responsive">
+                        <table class="data-table" id="ticketera-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Solicitante</th>
+                                    <th>Responsable</th>
+                                    <th>Prioridad</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ticketera-body">
+                                <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay tickets aún.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <script src="app.js"></script>
+    <button id="fab-ticketera" class="fab-ticketera" title="Nueva Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>
 </body>
 </html>
