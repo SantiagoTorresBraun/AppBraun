@@ -127,6 +127,28 @@
                         <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
                     </div>
                 </div>
+
+                <!-- Contratos -->
+                <div class="menu-card active" onclick="abrirVistaContratos()">
+                    <div class="card-header">
+                        <div class="card-icon contracts-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                                <path d="M8 12h8v1.5H8zM8 15h8v1.5H8zM8 9h3v1.5H8z"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Contratos</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Consulta los contratos y cartas de porte de tus cargas</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
             </div>
 
             <!-- Sección de Acciones Inferiores -->
@@ -525,18 +547,23 @@
         <div class="container ticketera-container">
             <div class="tab-bar" style="display:flex; align-items:center; justify-content:space-between;">
                 <h3 style="margin:0; padding:12px 16px;">Ticketera Simple</h3>
-                <div style="padding-right:12px;">
-                    <button class="btn-logout" onclick="cambiarVista('view-menu-principal')">← Volver al Menú</button>
-                </div>
             </div>
 
             <div class="ticketera-grid">
                 <div class="ticketera-form">
                     <form id="form-ticketera">
-                        <div class="form-group"><label for="ticket-nombre">Nombre solicitante</label><input type="text" id="ticket-nombre" required></div>
+                        <div class="form-group"><label for="ticket-nombre">Nombre solicitante</label>
+                            <div class="enum-row">
+                                <select id="ticket-nombre" class="enum-select" data-enum="personal" required></select>
+                                <button type="button" class="btn-enum-config" onclick="abrirGestorPersonal()" title="Gestionar personal"><i class="fas fa-cog"></i></button>
+                            </div>
+                        </div>
                         <div class="form-group"><label for="ticket-correo">Correo solicitante</label><input type="email" id="ticket-correo" required></div>
                         <div class="form-group"><label for="ticket-responsable">Responsable asignado</label>
-                            <select id="ticket-responsable" class="enum-select" data-enum="responsables"></select>
+                            <div class="enum-row">
+                                <select id="ticket-responsable" class="enum-select" data-enum="personal"></select>
+                                <button type="button" class="btn-enum-config" onclick="abrirGestorPersonal()" title="Gestionar personal"><i class="fas fa-cog"></i></button>
+                            </div>
                         </div>
                         <div class="form-group"><label>Prioridad</label>
                             <div class="si-no-toggle">
@@ -557,6 +584,36 @@
 
                 <div class="ticketera-list">
                     <h4>Historial de Tickets</h4>
+
+                    <!-- FILTROS (misma estética que Control de Carga) -->
+                    <div class="filters-section">
+                        <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                        <div class="filters-grid">
+                            <div class="filter-group">
+                                <label for="filter-ticket-estado">Estado</label>
+                                <select id="filter-ticket-estado">
+                                    <option value="">Todos los Estados</option>
+                                    <option value="Abierto">Abierto</option>
+                                    <option value="En Proceso">En Proceso</option>
+                                    <option value="Cerrado">Cerrado</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="filter-ticket-prioridad">Prioridad</label>
+                                <select id="filter-ticket-prioridad">
+                                    <option value="">Todas las Prioridades</option>
+                                    <option value="Baja">Baja</option>
+                                    <option value="Media">Media</option>
+                                    <option value="Alta">Alta</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="filter-ticket-search">Búsqueda Rápida</label>
+                                <input type="text" id="filter-ticket-search" placeholder="Solicitante, responsable, detalle...">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="data-table" id="ticketera-table">
                             <thead>
@@ -578,6 +635,87 @@
             </div>
         </div>
     </section>
+
+    <!-- VISTA DE CONTRATOS (solo lectura de los datos de Control de Carga) -->
+    <section id="view-contratos" class="view hidden">
+        <div class="container">
+            <nav class="breadcrumb-contratos">
+                <a onclick="cambiarVista('view-menu-principal')">Inicio</a>
+                <span class="breadcrumb-sep">&gt;</span>
+                <span class="breadcrumb-actual">Contratos</span>
+            </nav>
+
+            <!-- FILTROS (misma estética que Control de Carga) -->
+            <div class="filters-section">
+                <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="filter-cont-fecha-desde">Desde</label>
+                        <input type="date" id="filter-cont-fecha-desde">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-cont-fecha-hasta">Hasta</label>
+                        <input type="date" id="filter-cont-fecha-hasta">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-cont-search">Búsqueda Rápida</label>
+                        <input type="text" id="filter-cont-search" placeholder="Contrato, cliente, carta de porte...">
+                    </div>
+                </div>
+            </div>
+
+            <div class="contratos-panel">
+                <div class="contratos-panel-header">
+                    <h3><i class="fas fa-file-contract"></i> Contratos Registrados</h3>
+                    <span id="contratos-contador" class="contratos-contador"></span>
+                </div>
+                <div class="table-responsive contratos-scroll">
+                    <table class="data-table" id="tabla-contratos">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Contrato Comercial</th>
+                                <th>Contrato Cliente</th>
+                                <th>Carta de Porte</th>
+                                <th>Kg CP</th>
+                                <th>Kg Descarga</th>
+                                <th>Diferencia KG</th>
+                                <th>Observaciones CP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-contratos-body">
+                            <tr><td colspan="8" style="text-align:center; padding:20px; color:#999;">Cargando contratos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MODAL GESTOR DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) -->
+    <div id="modal-gestor-opciones" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarGestorOpciones()"></div>
+        <div class="gestor-content">
+            <div class="gestor-header">
+                <h3><i class="fas fa-cog"></i> Gestionar Opciones</h3>
+                <button type="button" class="gestor-close" onclick="cerrarGestorOpciones()" title="Cerrar">&times;</button>
+            </div>
+            <div class="gestor-tabs">
+                <button type="button" class="gestor-tab active" data-enum="producto" onclick="cambiarTabGestor('producto')">Productos</button>
+                <button type="button" class="gestor-tab" data-enum="calibre" onclick="cambiarTabGestor('calibre')">Calibres</button>
+                <button type="button" class="gestor-tab" data-enum="tipoCarga" onclick="cambiarTabGestor('tipoCarga')">Tipos de Carga</button>
+                <button type="button" class="gestor-tab" data-enum="envase" onclick="cambiarTabGestor('envase')">Envases</button>
+                <button type="button" class="gestor-tab" data-enum="personal" onclick="cambiarTabGestor('personal')">Personal</button>
+            </div>
+            <div class="gestor-body">
+                <ul id="gestor-lista-opciones" class="gestor-lista"></ul>
+                <div class="gestor-add-row">
+                    <input type="text" id="gestor-input-nueva" placeholder="Nueva opción..." maxlength="60">
+                    <button type="button" class="gestor-btn-add" onclick="agregarOpcionGestor()"><i class="fas fa-plus"></i> Agregar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
     <button id="fab-ticketera" class="fab-ticketera" title="Nueva Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>

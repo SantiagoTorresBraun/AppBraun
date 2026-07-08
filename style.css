@@ -435,7 +435,11 @@ h3 {
 .menu-principal-container {
     padding: 40px 20px;
     min-height: calc(100vh - 80px);
-    background: linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%);
+    /* Misma foto de campo que el login, con velo blanco al 92% para dar textura sin perder legibilidad */
+    background: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
+                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+    background-size: cover;
+    background-attachment: fixed;
 }
 
 /* --- ENCABEZADO DEL MENÚ CON LOGO --- */
@@ -520,26 +524,30 @@ h3 {
 
 /* --- TARJETA DE MENÚ PREMIUM --- */
 .menu-card {
-    background: white;
+    /* Glassmorphism sutil sobre el fondo de campo */
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     border-radius: 16px;
     overflow: hidden;
     cursor: pointer;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 6px 20px rgba(30, 20, 10, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(167, 29, 29, 0.1);
     display: flex;
     flex-direction: column;
     position: relative;
 }
 
 .menu-card.active {
-    border: 1px solid rgba(183, 28, 28, 0.15);
+    border: 1px solid rgba(167, 29, 29, 0.1);
 }
 
 .menu-card.active:hover {
-    transform: translateY(-12px) scale(1.02);
-    box-shadow: 0 16px 40px rgba(183, 28, 28, 0.15);
-    border-color: rgba(183, 28, 28, 0.3);
+    transform: translateY(-5px);
+    box-shadow: 0 14px 32px rgba(167, 29, 29, 0.12), 0 4px 10px rgba(0, 0, 0, 0.05);
+    border-color: #A71D1D;
+    background: rgba(255, 255, 255, 0.95);
 }
 
 /* Tarjetas deshabilitadas */
@@ -564,13 +572,16 @@ h3 {
 }
 
 .coming-soon-badge {
-    background: rgba(239, 108, 0, 0.15);
+    background: rgba(255, 255, 255, 0.85);
     color: #ef6c00;
-    padding: 8px 16px;
-    border-radius: 20px;
+    border: 1px solid rgba(239, 108, 0, 0.25);
+    padding: 8px 18px;
+    border-radius: 50px;
     font-size: 0.85rem;
     font-weight: 600;
     letter-spacing: 0.5px;
+    backdrop-filter: blur(2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .menu-card.disabled-card:hover {
@@ -605,24 +616,18 @@ h3 {
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
 }
 
-/* Estilos específicos de iconos */
-.cargo-icon {
-    background: linear-gradient(135deg, rgba(183, 28, 28, 0.1), rgba(239, 108, 0, 0.05));
-    color: #b71c1c;
-}
-
-.quality-icon {
-    background: linear-gradient(135deg, rgba(46, 125, 50, 0.1), rgba(76, 175, 80, 0.05));
-    color: #2e7d32;
-}
-
-.support-icon {
-    background: linear-gradient(135deg, rgba(25, 103, 210, 0.1), rgba(66, 165, 245, 0.05));
-    color: #1967d2;
+/* Iconos unificados con identidad de marca: fondo rojo muy claro + icono rojo Braun */
+.cargo-icon,
+.quality-icon,
+.support-icon,
+.contracts-icon {
+    background: rgba(167, 29, 29, 0.08);
+    color: #A71D1D;
 }
 
 .menu-card.active:hover .card-icon {
-    transform: scale(1.15) rotate(-8deg);
+    transform: scale(1.08);
+    background: rgba(167, 29, 29, 0.14);
 }
 
 /* Título y Badge de la Tarjeta */
@@ -636,7 +641,7 @@ h3 {
 .card-title {
     font-size: 1.2rem;
     font-weight: 700;
-    color: var(--color-text-dark);
+    color: #1f2328;
     margin: 0;
     letter-spacing: -0.3px;
 }
@@ -645,20 +650,22 @@ h3 {
     display: inline-block;
     font-size: 0.7rem;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 10px;
+    padding: 4px 12px;
+    border-radius: 50px;
     width: fit-content;
     letter-spacing: 0.5px;
 }
 
 .card-badge.active-badge {
-    background: rgba(46, 125, 50, 0.15);
+    background: rgba(46, 125, 50, 0.1);
     color: #2e7d32;
+    border: 1px solid rgba(46, 125, 50, 0.18);
 }
 
 .card-badge.coming-badge {
-    background: rgba(239, 108, 0, 0.15);
+    background: rgba(239, 108, 0, 0.1);
     color: #ef6c00;
+    border: 1px solid rgba(239, 108, 0, 0.18);
 }
 
 /* --- CUERPO DE LA TARJETA --- */
@@ -762,7 +769,11 @@ h3 {
 .submenu-container {
     padding: 40px 20px;
     min-height: calc(100vh - 80px);
-    background: linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%);
+    /* Coherente con el menú principal: campo con velo blanco */
+    background: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
+                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+    background-size: cover;
+    background-attachment: fixed;
 }
 
 .submenu-header {
@@ -1066,7 +1077,7 @@ h3 {
     }
 
     .menu-card.active:hover {
-        transform: translateY(-8px) scale(1.01);
+        transform: translateY(-5px);
     }
 
     .brand-title {
@@ -1125,7 +1136,7 @@ h3 {
     }
 
     .menu-card.active:hover {
-        transform: translateY(-6px) scale(1);
+        transform: translateY(-4px);
     }
 
     .card-header {
@@ -2168,3 +2179,506 @@ h3 {
 
 /* Ajustes para el botón de ticketera en el header */
 #btn-ticketera-header { color: white; }
+
+/* MODAL GESTOR DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) */
+.gestor-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.gestor-modal.active { display: flex; }
+
+.gestor-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(2px);
+}
+
+.gestor-content {
+    position: relative;
+    width: 92vw;
+    max-width: 480px;
+    max-height: 86vh;
+    background: var(--color-card-bg);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.gestor-header {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.gestor-header h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.gestor-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.2);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.gestor-close:hover { background: rgba(255,255,255,0.3); }
+
+.gestor-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-light);
+    overflow-x: auto;
+}
+.gestor-tab {
+    flex: 1;
+    padding: 10px 8px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.25s ease;
+}
+.gestor-tab:hover { color: var(--color-primary); }
+.gestor-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--color-card-bg);
+}
+
+.gestor-body {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+}
+
+.gestor-lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 42vh;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+.gestor-lista li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.92rem;
+    color: var(--color-text-dark);
+}
+.gestor-lista li:last-child { border-bottom: none; }
+.gestor-lista li:nth-child(odd) { background: #fafafa; }
+.gestor-lista .gestor-vacio {
+    justify-content: center;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+.gestor-btn-quitar {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 4px 6px;
+    transition: color 0.25s ease;
+}
+.gestor-btn-quitar:hover { color: var(--color-danger); }
+
+.gestor-add-row {
+    display: flex;
+    gap: 8px;
+}
+.gestor-add-row input {
+    flex: 1;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: all 0.3s ease;
+}
+.gestor-add-row input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(183, 28, 28, 0.1);
+}
+.gestor-btn-add {
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background-color 0.25s ease;
+}
+.gestor-btn-add:hover { background-color: var(--color-primary-dark); }
+
+@media (max-width: 480px) {
+    .gestor-content { width: 96vw; max-height: 90vh; }
+    .gestor-tab { font-size: 0.75rem; padding: 10px 4px; }
+}
+
+/* ============================================================
+   CARD DEL HISTORIAL DE CARGAS EN MOBILE
+   Solo afecta a la tabla del historial (#tabla-historial-body)
+   dentro del media query — el escritorio queda intacto.
+   ============================================================ */
+
+/* El n° de registro solo se muestra en la card mobile */
+.reg-num-movil { display: none; }
+
+@media (max-width: 720px) {
+    /* Card: fondo blanco, bordes redondeados y sombra sutil */
+    #tabla-historial-body tr {
+        background: #ffffff;
+        border: 1px solid #f0f0f0;
+        border-radius: 10px;
+        padding: 14px 16px 10px;
+        margin: 12px 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+
+    /* Filas de datos: etiqueta en negrita a la izquierda + dato en texto normal */
+    #tabla-historial-body td {
+        justify-content: flex-start;
+        align-items: baseline;
+        text-align: left;
+        gap: 8px;
+        padding: 6px 0;
+    }
+    #tabla-historial-body td:before {
+        content: attr(data-label) ":";
+        color: var(--color-text-dark);
+        font-weight: 700;
+        min-width: 80px;
+        flex-shrink: 0;
+        margin-right: 0;
+    }
+    /* El producto va en texto normal: la negrita queda solo para las etiquetas */
+    #tabla-historial-body td b { font-weight: 400; }
+
+    /* Encabezado de card: "jul 8, 2026  #123" en negrita, alineado a la izquierda */
+    #tabla-historial-body td.td-fecha {
+        font-weight: 700;
+        font-size: 1rem;
+        color: var(--color-text-dark);
+        padding: 0 0 10px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid var(--color-border);
+    }
+    #tabla-historial-body td.td-fecha:before { content: none; }
+    #tabla-historial-body .reg-num-movil {
+        display: inline-block;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--color-text-muted);
+        max-width: 50%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Estado: píldora pastel alineada a la derecha */
+    #tabla-historial-body td.td-estado {
+        justify-content: space-between;
+        align-items: center;
+    }
+    #tabla-historial-body td.td-estado .badge {
+        border-radius: 50px;
+        padding: 6px 14px;
+        font-size: 0.75rem;
+    }
+
+    /* Acciones: iconos agrupados, centrados y con área táctil de 44x44 */
+    #tabla-historial-body td.td-acciones {
+        justify-content: center;
+        gap: 20px;
+        padding: 10px 0 4px;
+        margin-top: 8px;
+        border-top: 1px solid var(--color-border);
+    }
+    #tabla-historial-body td.td-acciones:before { content: none; }
+    #tabla-historial-body td.td-acciones .btn-table-action {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: #fafafa;
+        border: 1px solid var(--color-border);
+        padding: 0;
+    }
+    #tabla-historial-body td.td-acciones .btn-table-action:active {
+        background: #f0f0f0;
+        transform: scale(0.96);
+    }
+
+    /* La celda del mensaje "No hay registros" no lleva etiqueta */
+    #tabla-historial-body td[colspan]:before { content: none; }
+    #tabla-historial-body td[colspan] { justify-content: center; }
+}
+
+/* ============================================================
+   VISTA DE CONTRATOS (Inicio > Contratos)
+   ============================================================ */
+.breadcrumb-contratos {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px 16px;
+    font-size: 0.95rem;
+}
+.breadcrumb-contratos a {
+    color: var(--color-primary);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+.breadcrumb-contratos a:hover { text-decoration: underline; }
+.breadcrumb-contratos .breadcrumb-sep { color: var(--color-text-muted); }
+.breadcrumb-contratos .breadcrumb-actual {
+    color: var(--color-text-dark);
+    font-weight: 700;
+}
+
+.contratos-panel {
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+}
+.contratos-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-light);
+}
+.contratos-panel-header h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-text-dark);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.contratos-panel-header h3 i { color: var(--color-primary); }
+.contratos-contador {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 50px;
+    padding: 4px 12px;
+}
+
+/* Scroll vertical cuando hay muchos registros, con encabezado fijo */
+.contratos-scroll {
+    max-height: 65vh;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Diferencia KG con color según signo */
+#tabla-contratos-body .dif-negativa b { color: var(--color-danger); }
+#tabla-contratos-body .dif-positiva b { color: var(--color-success); }
+
+/* Mobile: mismas cards con etiquetas que el historial */
+@media (max-width: 720px) {
+    #tabla-contratos-body tr {
+        background: #ffffff;
+        border: 1px solid #f0f0f0;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin: 12px 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+    #tabla-contratos-body td {
+        justify-content: flex-start;
+        align-items: baseline;
+        text-align: left;
+        gap: 8px;
+        padding: 6px 0;
+    }
+    #tabla-contratos-body td:before {
+        content: attr(data-label) ":";
+        color: var(--color-text-dark);
+        font-weight: 700;
+        min-width: 130px;
+        flex-shrink: 0;
+        margin-right: 0;
+    }
+    #tabla-contratos-body td[colspan]:before { content: none; }
+    #tabla-contratos-body td[colspan] { justify-content: center; }
+}
+
+/* ============================================================
+   TICKETERA ESTANDARIZADA
+   ============================================================ */
+
+/* Botón engranaje para gestionar la lista de personal (junto a los selects) */
+.btn-enum-config {
+    width: 40px;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: #f5f5f7;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: all 0.25s ease;
+}
+.btn-enum-config:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: #fff;
+}
+
+/* Badges de prioridad: píldora pastel, misma estética que los badges del historial */
+.badge-prio {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+.badge-prio.alta {
+    background: rgba(198, 40, 40, 0.15);
+    color: #c62828;
+}
+.badge-prio.media {
+    background: rgba(239, 108, 0, 0.15);
+    color: #ef6c00;
+}
+.badge-prio.baja {
+    background: rgba(46, 125, 50, 0.15);
+    color: #2e7d32;
+}
+
+/* Selects dentro de las filas del historial de tickets */
+.ticket-resp-select, .ticket-estado-select {
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: white;
+    font-size: 0.88rem;
+    outline: none;
+    max-width: 100%;
+}
+.ticket-resp-select:focus, .ticket-estado-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(183, 28, 28, 0.1);
+}
+
+/* Mobile: cada ticket como card blanca, igual que el Historial de Cargas */
+@media (max-width: 720px) {
+    #ticketera-body tr {
+        background: #ffffff;
+        border: 1px solid #f0f0f0;
+        border-radius: 10px;
+        padding: 14px 16px 10px;
+        margin: 12px 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    }
+    #ticketera-body td {
+        justify-content: flex-start;
+        align-items: center;
+        text-align: left;
+        gap: 8px;
+        padding: 6px 0;
+    }
+    #ticketera-body td:before {
+        content: attr(data-label) ":";
+        color: var(--color-text-dark);
+        font-weight: 700;
+        min-width: 100px;
+        flex-shrink: 0;
+        margin-right: 0;
+    }
+
+    /* Encabezado de card: la fecha en negrita con separador */
+    #ticketera-body td.td-fecha-ticket {
+        font-weight: 700;
+        font-size: 0.95rem;
+        padding: 0 0 10px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid var(--color-border);
+    }
+    #ticketera-body td.td-fecha-ticket:before { content: none; }
+
+    /* Prioridad: badge alineado a la derecha */
+    #ticketera-body td.td-prio-ticket { justify-content: space-between; }
+
+    /* Acciones centradas con separador superior */
+    #ticketera-body td.td-acciones-ticket {
+        justify-content: center;
+        gap: 20px;
+        padding: 10px 0 4px;
+        margin-top: 8px;
+        border-top: 1px solid var(--color-border);
+    }
+    #ticketera-body td.td-acciones-ticket:before { content: none; }
+    #ticketera-body td.td-acciones-ticket .btn-table-action {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: #fafafa;
+        border: 1px solid var(--color-border);
+        padding: 0;
+    }
+
+    #ticketera-body td[colspan]:before { content: none; }
+    #ticketera-body td[colspan] { justify-content: center; }
+}
+
+/* En celulares, background-attachment: fixed causa problemas de rendimiento y zoom (iOS) */
+@media (max-width: 720px) {
+    .menu-principal-container,
+    .submenu-container {
+        background-attachment: scroll;
+    }
+}

@@ -36,7 +36,8 @@ const ENUMS_DEFAULT = {
     envase: ["Bolsas", "Big Bag", "Granel", "Silo Bolsa"],
     elaboro: ["Lucas Ramis", "Jonathan Rui", "Alejo Chamorro"],
     destino: ["CAP. CORTES"],
-    responsables: ["Soporte", "Operaciones", "Administración"]
+    responsables: ["Soporte", "Operaciones", "Administración"],
+    personal: ["Santiago Torres", "Melisa Braun", "Jonathan Rui", "Lucas Ramis", "Carla Candoni", "Alejo Chamorro"]
 };
 
 function cargarEnums() {
@@ -148,6 +149,14 @@ function cambiarVista(idDestino) {
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-modulo-carga') {
             document.getElementById('header-title').textContent = `Carga ${tipoCargaActual}`;
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-contratos') {
+            document.getElementById('header-title').textContent = "Contratos";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-ticketera') {
+            document.getElementById('header-title').textContent = "Ticketera";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         }
@@ -279,10 +288,199 @@ function eliminarItemProducto(button) {
     button.closest('.dynamic-item-card').remove();
 }
 
-// Función para abrir el gestor de opciones de Enums
+// --- GESTOR CENTRALIZADO DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) ---
+let gestorEnumActivo = 'producto';
+
 function abrirGestorOpciones() {
-    alert('Modal de Gestión de Opciones - En construcción.\n\nAquí podrás agregar/editar opciones para:\n• Productos\n• Calibres\n• Tipos de Carga\n• Tipos de Envase');
-    // TODO: Implementar modal similar a agregarOpcionEnumUI pero centralizado
+    cambiarTabGestor(gestorEnumActivo);
+    document.getElementById('modal-gestor-opciones').classList.add('active');
+}
+
+function cerrarGestorOpciones() {
+    document.getElementById('modal-gestor-opciones').classList.remove('active');
+}
+
+function cambiarTabGestor(enumKey) {
+    gestorEnumActivo = enumKey;
+    document.querySelectorAll('#modal-gestor-opciones .gestor-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.enum === enumKey);
+    });
+    document.getElementById('gestor-input-nueva').value = '';
+    renderizarListaGestor();
+}
+
+function renderizarListaGestor() {
+    const lista = document.getElementById('gestor-lista-opciones');
+    lista.innerHTML = '';
+    const opciones = ENUMS[gestorEnumActivo] || [];
+
+    if (opciones.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'gestor-vacio';
+        li.textContent = 'No hay opciones. Agregá la primera abajo.';
+        lista.appendChild(li);
+        return;
+    }
+
+    opciones.forEach(valor => {
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.textContent = valor;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'gestor-btn-quitar';
+        btn.title = `Quitar "${valor}"`;
+        btn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+        btn.addEventListener('click', () => quitarOpcionGestor(valor));
+        li.appendChild(span);
+        li.appendChild(btn);
+        lista.appendChild(li);
+    });
+}
+
+function agregarOpcionGestor() {
+    const input = document.getElementById('gestor-input-nueva');
+    const valor = input.value.trim();
+    if (!valor) { input.focus(); return; }
+    if (ENUMS[gestorEnumActivo].some(v => v.toLowerCase() === valor.toLowerCase())) {
+        alert(`"${valor}" ya existe en esta lista.`);
+        input.select();
+        return;
+    }
+    ENUMS[gestorEnumActivo].push(valor);
+    guardarEnums();
+    input.value = '';
+    input.focus();
+    renderizarListaGestor();
+    refrescarSelectsEnum(gestorEnumActivo);
+}
+
+function quitarOpcionGestor(valor) {
+    const confirmado = confirm(`¿Quitar "${valor}" de la lista de opciones?\n(esto no borra los registros ya guardados que usan ese valor)`);
+    if (!confirmado) return;
+    ENUMS[gestorEnumActivo] = ENUMS[gestorEnumActivo].filter(v => v !== valor);
+    guardarEnums();
+    renderizarListaGestor();
+    refrescarSelectsEnum(gestorEnumActivo);
+}
+
+// Repuebla en vivo todos los selects del formulario que usan el enum modificado, conservando la selección actual
+function refrescarSelectsEnum(enumKey) {
+    document.querySelectorAll(`select.enum-select[data-enum="${enumKey}"]`).forEach(sel => {
+        poblarSelect(sel, enumKey, sel.value);
+    });
+    // Los selects de responsable dentro del historial de tickets también usan la lista de personal
+    if (enumKey === 'personal' && db && typeof renderTicketsTicketera === 'function') {
+        renderTicketsTicketera();
+    }
+}
+
+// Agregar con Enter y cerrar con Escape
+document.addEventListener('DOMContentLoaded', function() {
+    const inputNueva = document.getElementById('gestor-input-nueva');
+    if (inputNueva) {
+        inputNueva.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); agregarOpcionGestor(); }
+        });
+    }
+    document.addEventListener('keydown', function(e) {
+        const modal = document.getElementById('modal-gestor-opciones');
+        if (e.key === 'Escape' && modal && modal.classList.contains('active')) cerrarGestorOpciones();
+    });
+});
+
+// Abre el gestor de opciones directo en la pestaña Personal (usado desde la Ticketera)
+function abrirGestorPersonal() {
+    cambiarTabGestor('personal');
+    document.getElementById('modal-gestor-opciones').classList.add('active');
+}
+
+// --- VISTA DE CONTRATOS (solo lectura sobre los datos de Control de Carga) ---
+function abrirVistaContratos() {
+    cambiarVista('view-contratos');
+    renderizarTablaContratos();
+}
+
+// Filtros de la vista de Contratos: refrescan la tabla en vivo
+document.getElementById('filter-cont-search').addEventListener('input', renderizarTablaContratos);
+document.getElementById('filter-cont-fecha-desde').addEventListener('change', renderizarTablaContratos);
+document.getElementById('filter-cont-fecha-hasta').addEventListener('change', renderizarTablaContratos);
+
+async function renderizarTablaContratos() {
+    const tbody = document.getElementById('tabla-contratos-body');
+    const contador = document.getElementById('contratos-contador');
+    if (!tbody) return;
+
+    // Valores actuales de los filtros
+    const txt = (document.getElementById('filter-cont-search').value || '').toLowerCase();
+    const fechaDesde = document.getElementById('filter-cont-fecha-desde').value;
+    const fechaHasta = document.getElementById('filter-cont-fecha-hasta').value;
+
+    // Misma combinación de fuentes que el historial: locales pendientes + sincronizados con Sheets
+    const registrosLocales = await obtenerRegistrosLocales();
+    const idsLocales = new Set(registrosLocales.map(r => r.Id_Carga));
+    const remotosNoDuplicados = historialGeneral.filter(r => !idsLocales.has(r.Id_Carga));
+    const listaCombinada = registrosLocales.concat(remotosNoDuplicados);
+
+    // Aplanamos: cada contrato de cada registro es una fila, heredando la fecha y observaciones del registro
+    const filas = [];
+    listaCombinada.forEach(registro => {
+        let contratos = registro.Contratos || [];
+        if (typeof contratos === 'string') { try { contratos = JSON.parse(contratos); } catch (e) { contratos = []; } }
+        if (!Array.isArray(contratos)) return;
+        contratos.forEach(c => {
+            filas.push({
+                fecha: registro.Fecha || '-',
+                contrato_com: c.contrato_com || '-',
+                contrato_cli: c.contrato_cli || '-',
+                carta_porte: c.carta_porte || '-',
+                kg_cp: parseFloat(c.kg_cp) || 0,
+                kg_descarga: parseFloat(c.kg_descarga) || 0,
+                observaciones: registro.Indicaciones_Descarga || '-'
+            });
+        });
+    });
+
+    // Filtrado por rango de fechas y búsqueda rápida (contrato comercial, cliente o carta de porte)
+    const filtradas = filas.filter(f => {
+        if (fechaDesde && f.fecha && f.fecha < fechaDesde) return false;
+        if (fechaHasta && f.fecha && f.fecha > fechaHasta) return false;
+        if (txt) {
+            const textoFila = `${f.contrato_com} ${f.contrato_cli} ${f.carta_porte} ${f.observaciones}`.toLowerCase();
+            if (!textoFila.includes(txt)) return false;
+        }
+        return true;
+    });
+
+    // Más recientes primero
+    filtradas.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+    if (contador) contador.textContent = `${filtradas.length} contrato${filtradas.length === 1 ? '' : 's'}`;
+
+    if (filtradas.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#999;">No hay contratos que coincidan con los filtros.</td></tr>`;
+        return;
+    }
+
+    const fmt = n => n.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+    tbody.innerHTML = '';
+    filtradas.forEach(f => {
+        // Diferencia solicitada: Kg CP - Kg Descarga (calculada en vivo, no se toca el dato guardado)
+        const diferencia = f.kg_cp - f.kg_descarga;
+        const claseDif = diferencia < 0 ? 'dif-negativa' : (diferencia > 0 ? 'dif-positiva' : '');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td data-label="Fecha">${f.fecha}</td>
+            <td data-label="Contrato Comercial">${f.contrato_com}</td>
+            <td data-label="Contrato Cliente">${f.contrato_cli}</td>
+            <td data-label="Carta de Porte">${f.carta_porte}</td>
+            <td data-label="Kg CP">${fmt(f.kg_cp)}</td>
+            <td data-label="Kg Descarga">${fmt(f.kg_descarga)}</td>
+            <td data-label="Diferencia KG" class="${claseDif}"><b>${fmt(diferencia)}</b></td>
+            <td data-label="Observaciones CP">${f.observaciones}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 function agregarFilaContrato() {
@@ -615,9 +813,11 @@ document.addEventListener('DOMContentLoaded', function() { createImageModal(); }
 function abrirTicketera() {
     // Mostrar vista
     cambiarVista('view-ticketera');
-    // Poblar select de responsables desde ENUMS
+    // Poblar selects de solicitante y responsable desde la lista centralizada de personal
+    const selNombre = document.getElementById('ticket-nombre');
+    if (selNombre) poblarSelect(selNombre, 'personal', '');
     const sel = document.getElementById('ticket-responsable');
-    if (sel) poblarSelect(sel, 'responsables', '');
+    if (sel) poblarSelect(sel, 'personal', '');
     // Limpiar formulario y cargar tabla
     resetTicketForm();
     renderTicketsTicketera();
@@ -712,8 +912,23 @@ function renderTicketsTicketera() {
     const store = tx.objectStore('ticketera_tickets');
     const req = store.getAll();
     req.onsuccess = function() {
-        const items = req.result || [];
-        if (items.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay tickets aún.</td></tr>`; return; }
+        let items = req.result || [];
+
+        // Filtros del historial (estado, prioridad y búsqueda rápida)
+        const filtroEstado = (document.getElementById('filter-ticket-estado') || {}).value || '';
+        const filtroPrioridad = (document.getElementById('filter-ticket-prioridad') || {}).value || '';
+        const filtroTxt = ((document.getElementById('filter-ticket-search') || {}).value || '').toLowerCase();
+        items = items.filter(item => {
+            if (filtroEstado && (item.estado_ticket || 'Abierto') !== filtroEstado) return false;
+            if (filtroPrioridad && (item.prioridad || 'Baja') !== filtroPrioridad) return false;
+            if (filtroTxt) {
+                const texto = `${item.nombre_solicitante || ''} ${item.correo_solicitante || ''} ${item.responsable_asignado || ''} ${item.detalle_solicitud || ''}`.toLowerCase();
+                if (!texto.includes(filtroTxt)) return false;
+            }
+            return true;
+        });
+
+        if (items.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay tickets que coincidan con los filtros.</td></tr>`; return; }
         // ordenar por fecha desc
         items.sort((a,b)=> (b.fecha_creacion||'').localeCompare(a.fecha_creacion||''));
         tbody.innerHTML = '';
@@ -722,22 +937,22 @@ function renderTicketsTicketera() {
             const fecha = new Date(item.fecha_creacion).toLocaleString();
             const prioridadClass = item.prioridad === 'Alta' ? 'alta' : (item.prioridad === 'Media' ? 'media' : 'baja');
             tr.innerHTML = `
-                <td>${fecha}</td>
-                <td><b>${escapeHtml(item.nombre_solicitante || '-')}</b><br><small>${escapeHtml(item.correo_solicitante || '')}</small></td>
-                <td>
+                <td data-label="Fecha" class="td-fecha-ticket">${fecha}</td>
+                <td data-label="Solicitante"><b>${escapeHtml(item.nombre_solicitante || '-')}</b><br><small>${escapeHtml(item.correo_solicitante || '')}</small></td>
+                <td data-label="Responsable">
                     <select class="ticket-resp-select">
                         <option value="">-- Ninguno --</option>
                     </select>
                 </td>
-                <td><span class="badge-prio ${prioridadClass}">${item.prioridad || 'Baja'}</span></td>
-                <td>
+                <td data-label="Prioridad" class="td-prio-ticket"><span class="badge-prio ${prioridadClass}">${item.prioridad || 'Baja'}</span></td>
+                <td data-label="Estado">
                     <select class="ticket-estado-select">
                         <option value="Abierto">Abierto</option>
                         <option value="En Proceso">En Proceso</option>
                         <option value="Cerrado">Cerrado</option>
                     </select>
                 </td>
-                <td>
+                <td class="td-acciones-ticket">
                     <button class="btn-table-action" title="Ver detalle"> <i class="fas fa-eye"></i> </button>
                     <button class="btn-table-action" title="Descargar adjunto"> <i class="fas fa-download"></i> </button>
                 </td>
@@ -746,7 +961,7 @@ function renderTicketsTicketera() {
             // insertar opciones de responsables
             const respSelect = tr.querySelector('.ticket-resp-select');
             if (respSelect) {
-                const opciones = (ENUMS && ENUMS.responsables) ? ENUMS.responsables : [];
+                const opciones = (ENUMS && ENUMS.personal) ? ENUMS.personal : [];
                 opciones.forEach(opt => {
                     const o = document.createElement('option'); o.value = opt; o.textContent = opt; if (opt === item.responsable_asignado) o.selected = true; respSelect.appendChild(o);
                 });
@@ -828,13 +1043,19 @@ function updateTicketFields(id, patch, cb) {
 // Utilidad para escapar texto en HTML
 function escapeHtml(str){ if(!str) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// Filtros del historial de tickets: refrescan la tabla en vivo
+document.getElementById('filter-ticket-search').addEventListener('input', renderTicketsTicketera);
+document.getElementById('filter-ticket-estado').addEventListener('change', renderTicketsTicketera);
+document.getElementById('filter-ticket-prioridad').addEventListener('change', renderTicketsTicketera);
+
 // Exponer abrirTicketera globalmente para poder llamarla desde la UI
 window.abrirTicketera = abrirTicketera;
 
 // Cargar tickets cuando la DB esté lista si la vista está activa
 function tryInitTicketera() {
-    // poblar select global de responsables
-    const sel = document.getElementById('ticket-responsable'); if (sel) poblarSelect(sel, 'responsables', '');
+    // poblar selects de solicitante y responsable desde la lista de personal
+    const selNombre = document.getElementById('ticket-nombre'); if (selNombre) poblarSelect(selNombre, 'personal', '');
+    const sel = document.getElementById('ticket-responsable'); if (sel) poblarSelect(sel, 'personal', '');
     // renderizar tabla si la vista está visible
     if (!document.getElementById('view-ticketera')) return;
     renderTicketsTicketera();
@@ -1171,13 +1392,14 @@ async function filtrarYRenderizarTabla() {
             ? item.Contratos.map(c => c.contrato_com || '-').join('<br>')
             : '-';
  
+        const numRegistroMovil = item.Id_Carga ? `<span class="reg-num-movil">#${item.Id_Carga}</span>` : '';
         tr.innerHTML = `
-            <td onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${item.Fecha || '-'}</td>
-            <td onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
-            <td onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
-            <td onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'aceptado'}">${item.ESTATUS || 'ACEPTADO'}</span></td>
-            <td onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${item.Kg_Cargados || '0'} kg</td>
-            <td onclick="event.stopPropagation();">
+            <td data-label="Fecha" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-fecha">${item.Fecha || '-'}${numRegistroMovil}</td>
+            <td data-label="Producto" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
+            <td data-label="Contrato" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
+            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'aceptado'}">${item.ESTATUS || 'ACEPTADO'}</span></td>
+            <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${item.Kg_Cargados || '0'} kg</td>
+            <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro">
                     <i class="fas fa-pen" style="color:#ef6c00; font-size: 1.1rem; cursor:pointer;"></i>
                 </button>
@@ -1187,6 +1409,10 @@ async function filtrarYRenderizarTabla() {
                 <button class="btn-table-action" onclick="generarPDFReporte('${dataString}')" title="Descargar PDF">
                     <i class="fas fa-file-pdf" style="color:#b71c1c; font-size: 1.2rem; cursor:pointer;"></i>
                 </button>
+                ${esDispositivoMovil() ? `
+                <button class="btn-table-action" onclick="generarPDFReporte('${dataString}', 'compartir')" title="Compartir PDF (WhatsApp, correo...)">
+                    <i class="fas fa-share-alt" style="color:#1967d2; font-size: 1.1rem; cursor:pointer;"></i>
+                </button>` : ''}
             </td>
         `;
         tbody.appendChild(tr);
@@ -1390,8 +1616,50 @@ function eliminarRegistro(base64Data) {
     }
 }
 
+// Detecta celular/tablet (usado para mostrar el botón de compartir solo en mobile)
+function esDispositivoMovil() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
+}
+
+// Comparte el PDF con el menú nativo del celular (Web Share API).
+// Fallback: abre WhatsApp con un resumen del registro y descarga el PDF como respaldo.
+async function compartirPDF(doc, nombreArchivo, item) {
+    const blob = doc.output('blob');
+    const archivo = new File([blob], nombreArchivo, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        try {
+            await navigator.share({
+                files: [archivo],
+                title: 'Reporte de Carga - Braun',
+                text: `Reporte de carga del ${item.Fecha || '-'} (${item.Kg_Cargados || '0'} kg)`
+            });
+            return;
+        } catch (e) {
+            // Si el usuario canceló el menú de compartir, no hacemos nada más
+            if (e && e.name === 'AbortError') return;
+            console.warn('navigator.share falló, usando fallback WhatsApp:', e);
+        }
+    }
+
+    // Fallback: texto informativo por WhatsApp + descarga del PDF como respaldo
+    const productos = (Array.isArray(item.Productos) ? item.Productos : [])
+        .map(p => p.producto).filter(Boolean).join(', ') || '-';
+    const texto = `*Reporte de Carga - Braun*\n`
+        + `Fecha: ${item.Fecha || '-'}\n`
+        + `Producto/s: ${productos}\n`
+        + `Total Kg: ${item.Kg_Cargados || '0'}\n`
+        + `Estado: ${item.ESTATUS || 'ACEPTADO'}\n`
+        + `Chofer: ${item.Nombre_Chofer || '-'}\n\n`
+        + `(El PDF se descargó en el dispositivo para adjuntarlo manualmente)`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`, '_blank');
+    doc.save(nombreArchivo);
+}
+
 // --- === 10. GENERADOR DE REPORTE PDF CORPORATIVO (fiel al modelo de referencia) === ---
-async function generarPDFReporte(base64Data) {
+// modo: 'descargar' (default, comportamiento original) | 'compartir' (Web Share API en celulares)
+async function generarPDFReporte(base64Data, modo) {
     try {
         const rawJson = decodeURIComponent(escape(atob(base64Data)));
         const item = JSON.parse(rawJson);
@@ -1581,7 +1849,13 @@ for (const campo of camposImagen) {
             agregarPiePagina(doc);
         }
  
-        doc.save(`Reporte_Carga_PT_${item.Id_Carga || 'Braun'}.pdf`);
+        const nombreArchivo = `Reporte_Carga_PT_${item.Id_Carga || 'Braun'}.pdf`;
+        if (modo === 'compartir') {
+            await compartirPDF(doc, nombreArchivo, item);
+        } else {
+            // Comportamiento original: descarga directa (escritorio)
+            doc.save(nombreArchivo);
+        }
 
     } catch (error) {
         console.error("Error al construir PDF:", error);
