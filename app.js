@@ -1,6 +1,6 @@
 // --- 1. CONFIGURACIÓN BASE DE DATOS LOCAL (IndexedDB) ---
 let db;
-const request = indexedDB.open("AppBraunDB_v4", 1);
+const request = indexedDB.open("AppBraunDB_v4", 2);
 
 request.onupgradeneeded = function(e) {
     db = e.target.result;
@@ -11,12 +11,18 @@ request.onupgradeneeded = function(e) {
     if (!db.objectStoreNames.contains("ticketera_tickets")) {
         db.createObjectStore("ticketera_tickets", { keyPath: "id", autoIncrement: true });
     }
+    // Cola offline del módulo Control de Calidad
+    if (!db.objectStoreNames.contains("controles_calidad")) {
+        db.createObjectStore("controles_calidad", { keyPath: "id", autoIncrement: true });
+    }
 };
 
-request.onsuccess = function(e) { 
-    db = e.target.result; 
-    renderOfflineCount(); 
+request.onsuccess = function(e) {
+    db = e.target.result;
+    renderOfflineCount();
     cargarHistorialDesdeGoogle();
+    if (typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
+    if (typeof sincronizarCalidadPendientes === 'function' && navigator.onLine) sincronizarCalidadPendientes();
 };
 request.onerror = function(e) { console.error("Error IndexedDB", e); };
 
@@ -35,6 +41,9 @@ const ENUMS_DEFAULT = {
     tipoCarga: ["MP", "PT"],
     envase: ["Bolsas", "Big Bag", "Granel", "Silo Bolsa"],
     elaboro: ["Lucas Ramis", "Jonathan Rui", "Alejo Chamorro"],
+    cliente: ["CAP. CORTES"],
+    muestreo: ["Planta", "Camión", "Big Bag", "Silo Bolsa", "Puerto"],
+    tipoGrano: ["Kabuli", "Desi"],
     destino: ["CAP. CORTES"],
     responsables: ["Soporte", "Operaciones", "Administración"],
     personal: ["Santiago Torres", "Melisa Braun", "Jonathan Rui", "Lucas Ramis", "Carla Candoni", "Alejo Chamorro"]
@@ -149,6 +158,14 @@ function cambiarVista(idDestino) {
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-modulo-carga') {
             document.getElementById('header-title').textContent = `Carga ${tipoCargaActual}`;
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-submenu-calidad') {
+            document.getElementById('header-title').textContent = "Control de Calidad";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-modulo-calidad') {
+            document.getElementById('header-title').textContent = `Calidad ${(typeof nombreGranoActual === 'function') ? nombreGranoActual() : ''}`.trim();
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-contratos') {

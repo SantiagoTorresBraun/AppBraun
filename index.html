@@ -46,11 +46,7 @@
             <!-- Encabezado Premium del Menú -->
             <div class="menu-header">
                 <div class="header-logo-section">
-                    <img src="ruta/al/logo.png" alt="Braun Relaciones Comerciales" class="header-logo">
-                    <div class="header-text-fallback">
-                        <h1 class="brand-title">Braun</h1>
-                        <p class="brand-subtitle">Relaciones Comerciales</p>
-                    </div>
+                    <img src="logo-braun.png" alt="Braun Relaciones Comerciales" class="header-logo">
                 </div>
             </div>
 
@@ -87,10 +83,7 @@
                 </div>
 
                 <!-- Control de Calidad -->
-                <div class="menu-card disabled-card">
-                    <div class="disabled-overlay">
-                        <span class="coming-soon-badge">Próximamente</span>
-                    </div>
+                <div class="menu-card active" onclick="cambiarVista('view-submenu-calidad')">
                     <div class="card-header">
                         <div class="card-icon quality-icon">
                             <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -99,11 +92,14 @@
                         </div>
                         <div class="card-title-section">
                             <h3 class="card-title">Control de Calidad</h3>
-                            <span class="card-badge coming-badge">En desarrollo</span>
+                            <span class="card-badge active-badge">Activo</span>
                         </div>
                     </div>
                     <div class="card-body">
                         <p class="card-description">Validación y control de calidad de productos</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
                     </div>
                 </div>
 
@@ -227,7 +223,264 @@
             </div>
         </div>
     </section>
- 
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: SUBMENÚ CONTROL DE CALIDAD (selección de grano) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-submenu-calidad" class="view hidden">
+        <div class="container submenu-container">
+            <div class="submenu-header">
+                <h2 class="submenu-title">Selecciona el Grano a Analizar</h2>
+                <p class="submenu-subtitle">Elige el tipo de grano para el control de calidad</p>
+            </div>
+
+            <div class="menu-grid premium-grid">
+                <!-- Garbanzo -->
+                <div class="menu-card active" onclick="abrirModuloCalidad('GARBANZO')">
+                    <div class="card-header">
+                        <div class="card-icon quality-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="9" cy="10" r="5"/>
+                                <circle cx="16" cy="15" r="4"/>
+                                <path d="M9 3c1.5 0 2.5 1 2.5 1L10 6.5 7.5 5S8 3 9 3z"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Garbanzo</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Análisis de calibres, defectos y condición del garbanzo</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
+                <!-- Poroto Mung (esqueleto preparado, se habilita en CALIDAD_CONFIG) -->
+                <div class="menu-card disabled-card" onclick="abrirModuloCalidad('POROTO_MUNG')">
+                    <div class="disabled-overlay">
+                        <span class="coming-soon-badge">Próximamente</span>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon quality-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <ellipse cx="8" cy="12" rx="4" ry="5"/>
+                                <ellipse cx="16" cy="12" rx="4" ry="5"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Poroto Mung</h3>
+                            <span class="card-badge coming-badge">En desarrollo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Análisis de calidad para poroto mung</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: MÓDULO CONTROL DE CALIDAD (historial + formulario) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-modulo-calidad" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2>Historial de Controles — <span id="lbl-grano-actual">Garbanzo</span></h2>
+                    <p class="header-subtitle">Consulta y gestiona tus análisis de calidad</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="switchTabCalidad('nuevo')">
+                    <i class="fas fa-plus"></i> Nuevo Control
+                </button>
+            </div>
+        </div>
+
+        <div class="container modulo-carga-container">
+            <!-- FILTROS -->
+            <div class="filters-section">
+                <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="filter-cal-fecha-desde">Desde</label>
+                        <input type="date" id="filter-cal-fecha-desde">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-cal-fecha-hasta">Hasta</label>
+                        <input type="date" id="filter-cal-fecha-hasta">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-cal-search">Búsqueda Rápida</label>
+                        <input type="text" id="filter-cal-search" placeholder="Cliente, lote, variedad, contrato...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- HISTORIAL -->
+            <div id="tab-content-historial-calidad" class="tab-content historial-section">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Foto</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th>Lote / Variedad</th>
+                                <th>Kg</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-calidad-body">
+                            <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- FORMULARIO NUEVO CONTROL (OCULTO POR DEFECTO) -->
+            <div id="tab-content-nuevo-calidad" class="tab-content hidden nuevo-registro-section">
+                <div class="form-header-nuevo">
+                    <h3>Nuevo Control de Calidad — <span id="lbl-grano-form">Garbanzo</span></h3>
+                    <p class="form-subtitle">Completá el análisis por secciones</p>
+                </div>
+
+                <form id="form-calidad">
+                    <!-- SECCIÓN 1: DATOS GENERALES -->
+                    <h3><i class="fas fa-clipboard-list"></i> Datos Generales y Logística</h3>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-fecha">Fecha Análisis</label><input type="date" id="cal-fecha" required></div>
+                        <div class="form-group">
+                            <label for="cal-cliente">Cliente</label>
+                            <div class="enum-row">
+                                <select id="cal-cliente" class="enum-select" data-enum="cliente" required></select>
+                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="cal-muestreo">Muestreo en</label>
+                            <div class="enum-row">
+                                <select id="cal-muestreo" class="enum-select" data-enum="muestreo"></select>
+                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            </div>
+                        </div>
+                        <div class="form-group"><label for="cal-lote-cliente">N° Lote Cliente/Planta</label><input type="text" id="cal-lote-cliente"></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-lote-brc">N° Lote BRC</label><input type="text" id="cal-lote-brc"></div>
+                        <div class="form-group"><label for="cal-contrato-prod">Contrato Producción</label><input type="text" id="cal-contrato-prod"></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-contrato-com">Contrato Comercial</label><input type="text" id="cal-contrato-com"></div>
+                        <div class="form-group"><label for="cal-contrato-fm">Contrato FM</label><input type="text" id="cal-contrato-fm"></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-proceso">N° Proceso</label><input type="text" id="cal-proceso"></div>
+                        <div class="form-group"><label for="cal-variedad">Variedad</label><input type="text" id="cal-variedad"></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-lote">N° Lote</label><input type="text" id="cal-lote"></div>
+                        <div class="form-group"><label for="cal-ctg">N° CTG</label><input type="text" id="cal-ctg"></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="cal-tipo">Tipo</label>
+                            <div class="enum-row">
+                                <select id="cal-tipo" class="enum-select" data-enum="tipoGrano"></select>
+                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cal-calibre">Calibre</label>
+                            <div class="enum-row">
+                                <select id="cal-calibre" class="enum-select" data-enum="calibre"></select>
+                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="cal-envase">Envase</label>
+                            <div class="enum-row">
+                                <select id="cal-envase" class="enum-select" data-enum="envase"></select>
+                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            </div>
+                        </div>
+                        <div class="form-group"><label for="cal-kg">Kg</label><input type="number" id="cal-kg" step="0.01" value="0"></div>
+                    </div>
+
+                    <!-- SECCIÓN 2: ANÁLISIS DE CALIBRE -->
+                    <h3><i class="fas fa-ruler-horizontal"></i> Análisis de Calibre (%)</h3>
+                    <div id="wrapper-calibres-calidad" class="calidad-grid-porcentajes"></div>
+                    <div class="calidad-total-card buenos">
+                        <span>Total Granos Buenos</span>
+                        <strong id="total-granos-buenos">0.00 %</strong>
+                    </div>
+
+                    <!-- SECCIÓN 3: DEFECTOS -->
+                    <h3><i class="fas fa-triangle-exclamation"></i> Defectos Físicos (%)</h3>
+                    <div id="wrapper-defectos-calidad" class="calidad-grid-porcentajes"></div>
+                    <div class="calidad-total-card danios">
+                        <span>Total de Daños</span>
+                        <strong id="total-danios">0.00 %</strong>
+                    </div>
+
+                    <div class="calidad-totales-resumen">
+                        <div class="calidad-total-card muestra">
+                            <span>Total Muestra Cargada</span>
+                            <strong id="total-muestra-cargada">0.00</strong>
+                        </div>
+                        <div class="calidad-total-card muestra-pct">
+                            <span>Total Muestra %</span>
+                            <strong id="total-muestra-pct">0.00 %</strong>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 4: CONDICIÓN -->
+                    <h3><i class="fas fa-vial"></i> Condición de la Muestra</h3>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="cal-humedad">Humedad (%)</label><input type="number" id="cal-humedad" step="0.01" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label for="cal-materia-extrana">Materia Extraña (%)</label><input type="number" id="cal-materia-extrana" step="0.01" min="0" max="100" value="0"></div>
+                    </div>
+                    <div class="checklist-item"><p>Insectos Vivos o Muertos</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="cal-insectos-no" name="cal_insectos" value="NO" checked><label for="cal-insectos-no">NO</label>
+                            <input type="radio" id="cal-insectos-si" name="cal_insectos" value="SI"><label for="cal-insectos-si">SI</label>
+                        </div>
+                    </div>
+                    <div class="checklist-item"><p>Olor (ajeno al origen)</p>
+                        <div class="si-no-toggle">
+                            <input type="radio" id="cal-olor-no" name="cal_olor" value="NO" checked><label for="cal-olor-no">NO</label>
+                            <input type="radio" id="cal-olor-si" name="cal_olor" value="SI"><label for="cal-olor-si">SI</label>
+                        </div>
+                    </div>
+                    <div class="form-group"><label for="cal-observaciones">Observaciones</label><textarea id="cal-observaciones" rows="4" placeholder="Notas del análisis..."></textarea></div>
+
+                    <!-- SECCIÓN 5: FOTOS Y CIERRE -->
+                    <h3><i class="fas fa-camera"></i> Registro Fotográfico</h3>
+                    <div class="photo-grid">
+                        <div class="photo-box"><label for="cal-f1">Imagen 1</label><input type="file" id="cal-f1" accept="image/*" capture="environment"><div class="preview" id="cal-p1">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="cal-f2">Imagen 2</label><input type="file" id="cal-f2" accept="image/*" capture="environment"><div class="preview" id="cal-p2">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="cal-f3">Imagen 3</label><input type="file" id="cal-f3" accept="image/*" capture="environment"><div class="preview" id="cal-p3">📸 Sin foto</div></div>
+                        <div class="photo-box"><label for="cal-f4">Imagen 4</label><input type="file" id="cal-f4" accept="image/*" capture="environment"><div class="preview" id="cal-p4">📸 Sin foto</div></div>
+                    </div>
+
+                    <button type="submit" id="btn-guardar-calidad" class="btn-primary" style="margin-top:20px;">Guardar Control de Calidad</button>
+                    <button type="button" id="btn-cancelar-edicion-calidad" class="btn-logout hidden" style="width:100%; margin-top:10px; margin-bottom:50px;" onclick="cancelarEdicionCalidad()">Cancelar Edición</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
     <section id="view-modulo-carga" class="view hidden">
         <div class="modulo-carga-header">
             <div class="header-content">
@@ -718,6 +971,7 @@
     </div>
 
     <script src="app.js"></script>
+    <script src="calidad.js"></script>
     <button id="fab-ticketera" class="fab-ticketera" title="Nueva Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>
 </body>
 </html>
