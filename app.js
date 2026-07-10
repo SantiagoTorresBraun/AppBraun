@@ -136,6 +136,12 @@ const LOGO_BRAUN_BLANCO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAF
 
 // --- 2. SISTEMA DE NAVEGACIÓN Y VISTAS ---
 function cambiarVista(idDestino) {
+    // GUARD DE RUTAS: toda la navegación pasa por acá, así que este único
+    // control protege todos los módulos (Carga, Calidad, Ticketera, Contratos).
+    if (idDestino !== 'view-login' && !haySesionActiva()) {
+        idDestino = 'view-login';
+    }
+
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     const vistaDestino = document.getElementById(idDestino);
     vistaDestino.classList.remove('hidden');
@@ -152,6 +158,9 @@ function cambiarVista(idDestino) {
             document.getElementById('header-title').textContent = "Braun - Panel de Control";
             btnBack.classList.add('hidden');
             vistaHistorialNavegacion = ['view-menu-principal'];
+            const welcome = document.querySelector('.welcome-text');
+            const nombre = nombreUsuarioActual();
+            if (welcome && nombre) welcome.textContent = `¡Hola, ${nombre.split(' ')[0]}! Selecciona un módulo`;
         } else if (idDestino === 'view-submenu-carga') {
             document.getElementById('header-title').textContent = "Control de Carga";
             btnBack.classList.remove('hidden');
@@ -557,20 +566,34 @@ function agregarFilaContrato() {
 }
 
 // --- 4. AUTENTICACIÓN (LOGIN) ---
-document.getElementById('form-login').addEventListener('submit', function(e) {
+// La validación real (lista blanca + hash de contraseña) vive en auth.js.
+document.getElementById('form-login').addEventListener('submit', async function(e) {
     e.preventDefault();
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
-    if (email.includes('@') && password.length >= 4) {
-        localStorage.setItem('usuarioBraun', email);
+    const boton = document.getElementById('btn-login');
+    const errorBox = document.getElementById('login-error');
+
+    errorBox.classList.add('hidden');
+    boton.disabled = true;
+    boton.textContent = 'Verificando...';
+
+    const resultado = await iniciarSesion(email, password);
+
+    boton.disabled = false;
+    boton.textContent = 'Iniciar Sesión';
+
+    if (resultado.ok) {
+        document.getElementById('form-login').reset();
         cambiarVista('view-menu-principal');
     } else {
-        alert('Credenciales inválidas.');
+        errorBox.textContent = resultado.error;
+        errorBox.classList.remove('hidden');
     }
 });
 
 function cerrarSesion() {
-    localStorage.removeItem('usuarioBraun');
+    cerrarSesionAuth();
     cambiarVista('view-login');
 }
 
@@ -892,6 +915,7 @@ document.getElementById('form-ticketera').addEventListener('submit', function(e)
     if (!nombre || !correo) { alert('Completá nombre y correo del solicitante.'); return; }
 
     const ticket = {
+        usuario_registro: usuarioRegistroActual(),
         fecha_creacion: new Date().toISOString(),
         fecha_cierre: '',
         nombre_solicitante: nombre,
@@ -1128,6 +1152,8 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
 
     return {
         Id_Carga: idParaGuardar,
+        // Auditoría: email del operario logueado que crea/modifica el registro
+        usuario_registro: usuarioRegistroActual(),
         Fecha: document.getElementById("fecha").value,
         Tipo_Carga: tipoCargaActual,
         Nombre_Chofer: document.getElementById("chofer").value,
@@ -2253,7 +2279,7 @@ function sincronizarDatosPendientes() {
 
 // --- INICIALIZACIÓN ---
 document.addEventListener("DOMContentLoaded", () => {
-    if (localStorage.getItem('usuarioBraun')) {
+    if (haySesionActiva()) {
         cambiarVista('view-menu-principal');
     } else {
         cambiarVista('view-login');

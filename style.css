@@ -108,6 +108,36 @@ header h1 {
     margin-bottom: 30px;
     font-weight: 400;
 }
+
+.login-subtitle {
+    color: var(--color-text-dark);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.login-hint {
+    color: #777;
+    font-size: 0.85rem;
+    margin-bottom: 25px;
+}
+
+.login-error {
+    background: #fdecea;
+    color: #b71c1c;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+#btn-login:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
  
  
 /* 2. MENÚ PRINCIPAL EN CUADRÍCULA (GRID) - IGUAL A TU CAPTURA */

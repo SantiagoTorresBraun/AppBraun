@@ -27,16 +27,19 @@
             <div class="login-logo">
                 <img src="logo-braun.png" alt="Logo Braun" class="app-login-logo">
             </div>
+            <p class="login-subtitle">Sistema de Control Operativo</p>
+            <p class="login-hint">Acceso exclusivo para personal autorizado</p>
             <form id="form-login">
                 <div class="form-group">
-                    <label><i class="fas fa-envelope"></i> Correo Electrónico</label>
-                    <input type="email" id="login-email" placeholder="operario@braun.com" required>
+                    <label for="login-email"><i class="fas fa-envelope"></i> Correo Corporativo</label>
+                    <input type="email" id="login-email" placeholder="nombre.apellido@braunrelacionescomerciales.com.ar" autocomplete="username" required>
                 </div>
                 <div class="form-group">
-                    <label><i class="fas fa-lock"></i> Contraseña</label>
-                    <input type="password" id="login-password" placeholder="••••••••" required>
+                    <label for="login-password"><i class="fas fa-lock"></i> Contraseña</label>
+                    <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required>
                 </div>
-                <button type="submit" class="btn-primary">Iniciar Sesión</button>
+                <div id="login-error" class="login-error hidden"></div>
+                <button type="submit" id="btn-login" class="btn-primary">Iniciar Sesión</button>
             </form>
         </div>
     </section>
@@ -970,6 +973,7 @@
         </div>
     </div>
 
+    <script src="auth.js"></script>
     <script src="app.js"></script>
     <script src="calidad.js"></script>
     <button id="fab-ticketera" class="fab-ticketera" title="Nueva Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>

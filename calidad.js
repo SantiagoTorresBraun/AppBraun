@@ -240,6 +240,8 @@ function construirRegistroCalidad(idParaGuardar) {
 
     const registro = {
         "Id_Calidad": idParaGuardar,
+        // Auditoría: email del operario logueado que crea/modifica el control
+        "usuario_registro": usuarioRegistroActual(),
         "Grano": granoActual,
         "Fecha Analisis": document.getElementById('cal-fecha').value,
         "Cliente": document.getElementById('cal-cliente').value,
@@ -751,7 +753,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('cal-kg').addEventListener('input', recalcularTotalesCalidad);
 
     // Ruteo interno: si la URL trae #/control-calidad/<grano> y hay sesión, abrimos directo
-    if (localStorage.getItem('usuarioBraun')) {
+    if (haySesionActiva()) {
         abrirCalidadDesdeHash();
     }
 });
