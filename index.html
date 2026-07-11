@@ -261,11 +261,8 @@
                     </div>
                 </div>
 
-                <!-- Poroto Mung (esqueleto preparado, se habilita en CALIDAD_CONFIG) -->
-                <div class="menu-card disabled-card" onclick="abrirModuloCalidad('POROTO_MUNG')">
-                    <div class="disabled-overlay">
-                        <span class="coming-soon-badge">Próximamente</span>
-                    </div>
+                <!-- Poroto Mung -->
+                <div class="menu-card active" onclick="abrirModuloCalidad('POROTO_MUNG')">
                     <div class="card-header">
                         <div class="card-icon quality-icon">
                             <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -275,11 +272,14 @@
                         </div>
                         <div class="card-title-section">
                             <h3 class="card-title">Poroto Mung</h3>
-                            <span class="card-badge coming-badge">En desarrollo</span>
+                            <span class="card-badge active-badge">Activo</span>
                         </div>
                     </div>
                     <div class="card-body">
-                        <p class="card-description">Análisis de calidad para poroto mung</p>
+                        <p class="card-description">Análisis de calibres, defectos y condición del poroto mung</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
                     </div>
                 </div>
             </div>
@@ -789,6 +789,103 @@
                         <i class="fas fa-trash"></i> Eliminar
                     </button>
                     <button class="btn-accion volver" onclick="cerrarDetalleCarga()">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: DETALLE DE CONTROL DE CALIDAD (SOLO LECTURA) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-detalle-calidad" class="view hidden">
+        <div class="detalle-header">
+            <div class="detalle-title-section">
+                <h2>Detalle de Control de Calidad — <span id="det-cal-titulo-grano">Garbanzo</span></h2>
+                <p class="detalle-subtitle">Información completa del análisis (solo lectura)</p>
+            </div>
+            <button class="btn-cerrar-detalle" onclick="cerrarDetalleCalidad()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="container detalle-container">
+            <div class="detalle-content">
+                <!-- Información General -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Información General</h3>
+                    <div class="detalle-grid">
+                        <div class="detalle-item"><label>Fecha Análisis</label><div class="detalle-value" id="det-cal-fecha">-</div></div>
+                        <div class="detalle-item"><label>Cliente</label><div class="detalle-value" id="det-cal-cliente">-</div></div>
+                        <div class="detalle-item"><label>Muestreo en</label><div class="detalle-value" id="det-cal-muestreo">-</div></div>
+                        <div class="detalle-item"><label>Kg</label><div class="detalle-value" id="det-cal-kg">-</div></div>
+                        <div class="detalle-item"><label>Tipo</label><div class="detalle-value" id="det-cal-tipo">-</div></div>
+                        <div class="detalle-item"><label>Calibre</label><div class="detalle-value" id="det-cal-calibre">-</div></div>
+                        <div class="detalle-item"><label>Envase</label><div class="detalle-value" id="det-cal-envase">-</div></div>
+                        <div class="detalle-item"><label>Variedad</label><div class="detalle-value" id="det-cal-variedad">-</div></div>
+                    </div>
+                </div>
+
+                <!-- Lotes y Contratos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Lotes y Contratos</h3>
+                    <div class="detalle-grid">
+                        <div class="detalle-item"><label>N° Lote</label><div class="detalle-value" id="det-cal-lote">-</div></div>
+                        <div class="detalle-item"><label>N° Lote BRC</label><div class="detalle-value" id="det-cal-lote-brc">-</div></div>
+                        <div class="detalle-item"><label>N° Lote Cliente/Planta</label><div class="detalle-value" id="det-cal-lote-cliente">-</div></div>
+                        <div class="detalle-item"><label>N° CTG</label><div class="detalle-value" id="det-cal-ctg">-</div></div>
+                        <div class="detalle-item"><label>Contrato Producción</label><div class="detalle-value" id="det-cal-contrato-prod">-</div></div>
+                        <div class="detalle-item"><label>Contrato Comercial</label><div class="detalle-value" id="det-cal-contrato-com">-</div></div>
+                        <div class="detalle-item"><label>Contrato FM</label><div class="detalle-value" id="det-cal-contrato-fm">-</div></div>
+                        <div class="detalle-item"><label>N° Proceso</label><div class="detalle-value" id="det-cal-proceso">-</div></div>
+                    </div>
+                </div>
+
+                <!-- Análisis de Calibre -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Análisis de Calibre (%)</h3>
+                    <div class="detalle-checklist" id="det-cal-calibres"><p style="color: #999;">Sin datos</p></div>
+                </div>
+
+                <!-- Defectos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Defectos Físicos (%)</h3>
+                    <div class="detalle-checklist" id="det-cal-defectos"><p style="color: #999;">Sin datos</p></div>
+                </div>
+
+                <!-- Condición de la Muestra -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Condición de la Muestra</h3>
+                    <div class="detalle-checklist" id="det-cal-condicion"><p style="color: #999;">Sin datos</p></div>
+                </div>
+
+                <!-- Observaciones -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Observaciones</h3>
+                    <div class="detalle-value" id="det-cal-observaciones" style="white-space: pre-wrap;">-</div>
+                </div>
+
+                <!-- Fotos -->
+                <div class="detalle-section">
+                    <h3 class="section-title">Registro Fotográfico</h3>
+                    <div class="detalle-foto-grid" id="det-cal-fotos">
+                        <p style="color: #999;">No hay fotos</p>
+                    </div>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="detalle-actions">
+                    <button class="btn-accion editar" onclick="editarDesdeDetalleCalidad()" title="Editar este control">
+                        <i class="fas fa-pen"></i> Editar
+                    </button>
+                    <button class="btn-accion pdf" onclick="pdfDesdeDetalleCalidad()" title="Descargar PDF">
+                        <i class="fas fa-file-pdf"></i> Descargar PDF
+                    </button>
+                    <button class="btn-accion eliminar" onclick="eliminarDesdeDetalleCalidad()" title="Eliminar este control">
+                        <i class="fas fa-trash"></i> Eliminar
+                    </button>
+                    <button class="btn-accion volver" onclick="cerrarDetalleCalidad()">
                         <i class="fas fa-arrow-left"></i> Volver
                     </button>
                 </div>
