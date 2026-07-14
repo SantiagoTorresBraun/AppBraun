@@ -23,6 +23,9 @@ request.onsuccess = function(e) {
     cargarHistorialDesdeGoogle();
     if (typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
     if (typeof sincronizarCalidadPendientes === 'function' && navigator.onLine) sincronizarCalidadPendientes();
+    cargarTicketsDesdeGoogle();
+    if (navigator.onLine) sincronizarTicketsPendientes();
+    sincronizarUsuariosDesdeSheet();
 };
 request.onerror = function(e) { console.error("Error IndexedDB", e); };
 
@@ -585,7 +588,12 @@ document.getElementById('form-login').addEventListener('submit', async function(
 
     if (resultado.ok) {
         document.getElementById('form-login').reset();
-        cambiarVista('view-menu-principal');
+        // Si venía del link de un correo de la ticketera, retomamos ese destino
+        if ((location.hash || '').startsWith('#/ticketera')) {
+            abrirTicketera();
+        } else {
+            cambiarVista('view-menu-principal');
+        }
     } else {
         errorBox.textContent = resultado.error;
         errorBox.classList.remove('hidden');
@@ -605,6 +613,8 @@ function updateOnlineStatus() {
         badge.className = "online";
         sincronizarDatosPendientes();
         cargarHistorialDesdeGoogle();
+        sincronizarTicketsPendientes();
+        if (typeof sincronizarCalidadPendientes === 'function') sincronizarCalidadPendientes();
     } else {
         badge.textContent = "Offline";
         badge.className = "offline";
@@ -853,14 +863,33 @@ document.addEventListener('DOMContentLoaded', function() { createImageModal(); }
 function abrirTicketera() {
     // Mostrar vista
     cambiarVista('view-ticketera');
-    // Poblar selects de solicitante y responsable desde la lista centralizada de personal
-    const selNombre = document.getElementById('ticket-nombre');
-    if (selNombre) poblarSelect(selNombre, 'personal', '');
-    const sel = document.getElementById('ticket-responsable');
-    if (sel) poblarSelect(sel, 'personal', '');
-    // Limpiar formulario y cargar tabla
+    // Responsables: la lista de usuarios del login (así siempre tenemos su correo
+    // para las notificaciones). value = email, texto visible = nombre.
+    poblarSelectResponsables();
+    // Limpiar formulario y autocompletar solicitante con el usuario logueado
     resetTicketForm();
+    cargarTicketsDesdeGoogle();
     renderTicketsTicketera();
+}
+
+function poblarSelectResponsables(sel) {
+    const select = sel || document.getElementById('ticket-responsable');
+    if (!select) return;
+    select.innerHTML = '<option value="">-- Elegir responsable --</option>' +
+        obtenerUsuariosApp().map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+}
+
+// Solicitante: también desplegable con todos los miembros de la empresa.
+// value = email, texto = nombre; el correo se completa solo al elegir.
+function poblarSelectSolicitante() {
+    const select = document.getElementById('ticket-nombre');
+    const correo = document.getElementById('ticket-correo');
+    if (!select) return;
+    select.innerHTML = obtenerUsuariosApp().map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+    const sesion = obtenerSesion();
+    if (sesion) select.value = sesion.email;
+    if (correo) correo.value = select.value || '';
+    select.onchange = function() { if (correo) correo.value = this.value || ''; };
 }
 
 function resetTicketForm() {
@@ -870,6 +899,8 @@ function resetTicketForm() {
     if (preview) preview.textContent = 'Sin archivo';
     // limpiar base64 temporal
     form && (form._archivoBase64 = '');
+    // Solicitante: desplegable con los miembros, preseleccionado el usuario logueado
+    poblarSelectSolicitante();
 }
 
 // Manejo del archivo adjunto: preview y guardado temporal en el form
@@ -901,151 +932,341 @@ document.addEventListener('change', function(e){
     }
 });
 
-// Guardar nuevo ticket en IndexedDB y notificar backend
+// Guardar nuevo ticket: entra a la cola offline (IndexedDB) y la sincronización
+// lo sube al Sheet con _accion "crear_ticket" — el backend guarda la fila Y
+// le manda el correo de notificación al responsable. Funciona igual sin conexión:
+// al volver internet se sube y recién ahí se notifica.
 document.getElementById('form-ticketera').addEventListener('submit', function(e){
     e.preventDefault();
-    const nombre = document.getElementById('ticket-nombre').value.trim();
-    const correo = document.getElementById('ticket-correo').value.trim();
-    const responsable = document.getElementById('ticket-responsable').value;
+    const selSolicitante = document.getElementById('ticket-nombre');
+    const correo = selSolicitante.value.trim();
+    const nombre = selSolicitante.selectedIndex >= 0 ? selSolicitante.options[selSolicitante.selectedIndex].text : '';
+    const selResponsable = document.getElementById('ticket-responsable');
+    const correoResponsable = selResponsable.value;
+    const nombreResponsable = selResponsable.selectedIndex > 0 ? selResponsable.options[selResponsable.selectedIndex].text : '';
     const prioridad = document.querySelector('input[name="ticket-prioridad"]:checked').value;
     const detalle = document.getElementById('ticket-detalle').value.trim();
     const form = document.getElementById('form-ticketera');
     const archivo = form && form._archivoBase64 ? form._archivoBase64 : '';
 
     if (!nombre || !correo) { alert('Completá nombre y correo del solicitante.'); return; }
+    if (!correoResponsable) { alert('Elegí el responsable asignado: es quien recibe la notificación del ticket.'); return; }
 
     const ticket = {
+        id_ticket: 'TK-' + Date.now(),
         usuario_registro: usuarioRegistroActual(),
         fecha_creacion: new Date().toISOString(),
         fecha_cierre: '',
         nombre_solicitante: nombre,
         correo_solicitante: correo,
-        responsable_asignado: responsable || '',
+        responsable_asignado: nombreResponsable,
+        correo_responsable: correoResponsable,
         prioridad: prioridad,
         detalle_solicitud: detalle,
         archivo_adjunto: archivo,
-        estado_ticket: 'Abierto'
+        estado_ticket: 'Abierto',
+        respuesta: '',
+        fecha_respuesta: ''
     };
 
     const tx = db.transaction(['ticketera_tickets'], 'readwrite');
     const store = tx.objectStore('ticketera_tickets');
     const req = store.add(ticket);
     req.onsuccess = function() {
-        // notificar creación al backend para enviar correo
-        try {
-            fetch(WEB_APP_URL, {
-                method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify(Object.assign({ _accion: 'crear_ticket' }, ticket))
-            });
-        } catch (err) { console.error('Error al notificar backend crear_ticket', err); }
         resetTicketForm();
         renderTicketsTicketera();
-        alert('Ticket creado correctamente.');
+        if (navigator.onLine) {
+            sincronizarTicketsPendientes();
+            alert(`Ticket creado. ${nombreResponsable} va a recibir la notificación por correo.`);
+        } else {
+            alert('Ticket guardado sin conexión. Cuando vuelva internet se enviará y se notificará al responsable.');
+        }
     };
     req.onerror = function(e){ console.error('Error al guardar ticket:', e); alert('No se pudo guardar el ticket.'); };
 });
 
-// Renderizar tickets desde IndexedDB en la tabla
-function renderTicketsTicketera() {
-    const tbody = document.getElementById('ticketera-body');
-    if (!tbody) return;
+// --- GESTOR DE USUARIOS DE LA EMPRESA (login + ticketera) ---
+// La lista vive en la hoja "Usuarios" del Sheet (compartida entre dispositivos)
+// con caché local en localStorage (ver auth.js). Los 8 usuarios base del código
+// no se pueden eliminar desde acá.
+
+function abrirGestorUsuarios() {
+    renderizarListaUsuarios();
+    document.getElementById('modal-gestor-usuarios').classList.add('active');
+}
+
+function cerrarGestorUsuarios() {
+    document.getElementById('modal-gestor-usuarios').classList.remove('active');
+}
+
+function renderizarListaUsuarios() {
+    const lista = document.getElementById('gestor-lista-usuarios');
+    if (!lista) return;
+    lista.innerHTML = '';
+    obtenerUsuariosApp().forEach(u => {
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.innerHTML = `${escapeHtml(u.nombre)}<br><small style="color:#888;">${escapeHtml(u.email)}</small>`;
+        li.appendChild(span);
+        if (u.esBase) {
+            const candado = document.createElement('span');
+            candado.innerHTML = '<i class="fas fa-lock" style="color:#bbb;" title="Usuario original: no se puede eliminar desde la app"></i>';
+            li.appendChild(candado);
+        } else {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'gestor-btn-quitar';
+            btn.title = `Quitar a ${u.nombre}`;
+            btn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+            btn.onclick = () => quitarUsuarioUI(u.email, u.nombre);
+            li.appendChild(btn);
+        }
+        lista.appendChild(li);
+    });
+}
+
+function agregarUsuarioUI() {
+    const inputNombre = document.getElementById('usuario-nuevo-nombre');
+    const inputEmail = document.getElementById('usuario-nuevo-email');
+    const nombre = (inputNombre.value || '').trim();
+    const email = (inputEmail.value || '').trim().toLowerCase();
+
+    if (!nombre) { alert('Escribí el nombre y apellido del usuario.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('El correo no tiene un formato válido.'); return; }
+    if (obtenerUsuariosApp().some(u => u.email === email)) { alert('Ese correo ya está en la lista de usuarios.'); return; }
+
+    // Actualizar caché local (el usuario ya queda operativo en este dispositivo)
+    const extras = obtenerUsuariosExtra();
+    extras.push({ nombre: nombre, email: email });
+    guardarUsuariosExtra(extras);
+
+    // Persistir en la hoja "Usuarios" para el resto de los dispositivos
+    if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
+        fetch(WEB_APP_URL, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _accion: 'agregar_usuario', nombre: nombre, email: email })
+        }).catch(err => console.error('No se pudo guardar el usuario en el servidor:', err));
+    } else {
+        alert('Sin conexión: el usuario quedó solo en este dispositivo. Volvé a agregarlo con internet para que lo vean todos.');
+    }
+
+    inputNombre.value = '';
+    inputEmail.value = '';
+    renderizarListaUsuarios();
+    poblarSelectSolicitante();
+    poblarSelectResponsables();
+    renderTicketsTicketera();
+}
+
+function quitarUsuarioUI(email, nombre) {
+    if (!confirm(`¿Quitar a ${nombre} (${email}) de la lista de usuarios?\nYa no podrá iniciar sesión ni recibir tickets.`)) return;
+
+    guardarUsuariosExtra(obtenerUsuariosExtra().filter(u => String(u.email).toLowerCase() !== email));
+
+    if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
+        fetch(WEB_APP_URL, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _accion: 'eliminar_usuario', email: email })
+        }).catch(err => console.error('No se pudo eliminar el usuario en el servidor:', err));
+    }
+
+    renderizarListaUsuarios();
+    poblarSelectSolicitante();
+    poblarSelectResponsables();
+    renderTicketsTicketera();
+}
+
+// --- SINCRONIZACIÓN DE TICKETS (mismo patrón que Carga y Calidad) ---
+let historialTickets = []; // tickets ya sincronizados (vienen de la hoja "Tickets")
+
+function cargarTicketsDesdeGoogle() {
+    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
+    fetch(`${WEB_APP_URL}?action=read_tickets`)
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data)) {
+                historialTickets = data.filter(t => t && t.id_ticket);
+                renderTicketsTicketera();
+            }
+        })
+        .catch(err => console.error('Error cargando tickets:', err));
+}
+
+function obtenerTicketsLocales() {
+    return new Promise(resolve => {
+        if (!db || !db.objectStoreNames.contains('ticketera_tickets')) { resolve([]); return; }
+        try {
+            const tx = db.transaction(['ticketera_tickets'], 'readonly');
+            const req = tx.objectStore('ticketera_tickets').getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        } catch (e) { resolve([]); }
+    });
+}
+
+// Sube los tickets en cola al backend (que guarda la fila y manda el correo)
+function sincronizarTicketsPendientes() {
+    if (!db || !navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
     const tx = db.transaction(['ticketera_tickets'], 'readonly');
-    const store = tx.objectStore('ticketera_tickets');
-    const req = store.getAll();
-    req.onsuccess = function() {
-        let items = req.result || [];
+    tx.objectStore('ticketera_tickets').openCursor().onsuccess = function(e) {
+        const cursor = e.target.result;
+        if (!cursor) { setTimeout(cargarTicketsDesdeGoogle, 2500); return; }
+        const item = cursor.value;
+        const idKey = item.id;
+        const payload = Object.assign({ _accion: 'crear_ticket' }, item);
+        delete payload.id;
 
-        // Filtros del historial (estado, prioridad y búsqueda rápida)
-        const filtroEstado = (document.getElementById('filter-ticket-estado') || {}).value || '';
-        const filtroPrioridad = (document.getElementById('filter-ticket-prioridad') || {}).value || '';
-        const filtroTxt = ((document.getElementById('filter-ticket-search') || {}).value || '').toLowerCase();
-        items = items.filter(item => {
-            if (filtroEstado && (item.estado_ticket || 'Abierto') !== filtroEstado) return false;
-            if (filtroPrioridad && (item.prioridad || 'Baja') !== filtroPrioridad) return false;
-            if (filtroTxt) {
-                const texto = `${item.nombre_solicitante || ''} ${item.correo_solicitante || ''} ${item.responsable_asignado || ''} ${item.detalle_solicitud || ''}`.toLowerCase();
-                if (!texto.includes(filtroTxt)) return false;
-            }
-            return true;
-        });
-
-        if (items.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay tickets que coincidan con los filtros.</td></tr>`; return; }
-        // ordenar por fecha desc
-        items.sort((a,b)=> (b.fecha_creacion||'').localeCompare(a.fecha_creacion||''));
-        tbody.innerHTML = '';
-        items.forEach(item => {
-            const tr = document.createElement('tr');
-            const fecha = new Date(item.fecha_creacion).toLocaleString();
-            const prioridadClass = item.prioridad === 'Alta' ? 'alta' : (item.prioridad === 'Media' ? 'media' : 'baja');
-            tr.innerHTML = `
-                <td data-label="Fecha" class="td-fecha-ticket">${fecha}</td>
-                <td data-label="Solicitante"><b>${escapeHtml(item.nombre_solicitante || '-')}</b><br><small>${escapeHtml(item.correo_solicitante || '')}</small></td>
-                <td data-label="Responsable">
-                    <select class="ticket-resp-select">
-                        <option value="">-- Ninguno --</option>
-                    </select>
-                </td>
-                <td data-label="Prioridad" class="td-prio-ticket"><span class="badge-prio ${prioridadClass}">${item.prioridad || 'Baja'}</span></td>
-                <td data-label="Estado">
-                    <select class="ticket-estado-select">
-                        <option value="Abierto">Abierto</option>
-                        <option value="En Proceso">En Proceso</option>
-                        <option value="Cerrado">Cerrado</option>
-                    </select>
-                </td>
-                <td class="td-acciones-ticket">
-                    <button class="btn-table-action" title="Ver detalle"> <i class="fas fa-eye"></i> </button>
-                    <button class="btn-table-action" title="Descargar adjunto"> <i class="fas fa-download"></i> </button>
-                </td>
-            `;
-
-            // insertar opciones de responsables
-            const respSelect = tr.querySelector('.ticket-resp-select');
-            if (respSelect) {
-                const opciones = (ENUMS && ENUMS.personal) ? ENUMS.personal : [];
-                opciones.forEach(opt => {
-                    const o = document.createElement('option'); o.value = opt; o.textContent = opt; if (opt === item.responsable_asignado) o.selected = true; respSelect.appendChild(o);
-                });
-            }
-
-            // set estado
-            const estadoSelect = tr.querySelector('.ticket-estado-select');
-            if (estadoSelect) estadoSelect.value = item.estado_ticket || 'Abierto';
-
-            // acciones: ver detalle / descargar
-            const btns = tr.querySelectorAll('.btn-table-action');
-            if (btns[0]) btns[0].addEventListener('click', ()=> showTicketDetalle(item));
-            if (btns[1]) btns[1].addEventListener('click', ()=> descargarAdjuntoTicket(item));
-
-            // cuando se cambia responsable
-            respSelect.addEventListener('change', function(){
-                const nuevo = this.value;
-                updateTicketField(item.id, 'responsable_asignado', nuevo, function(){
-                    // notificar al responsable
-                    try { fetch(WEB_APP_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ _accion:'notificar_responsable', ticket:Object.assign({}, item, { responsable_asignado: nuevo }) }) }); } catch(e){ console.error(e); }
-                    renderTicketsTicketera();
-                });
-            });
-
-            // cuando se cambia estado
-            estadoSelect.addEventListener('change', function(){
-                const nuevo = this.value;
-                const patch = { estado_ticket: nuevo };
-                if (nuevo === 'Cerrado') patch.fecha_cierre = new Date().toISOString();
-                updateTicketFields(item.id, patch, function(){
-                    // notificar responsable del cambio
-                    try { fetch(WEB_APP_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ _accion:'notificar_responsable', ticket:Object.assign({}, item, patch) }) }); } catch(e){ console.error(e); }
-                    renderTicketsTicketera();
-                });
-            });
-
-            tbody.appendChild(tr);
-        });
+        fetch(WEB_APP_URL, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(() => {
+            const delTx = db.transaction(['ticketera_tickets'], 'readwrite');
+            delTx.objectStore('ticketera_tickets').delete(idKey).onsuccess = function() {
+                sincronizarTicketsPendientes();
+            };
+        })
+        .catch(err => console.error('No se pudo sincronizar el ticket:', err));
     };
 }
 
+// Aplica un cambio a un ticket (estado, responsable, respuesta) y avisa al backend,
+// que actualiza la hoja y manda la notificación que corresponda.
+function aplicarCambioTicket(item, patch, accion) {
+    if (item._pendienteSync) {
+        // Todavía está en la cola local: se edita ahí y viajará ya corregido
+        updateTicketFields(item.id, patch, renderTicketsTicketera);
+        return;
+    }
+    const idx = historialTickets.findIndex(t => t.id_ticket === item.id_ticket);
+    if (idx !== -1) Object.assign(historialTickets[idx], patch);
+    if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
+        fetch(WEB_APP_URL, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({ _accion: accion || 'actualizar_ticket', id_ticket: item.id_ticket }, patch))
+        }).catch(err => console.error('No se pudo actualizar el ticket en el servidor:', err));
+    }
+    renderTicketsTicketera();
+}
+
+// Responder un ticket: guarda la respuesta y el backend le manda el correo al solicitante
+function responderTicket(item) {
+    const texto = prompt(`Respuesta para ${item.nombre_solicitante} (se le enviará por correo):`, item.respuesta || '');
+    if (texto === null || !texto.trim()) return;
+    const patch = {
+        respuesta: texto.trim(),
+        fecha_respuesta: new Date().toISOString(),
+        estado_ticket: (item.estado_ticket === 'Abierto') ? 'En Proceso' : (item.estado_ticket || 'En Proceso')
+    };
+    aplicarCambioTicket(item, patch, 'responder_ticket');
+}
+
+// Renderizar tickets: los sincronizados (hoja "Tickets", visibles para todo el
+// equipo) + los que todavía están en la cola local de este dispositivo.
+async function renderTicketsTicketera() {
+    const tbody = document.getElementById('ticketera-body');
+    if (!tbody) return;
+
+    const locales = (await obtenerTicketsLocales()).map(t => Object.assign({}, t, { _pendienteSync: true }));
+    const idsLocales = new Set(locales.map(t => t.id_ticket));
+    let items = locales.concat(historialTickets.filter(t => !idsLocales.has(t.id_ticket)));
+
+    // Filtros del historial (estado, prioridad y búsqueda rápida)
+    const filtroEstado = (document.getElementById('filter-ticket-estado') || {}).value || '';
+    const filtroPrioridad = (document.getElementById('filter-ticket-prioridad') || {}).value || '';
+    const filtroTxt = ((document.getElementById('filter-ticket-search') || {}).value || '').toLowerCase();
+    items = items.filter(item => {
+        if (filtroEstado && (item.estado_ticket || 'Abierto') !== filtroEstado) return false;
+        if (filtroPrioridad && (item.prioridad || 'Baja') !== filtroPrioridad) return false;
+        if (filtroTxt) {
+            const texto = `${item.nombre_solicitante || ''} ${item.correo_solicitante || ''} ${item.responsable_asignado || ''} ${item.detalle_solicitud || ''}`.toLowerCase();
+            if (!texto.includes(filtroTxt)) return false;
+        }
+        return true;
+    });
+
+    if (items.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay tickets que coincidan con los filtros.</td></tr>`; return; }
+    // ordenar por fecha desc
+    items.sort((a,b)=> (b.fecha_creacion||'').localeCompare(a.fecha_creacion||''));
+    tbody.innerHTML = '';
+    items.forEach(item => {
+        const tr = document.createElement('tr');
+        const fecha = new Date(item.fecha_creacion).toLocaleString();
+        const prioridadClass = item.prioridad === 'Alta' ? 'alta' : (item.prioridad === 'Media' ? 'media' : 'baja');
+        const marcaPendiente = item._pendienteSync
+            ? `<br><span class="badge-pendiente" title="Todavía no se sincronizó con el servidor"><i class="fas fa-clock"></i> Pendiente</span>` : '';
+        const marcaRespuesta = item.respuesta
+            ? ` <i class="fas fa-comment-dots" title="Tiene respuesta" style="color:#2e7d32;"></i>` : '';
+        tr.innerHTML = `
+            <td data-label="Fecha" class="td-fecha-ticket">${fecha}${marcaPendiente}</td>
+            <td data-label="Solicitante"><b>${escapeHtml(item.nombre_solicitante || '-')}</b>${marcaRespuesta}<br><small>${escapeHtml(item.correo_solicitante || '')}</small></td>
+            <td data-label="Responsable">
+                <select class="ticket-resp-select"></select>
+            </td>
+            <td data-label="Prioridad" class="td-prio-ticket"><span class="badge-prio ${prioridadClass}">${item.prioridad || 'Baja'}</span></td>
+            <td data-label="Estado">
+                <select class="ticket-estado-select">
+                    <option value="Abierto">Abierto</option>
+                    <option value="En Proceso">En Proceso</option>
+                    <option value="Cerrado">Cerrado</option>
+                </select>
+            </td>
+            <td class="td-acciones-ticket">
+                <button class="btn-table-action" title="Responder (le llega por correo al solicitante)"> <i class="fas fa-reply" style="color:#2e7d32;"></i> </button>
+                <button class="btn-table-action" title="Ver detalle"> <i class="fas fa-eye"></i> </button>
+                <button class="btn-table-action" title="Descargar adjunto"> <i class="fas fa-download"></i> </button>
+            </td>
+        `;
+
+        // Responsables: todos los miembros de la empresa (value = email, texto = nombre)
+        const respSelect = tr.querySelector('.ticket-resp-select');
+        const usuariosEmpresa = obtenerUsuariosApp();
+        respSelect.innerHTML = '<option value="">-- Ninguno --</option>' +
+            usuariosEmpresa.map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+        respSelect.value = item.correo_responsable || '';
+        if (!respSelect.value && item.responsable_asignado) {
+            // compat: tickets viejos guardados solo con el nombre
+            const u = usuariosEmpresa.find(x => x.nombre === item.responsable_asignado);
+            if (u) respSelect.value = u.email;
+        }
+
+        // set estado
+        const estadoSelect = tr.querySelector('.ticket-estado-select');
+        estadoSelect.value = item.estado_ticket || 'Abierto';
+
+        // acciones: responder / ver detalle / descargar
+        const btns = tr.querySelectorAll('.btn-table-action');
+        btns[0].addEventListener('click', ()=> responderTicket(item));
+        btns[1].addEventListener('click', ()=> showTicketDetalle(item));
+        btns[2].addEventListener('click', ()=> descargarAdjuntoTicket(item));
+
+        // Reasignar responsable → el backend le manda el correo al nuevo responsable
+        respSelect.addEventListener('change', function(){
+            const email = this.value;
+            const nombre = this.selectedIndex > 0 ? this.options[this.selectedIndex].text : '';
+            aplicarCambioTicket(item, { responsable_asignado: nombre, correo_responsable: email }, 'actualizar_ticket');
+        });
+
+        // Cambiar estado → si se cierra, el backend le avisa al solicitante
+        estadoSelect.addEventListener('change', function(){
+            const patch = { estado_ticket: this.value };
+            if (this.value === 'Cerrado') patch.fecha_cierre = new Date().toISOString();
+            aplicarCambioTicket(item, patch, 'actualizar_ticket');
+        });
+
+        tbody.appendChild(tr);
+    });
+}
+
 function showTicketDetalle(item) {
-    const detalle = `Fecha: ${new Date(item.fecha_creacion).toLocaleString()}\nSolicitante: ${item.nombre_solicitante} <${item.correo_solicitante}>\nResponsable: ${item.responsable_asignado}\nPrioridad: ${item.prioridad}\nEstado: ${item.estado_ticket}\n\nDetalle:\n${item.detalle_solicitud}`;
+    let detalle = `Ticket: ${item.id_ticket || '-'}\nFecha: ${new Date(item.fecha_creacion).toLocaleString()}\nSolicitante: ${item.nombre_solicitante} <${item.correo_solicitante}>\nResponsable: ${item.responsable_asignado || '-'}\nPrioridad: ${item.prioridad}\nEstado: ${item.estado_ticket}\n\nDetalle:\n${item.detalle_solicitud}`;
+    if (item.respuesta) {
+        detalle += `\n\n— Respuesta (${item.fecha_respuesta ? new Date(item.fecha_respuesta).toLocaleString() : ''}):\n${item.respuesta}`;
+    }
     alert(detalle);
 }
 
@@ -1375,12 +1596,16 @@ document.getElementById('filter-search').addEventListener('input', filtrarYRende
 document.getElementById('filter-fecha-desde').addEventListener('change', filtrarYRenderizarTabla);
 document.getElementById('filter-fecha-hasta').addEventListener('change', filtrarYRenderizarTabla);
 document.getElementById('filter-status').addEventListener('change', filtrarYRenderizarTabla);
+document.getElementById('filter-lote').addEventListener('input', filtrarYRenderizarTabla);
+document.getElementById('filter-posicion').addEventListener('input', filtrarYRenderizarTabla);
 
 async function filtrarYRenderizarTabla() {
     const txt = document.getElementById('filter-search').value.toLowerCase();
     const fechaDesde = document.getElementById('filter-fecha-desde').value;
     const fechaHasta = document.getElementById('filter-fecha-hasta').value;
     const status = document.getElementById('filter-status').value;
+    const filtroLote = (document.getElementById('filter-lote').value || '').trim().toLowerCase();
+    const filtroPosicion = (document.getElementById('filter-posicion').value || '').trim().toLowerCase();
     const tbody = document.getElementById('tabla-historial-body');
     if(!tbody) return;
  
@@ -1403,11 +1628,16 @@ async function filtrarYRenderizarTabla() {
         const textoContratos = contratos.map(c => (c.contrato_com || '')).join(' ').toLowerCase();
  
         if (txt && !textoProductos.includes(txt) && !textoContratos.includes(txt)) return false;
-        
+
+        // Filtro por N° Lote y Posición Planta (campos de los productos de la carga:
+        // la carga aparece si ALGÚN producto coincide)
+        if (filtroLote && !productos.some(p => String(p.lote || '').toLowerCase().includes(filtroLote))) return false;
+        if (filtroPosicion && !productos.some(p => String(p.posicion || '').toLowerCase().includes(filtroPosicion))) return false;
+
         // Filtrado por rango de fechas
         if (fechaDesde && item.Fecha && item.Fecha < fechaDesde) return false;
         if (fechaHasta && item.Fecha && item.Fecha > fechaHasta) return false;
-        
+
         if (status && item.ESTATUS !== status) return false;
         return true;
     });
@@ -2280,7 +2510,13 @@ function sincronizarDatosPendientes() {
 // --- INICIALIZACIÓN ---
 document.addEventListener("DOMContentLoaded", () => {
     if (haySesionActiva()) {
-        cambiarVista('view-menu-principal');
+        // Si la app se abrió desde el link de un correo de la ticketera
+        // (#/ticketera), vamos directo al módulo
+        if ((location.hash || '').startsWith('#/ticketera')) {
+            abrirTicketera();
+        } else {
+            cambiarVista('view-menu-principal');
+        }
     } else {
         cambiarVista('view-login');
     }

@@ -31,6 +31,57 @@ const AUTH_USUARIOS = [
     { email: 'santiago.torres@braunrelacionescomerciales.com.ar', nombre: 'Santiago Torres', passwordHash: AUTH_HASH_GENERICO }
 ];
 
+// --- USUARIOS AGREGADOS DESDE LA APP -----------------------------------------
+// Además de los 8 usuarios base (arriba), se pueden agregar usuarios desde el
+// módulo "Usuarios" de la app. Viven en la hoja "Usuarios" del Google Sheet
+// (visibles para todos los dispositivos) y se cachean en localStorage para que
+// el login funcione también sin conexión. Todos entran con la contraseña
+// genérica hasta que se migre a contraseñas individuales.
+const USUARIOS_EXTRA_KEY = 'braun_usuarios_extra_v1';
+
+function obtenerUsuariosExtra() {
+    try {
+        const lista = JSON.parse(localStorage.getItem(USUARIOS_EXTRA_KEY) || '[]');
+        return Array.isArray(lista) ? lista : [];
+    } catch (e) { return []; }
+}
+
+function guardarUsuariosExtra(lista) {
+    localStorage.setItem(USUARIOS_EXTRA_KEY, JSON.stringify(lista || []));
+}
+
+// Lista completa de usuarios de la empresa (base + agregados), sin duplicados.
+// Los base llevan esBase: true (no se pueden borrar desde la app).
+function obtenerUsuariosApp() {
+    const lista = AUTH_USUARIOS.map(u => ({ email: u.email, nombre: u.nombre, passwordHash: u.passwordHash, esBase: true }));
+    const emails = new Set(lista.map(u => u.email));
+    obtenerUsuariosExtra().forEach(u => {
+        if (!u || !u.email) return;
+        const email = String(u.email).trim().toLowerCase();
+        if (emails.has(email)) return;
+        emails.add(email);
+        lista.push({ email: email, nombre: u.nombre || email, passwordHash: AUTH_HASH_GENERICO, esBase: false });
+    });
+    return lista;
+}
+
+// Baja del Sheet la lista de usuarios y actualiza la caché local.
+// (WEB_APP_URL está definida en app.js, que carga después: se consulta al ejecutar)
+function sincronizarUsuariosDesdeSheet() {
+    if (typeof WEB_APP_URL === 'undefined' || !navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
+    fetch(`${WEB_APP_URL}?action=read_usuarios`)
+        .then(res => res.json())
+        .then(data => {
+            if (!Array.isArray(data)) return;
+            const emailsBase = new Set(AUTH_USUARIOS.map(u => u.email));
+            const extras = data
+                .filter(u => u && u.email && !emailsBase.has(String(u.email).trim().toLowerCase()))
+                .map(u => ({ nombre: u.nombre || u.email, email: String(u.email).trim().toLowerCase() }));
+            guardarUsuariosExtra(extras);
+        })
+        .catch(() => { /* sin conexión o backend sin la acción: se usa la caché */ });
+}
+
 // --- HASHING ---------------------------------------------------------------
 // Usa la Web Crypto API (disponible en HTTPS y en localhost, que es donde
 // corre cualquier PWA con service worker).
@@ -48,7 +99,7 @@ async function hashPassword(password) {
 // existe o no en la lista.
 async function iniciarSesion(email, password) {
     const emailNormalizado = (email || '').trim().toLowerCase();
-    const usuario = AUTH_USUARIOS.find(u => u.email === emailNormalizado);
+    const usuario = obtenerUsuariosApp().find(u => u.email === emailNormalizado);
 
     if (!usuario) {
         return { ok: false, error: 'Correo o contraseña incorrectos.' };
@@ -96,8 +147,8 @@ function obtenerSesion() {
             return null;
         }
 
-        // Si el usuario fue quitado de la lista blanca, su sesión deja de valer
-        if (!AUTH_USUARIOS.some(u => u.email === sesion.email)) {
+        // Si el usuario fue quitado de la lista (base o agregados), su sesión deja de valer
+        if (!obtenerUsuariosApp().some(u => u.email === sesion.email)) {
             cerrarSesionAuth();
             return null;
         }

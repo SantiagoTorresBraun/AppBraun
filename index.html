@@ -520,6 +520,14 @@
                         </select>
                     </div>
                     <div class="filter-group">
+                        <label for="filter-lote">N° Lote</label>
+                        <input type="text" id="filter-lote" placeholder="Ej: 4531">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-posicion">Posición Planta</label>
+                        <input type="text" id="filter-posicion" placeholder="Ej: L002">
+                    </div>
+                    <div class="filter-group">
                         <label for="filter-search">Búsqueda Rápida</label>
                         <input type="text" id="filter-search" placeholder="Producto, contrato...">
                     </div>
@@ -900,23 +908,20 @@
         <div class="container ticketera-container">
             <div class="tab-bar" style="display:flex; align-items:center; justify-content:space-between;">
                 <h3 style="margin:0; padding:12px 16px;">Ticketera Simple</h3>
+                <button type="button" class="btn-gestionar-opciones" style="margin-right:12px;" onclick="abrirGestorUsuarios()" title="Gestionar usuarios de la empresa">
+                    <i class="fas fa-users-cog"></i> Usuarios
+                </button>
             </div>
 
             <div class="ticketera-grid">
                 <div class="ticketera-form">
                     <form id="form-ticketera">
                         <div class="form-group"><label for="ticket-nombre">Nombre solicitante</label>
-                            <div class="enum-row">
-                                <select id="ticket-nombre" class="enum-select" data-enum="personal" required></select>
-                                <button type="button" class="btn-enum-config" onclick="abrirGestorPersonal()" title="Gestionar personal"><i class="fas fa-cog"></i></button>
-                            </div>
+                            <select id="ticket-nombre" required></select>
                         </div>
-                        <div class="form-group"><label for="ticket-correo">Correo solicitante</label><input type="email" id="ticket-correo" required></div>
+                        <div class="form-group"><label for="ticket-correo">Correo solicitante</label><input type="email" id="ticket-correo" readonly required></div>
                         <div class="form-group"><label for="ticket-responsable">Responsable asignado</label>
-                            <div class="enum-row">
-                                <select id="ticket-responsable" class="enum-select" data-enum="personal"></select>
-                                <button type="button" class="btn-enum-config" onclick="abrirGestorPersonal()" title="Gestionar personal"><i class="fas fa-cog"></i></button>
-                            </div>
+                            <select id="ticket-responsable" required></select>
                         </div>
                         <div class="form-group"><label>Prioridad</label>
                             <div class="si-no-toggle">
@@ -1066,6 +1071,29 @@
                     <input type="text" id="gestor-input-nueva" placeholder="Nueva opción..." maxlength="60">
                     <button type="button" class="gestor-btn-add" onclick="agregarOpcionGestor()"><i class="fas fa-plus"></i> Agregar</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL GESTOR DE USUARIOS DE LA EMPRESA (login + ticketera) -->
+    <div id="modal-gestor-usuarios" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarGestorUsuarios()"></div>
+        <div class="gestor-content">
+            <div class="gestor-header">
+                <h3><i class="fas fa-users-cog"></i> Usuarios de la Empresa</h3>
+                <button type="button" class="gestor-close" onclick="cerrarGestorUsuarios()" title="Cerrar">&times;</button>
+            </div>
+            <div class="gestor-body">
+                <ul id="gestor-lista-usuarios" class="gestor-lista"></ul>
+                <div class="gestor-add-row" style="flex-wrap:wrap; gap:8px;">
+                    <input type="text" id="usuario-nuevo-nombre" placeholder="Nombre y apellido" maxlength="60" style="flex:1; min-width:150px;">
+                    <input type="email" id="usuario-nuevo-email" placeholder="correo@braunrelacionescomerciales.com.ar" style="flex:1.4; min-width:220px;">
+                    <button type="button" class="gestor-btn-add" onclick="agregarUsuarioUI()"><i class="fas fa-plus"></i> Agregar</button>
+                </div>
+                <p style="font-size:0.8rem; color:#888; margin:10px 2px 0;">
+                    Los usuarios nuevos pueden iniciar sesión con la contraseña genérica y recibir tickets por correo.
+                    Los 8 usuarios originales <i class="fas fa-lock"></i> no se pueden eliminar desde acá.
+                </p>
             </div>
         </div>
     </div>

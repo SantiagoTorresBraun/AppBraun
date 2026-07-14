@@ -35,6 +35,16 @@ function doPost(e) {
     if (accion === "eliminar_calidad")   return eliminarCalidad(data);
     // ===================================================================
 
+    // ==================== NUEVO: TICKETERA ====================
+    if (accion === "crear_ticket")          return crearTicket(data);
+    if (accion === "actualizar_ticket")     return actualizarTicket(data);
+    if (accion === "responder_ticket")      return responderTicket(data);
+    if (accion === "notificar_responsable") return actualizarTicket(data.ticket || data); // compat versión vieja
+    // ==================== NUEVO: USUARIOS ======================
+    if (accion === "agregar_usuario")  return agregarUsuario(data);
+    if (accion === "eliminar_usuario") return eliminarUsuario(data);
+    // ===========================================================
+
     if (accion === "eliminar") {
       eliminarPorIdCarga(data.Id_Carga);
       return respuestaOk();
@@ -52,9 +62,16 @@ function doPost(e) {
       return respuestaOk();
     }
 
-    // accion === "guardar" (caso normal, registro nuevo)
-    guardarRegistroCompleto(data);
-    return respuestaOk();
+    // accion === "guardar" (caso normal, registro nuevo de Control de Carga).
+    // IMPORTANTE: solo si la acción es exactamente "guardar" — antes cualquier
+    // acción desconocida caía acá y escribía filas vacías en la hoja "Orden".
+    if (accion === "guardar") {
+      guardarRegistroCompleto(data);
+      return respuestaOk();
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": "Acción desconocida: " + accion }))
+      .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     Logger.log("Error crítico: " + error.toString());
@@ -195,7 +212,15 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === "read_calidad") {
       return leerCalidad();
     }
-    // ===================================================================
+    // ==================== NUEVO: TICKETERA ====================
+    if (e && e.parameter && e.parameter.action === "read_tickets") {
+      return leerTickets();
+    }
+    // ==================== NUEVO: USUARIOS =====================
+    if (e && e.parameter && e.parameter.action === "read_usuarios") {
+      return leerUsuarios();
+    }
+    // ==========================================================
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheetOrden = ss.getSheetByName(NOMBRE_HOJA_ORDEN);
@@ -537,5 +562,294 @@ function guardarFotoCalidadEnDrive(idCalidad, columna, base64) {
   } catch (err) {
     Logger.log("No se pudo guardar la foto en Drive: " + err);
     return "";
+  }
+}
+
+// ========================================================
+// 4. NUEVO: TICKETERA (hoja "Tickets" + notificaciones por correo)
+//    Matriz de notificaciones:
+//      crear ticket      → correo al RESPONSABLE
+//      responder ticket  → correo al SOLICITANTE (con la respuesta)
+//      reasignar         → correo al NUEVO RESPONSABLE
+//      cerrar            → correo al SOLICITANTE
+// ========================================================
+
+var HOJA_TICKETS = "Tickets";
+// URL donde está publicada la app (para el botón "Abrir Ticketera" del correo).
+// CAMBIAR cuando la app se publique en su dominio definitivo.
+var URL_APP_TICKETERA = "http://127.0.0.1:5500/AppBraun-main/index.html";
+
+var COLUMNAS_TICKETS = [
+  "id_ticket", "fecha_creacion", "fecha_cierre",
+  "nombre_solicitante", "correo_solicitante",
+  "responsable_asignado", "correo_responsable",
+  "prioridad", "detalle_solicitud", "estado_ticket",
+  "respuesta", "fecha_respuesta", "usuario_registro", "archivo_adjunto"
+];
+
+// Devuelve la hoja "Tickets"; si no existe la crea con sus encabezados.
+function obtenerHojaTickets() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(HOJA_TICKETS);
+  if (!hoja) {
+    hoja = ss.insertSheet(HOJA_TICKETS);
+    hoja.appendRow(COLUMNAS_TICKETS);
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+// --- LECTURA (?action=read_tickets) ---
+function leerTickets() {
+  var hoja = obtenerHojaTickets();
+  var valores = hoja.getDataRange().getDisplayValues();
+  if (valores.length < 2) return respuestaJsonCalidad([]);
+  var encabezados = valores[0];
+  var tickets = [];
+  for (var f = 1; f < valores.length; f++) {
+    if (!valores[f][0]) continue;
+    var t = {};
+    for (var c = 0; c < encabezados.length; c++) t[encabezados[c]] = valores[f][c];
+    tickets.push(t);
+  }
+  return respuestaJsonCalidad(tickets.reverse()); // más recientes primero
+}
+
+// --- CREAR (_accion: "crear_ticket") → guarda la fila y notifica al responsable ---
+function crearTicket(body) {
+  var hoja = obtenerHojaTickets();
+
+  // Evitar duplicados si el dispositivo reintenta la sincronización
+  if (body.id_ticket && buscarFilaTicket(hoja, body.id_ticket) !== -1) {
+    return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
+  }
+
+  var fila = COLUMNAS_TICKETS.map(function (col) {
+    var v = body[col];
+    if (v === undefined || v === null) return "";
+    // El adjunto en base64 puede superar el límite de 50.000 caracteres por celda
+    if (col === "archivo_adjunto" && String(v).length > 45000) return "(adjunto demasiado grande: viajó por correo)";
+    return v;
+  });
+  hoja.appendRow(fila);
+
+  // Notificación al responsable
+  if (body.correo_responsable) {
+    enviarMailTicket(
+      body.correo_responsable,
+      "Nuevo ticket de " + (body.nombre_solicitante || "un solicitante") + " [" + (body.prioridad || "Baja") + "]",
+      "Nuevo Ticket Asignado",
+      "<b>" + (body.nombre_solicitante || "") + "</b> te asignó un ticket. Estos son los datos:",
+      body,
+      body.correo_solicitante,
+      body.archivo_adjunto
+    );
+  }
+  return respuestaJsonCalidad({ ok: true });
+}
+
+// --- ACTUALIZAR (_accion: "actualizar_ticket") → reasignación / cambio de estado ---
+function actualizarTicket(body) {
+  var hoja = obtenerHojaTickets();
+  var filaIdx = buscarFilaTicket(hoja, body.id_ticket);
+  if (filaIdx === -1) return respuestaJsonCalidad({ ok: false, error: "id_ticket no encontrado" });
+
+  var anterior = leerFilaTicket(hoja, filaIdx);
+  aplicarPatchTicket(hoja, filaIdx, body);
+  var actual = leerFilaTicket(hoja, filaIdx);
+
+  // Reasignación → correo al NUEVO responsable
+  if (body.correo_responsable && body.correo_responsable !== anterior.correo_responsable) {
+    enviarMailTicket(
+      body.correo_responsable,
+      "Te reasignaron un ticket de " + (actual.nombre_solicitante || "") + " [" + (actual.prioridad || "Baja") + "]",
+      "Ticket Reasignado",
+      "Te acaban de asignar este ticket:",
+      actual,
+      actual.correo_solicitante,
+      null
+    );
+  }
+
+  // Cierre → correo al solicitante
+  if (body.estado_ticket === "Cerrado" && anterior.estado_ticket !== "Cerrado" && actual.correo_solicitante) {
+    enviarMailTicket(
+      actual.correo_solicitante,
+      "Tu ticket fue cerrado — " + (actual.id_ticket || ""),
+      "Ticket Cerrado",
+      "Tu ticket fue marcado como <b>Cerrado</b> por el equipo:",
+      actual,
+      actual.correo_responsable,
+      null
+    );
+  }
+  return respuestaJsonCalidad({ ok: true });
+}
+
+// --- RESPONDER (_accion: "responder_ticket") → guarda la respuesta y avisa al solicitante ---
+function responderTicket(body) {
+  var hoja = obtenerHojaTickets();
+  var filaIdx = buscarFilaTicket(hoja, body.id_ticket);
+  if (filaIdx === -1) return respuestaJsonCalidad({ ok: false, error: "id_ticket no encontrado" });
+
+  aplicarPatchTicket(hoja, filaIdx, body);
+  var actual = leerFilaTicket(hoja, filaIdx);
+
+  if (actual.correo_solicitante) {
+    enviarMailTicket(
+      actual.correo_solicitante,
+      "Respuesta a tu ticket — " + (actual.id_ticket || ""),
+      "Tu Ticket Tiene Respuesta",
+      "<b>" + (actual.responsable_asignado || "El responsable") + "</b> respondió tu ticket:",
+      actual,
+      actual.correo_responsable,
+      null
+    );
+  }
+  return respuestaJsonCalidad({ ok: true });
+}
+
+// --- AUXILIARES TICKETS ---
+function buscarFilaTicket(hoja, idTicket) {
+  if (!idTicket) return -1;
+  var ids = hoja.getRange(1, 1, hoja.getLastRow(), 1).getDisplayValues();
+  for (var f = 1; f < ids.length; f++) {
+    if (String(ids[f][0]).trim() === String(idTicket).trim()) return f + 1;
+  }
+  return -1;
+}
+
+function leerFilaTicket(hoja, filaIdx) {
+  var valores = hoja.getRange(filaIdx, 1, 1, COLUMNAS_TICKETS.length).getDisplayValues()[0];
+  var t = {};
+  COLUMNAS_TICKETS.forEach(function (col, i) { t[col] = valores[i]; });
+  return t;
+}
+
+function aplicarPatchTicket(hoja, filaIdx, body) {
+  COLUMNAS_TICKETS.forEach(function (col, i) {
+    if (col === "id_ticket") return;
+    if (body[col] !== undefined) hoja.getRange(filaIdx, i + 1).setValue(body[col]);
+  });
+}
+
+// ========================================================
+// 5. NUEVO: USUARIOS DE LA EMPRESA (hoja "Usuarios")
+//    Fuente compartida de la lista de miembros: la app la baja al iniciar
+//    (?action=read_usuarios) y la cachea para el login offline.
+// ========================================================
+
+var HOJA_USUARIOS = "Usuarios";
+
+// Los 8 usuarios originales: se siembran al crear la hoja por primera vez.
+var USUARIOS_SEMILLA = [
+  ["Melisa Braun",    "melisa.braun@braunrelacionescomerciales.com.ar"],
+  ["Alejo Chamorro",  "alejo.chamorro@braunrelacionescomerciales.com.ar"],
+  ["Lucas Ramis",     "lucas.ramis@braunrelacionescomerciales.com.ar"],
+  ["Juan Cavallera",  "juan.cavallera@braunrelacionescomerciales.com.ar"],
+  ["Pablo Suárez",    "pablo.suarez@braunrelacionescomerciales.com.ar"],
+  ["Jonathan Rui",    "jonathan.rui@braunrelacionescomerciales.com.ar"],
+  ["Carla Candoni",   "carla.candoni@braunrelacionescomerciales.com.ar"],
+  ["Santiago Torres", "santiago.torres@braunrelacionescomerciales.com.ar"]
+];
+
+function obtenerHojaUsuarios() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(HOJA_USUARIOS);
+  if (!hoja) {
+    hoja = ss.insertSheet(HOJA_USUARIOS);
+    hoja.appendRow(["nombre", "email"]);
+    hoja.setFrozenRows(1);
+    USUARIOS_SEMILLA.forEach(function (u) { hoja.appendRow(u); });
+  }
+  return hoja;
+}
+
+function leerUsuarios() {
+  var hoja = obtenerHojaUsuarios();
+  var valores = hoja.getDataRange().getDisplayValues();
+  var usuarios = [];
+  for (var f = 1; f < valores.length; f++) {
+    if (!valores[f][1]) continue;
+    usuarios.push({ nombre: valores[f][0], email: String(valores[f][1]).trim().toLowerCase() });
+  }
+  return respuestaJsonCalidad(usuarios);
+}
+
+function agregarUsuario(body) {
+  if (!body.email || !body.nombre) return respuestaJsonCalidad({ ok: false, error: "Faltan nombre o email" });
+  var hoja = obtenerHojaUsuarios();
+  var email = String(body.email).trim().toLowerCase();
+  var valores = hoja.getDataRange().getDisplayValues();
+  for (var f = 1; f < valores.length; f++) {
+    if (String(valores[f][1]).trim().toLowerCase() === email) {
+      return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
+    }
+  }
+  hoja.appendRow([String(body.nombre).trim(), email]);
+  return respuestaJsonCalidad({ ok: true });
+}
+
+function eliminarUsuario(body) {
+  if (!body.email) return respuestaJsonCalidad({ ok: false, error: "Falta el email" });
+  var hoja = obtenerHojaUsuarios();
+  var email = String(body.email).trim().toLowerCase();
+  var valores = hoja.getDataRange().getDisplayValues();
+  for (var f = valores.length - 1; f >= 1; f--) {
+    if (String(valores[f][1]).trim().toLowerCase() === email) hoja.deleteRow(f + 1);
+  }
+  return respuestaJsonCalidad({ ok: true });
+}
+
+// Correo HTML institucional. replyTo apunta a la contraparte para que
+// "Responder" del cliente de correo también funcione como canal directo.
+function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjuntoBase64) {
+  try {
+    var colorPrio = t.prioridad === "Alta" ? "#c62828" : (t.prioridad === "Media" ? "#ef6c00" : "#2e7d32");
+    var filaHtml = function (et, val) {
+      return '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777;white-space:nowrap">' + et + '</td>' +
+             '<td style="padding:6px 10px;border-bottom:1px solid #eee;color:#333">' + (val || "-") + '</td></tr>';
+    };
+    var fechaLegible = "";
+    try { fechaLegible = Utilities.formatDate(new Date(t.fecha_creacion), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"); } catch (e) { fechaLegible = t.fecha_creacion || ""; }
+
+    var html =
+      '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">' +
+        '<div style="background:#a31e1e;color:#ffffff;padding:14px 20px;font-size:17px;font-weight:bold">Ticketera Braun — ' + titulo + '</div>' +
+        '<div style="padding:18px 20px;color:#333333">' +
+          '<p style="margin-top:0">' + intro + '</p>' +
+          '<table style="border-collapse:collapse;width:100%;font-size:14px">' +
+            filaHtml("Ticket", t.id_ticket) +
+            filaHtml("Fecha", fechaLegible) +
+            filaHtml("Solicitante", (t.nombre_solicitante || "") + " &lt;" + (t.correo_solicitante || "") + "&gt;") +
+            filaHtml("Responsable", t.responsable_asignado) +
+            filaHtml("Prioridad", '<span style="background:' + colorPrio + ';color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:bold">' + (t.prioridad || "Baja") + '</span>') +
+            filaHtml("Estado", t.estado_ticket) +
+            filaHtml("Detalle", t.detalle_solicitud) +
+          '</table>' +
+          (t.respuesta ? '<div style="background:#f5f5f5;border-left:4px solid #a31e1e;padding:10px 14px;margin-top:14px"><b>Respuesta:</b><br>' + t.respuesta + '</div>' : '') +
+          '<p style="text-align:center;margin:24px 0 8px">' +
+            '<a href="' + URL_APP_TICKETERA + '#/ticketera" style="background:#a31e1e;color:#ffffff;padding:11px 28px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir Ticketera</a>' +
+          '</p>' +
+          '<p style="color:#999;font-size:12px;text-align:center">También podés responder directamente a este correo.</p>' +
+        '</div>' +
+      '</div>';
+
+    var opciones = { htmlBody: html, name: "Ticketera Braun" };
+    if (replyTo) opciones.replyTo = replyTo;
+
+    // Adjunto (si el ticket se creó con archivo)
+    if (adjuntoBase64 && String(adjuntoBase64).indexOf("data:") === 0) {
+      try {
+        var partes = String(adjuntoBase64).split(",");
+        var mime = (partes[0].match(/data:([^;]+)/) || [null, "application/octet-stream"])[1];
+        var ext = mime.indexOf("pdf") !== -1 ? "pdf" : (mime.indexOf("png") !== -1 ? "png" : "jpg");
+        opciones.attachments = [Utilities.newBlob(Utilities.base64Decode(partes[1]), mime, "adjunto-" + (t.id_ticket || "ticket") + "." + ext)];
+      } catch (errAdj) { Logger.log("No se pudo adjuntar el archivo: " + errAdj); }
+    }
+
+    MailApp.sendEmail(destinatario, asunto, "Abrí este correo con un cliente que soporte HTML.", opciones);
+  } catch (err) {
+    Logger.log("No se pudo enviar el correo del ticket: " + err);
   }
 }
