@@ -154,8 +154,16 @@ function guardarRegistroCompleto(data) {
   // ---- Contratos ----
   if (data.Contratos && Array.isArray(data.Contratos)) {
     data.Contratos.forEach(function(c) {
+      var idContrato = Utilities.getUuid();
+      // El front manda el campo "archivo_cp": o bien un data:...;base64 recién
+      // elegido por el usuario (hay que subirlo a Drive), o bien la ruta/URL
+      // que ya vino de un archivo existente (se conserva tal cual).
+      var archivoCp = c.archivo_cp || "";
+      if (archivoCp.indexOf("data:") === 0) {
+        archivoCp = guardarArchivoContratoEnDrive(idContrato, archivoCp);
+      }
       sheetContrato.appendRow([
-        Utilities.getUuid(),
+        idContrato,
         data.Id_Carga || "",
         c.contrato_com || "",
         c.contrato_cli || "",
@@ -164,7 +172,7 @@ function guardarRegistroCompleto(data) {
         c.kg_cp || "",
         "",                       // Observaciones CP (no la envía el front hoy)
         c.kg_descarga || "",
-        c.link_cp || ""           // Columna "CP" real = archivo adjunto Carta de Porte (NO diferencia_carga)
+        archivoCp                 // Columna "CP" real = archivo adjunto Carta de Porte (NO diferencia_carga)
       ]);
     });
   }
@@ -274,7 +282,7 @@ function doGet(e) {
             // La diferencia NO se guarda en el Sheet, se calcula acá.
             // (La columna 9, "CP", es el archivo adjunto de la Carta de Porte, no una diferencia)
             diferencia_carga: (kgDescargaValor - kgCpValor).toFixed(2),
-            link_cp: rowsContrato[c][9] || ""
+            archivo_cp: resolverArchivoDrive(rowsContrato[c][9] || "")
           });
         }
       }
@@ -541,6 +549,146 @@ function buscarFilaPorIdCalidad(hoja, idCalidad) {
     if (String(ids[f][0]).trim() === String(idCalidad).trim()) return f + 1;
   }
   return -1;
+}
+
+// --- ARCHIVO ADJUNTO DE LA CARTA DE PORTE (hoja "Contrato Comercial", columna "CP") ---
+// Misma carpeta y convención de nombre de archivo que ya usa AppSheet
+// ("Contrato Comercial_Files_/<id>.CP.<timestamp>.<ext>"), para que los
+// archivos cargados desde la app web y desde AppSheet convivan sin choques.
+var NOMBRE_CARPETA_ARCHIVOS_CONTRATO = "Contrato Comercial_Files_";
+
+var EXTENSIONES_POR_MIME = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx"
+};
+
+// Guarda el archivo (imagen, PDF, Word, etc.) elegido en el form y devuelve
+// la ruta relativa que se guarda en la celda "CP".
+function guardarArchivoContratoEnDrive(idContrato, base64) {
+  try {
+    var carpetas = DriveApp.getFoldersByName(NOMBRE_CARPETA_ARCHIVOS_CONTRATO);
+    var carpeta = carpetas.hasNext() ? carpetas.next() : DriveApp.createFolder(NOMBRE_CARPETA_ARCHIVOS_CONTRATO);
+
+    var partes = base64.split(",");
+    var tipo = (partes[0].match(/data:([^;]+)/) || [null, "application/octet-stream"])[1];
+    var extension = EXTENSIONES_POR_MIME[tipo] || "bin";
+    var nombre = (idContrato || Utilities.getUuid()) + ".CP." + new Date().getTime() + "." + extension;
+
+    var blob = Utilities.newBlob(Utilities.base64Decode(partes[1]), tipo, nombre);
+    var archivo = carpeta.createFile(blob);
+    // Sin esto, el link que le damos al front no se puede abrir/descargar
+    // (el archivo quedaría privado, solo visible para el dueño de la carpeta).
+    archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return NOMBRE_CARPETA_ARCHIVOS_CONTRATO + "/" + nombre;
+  } catch (err) {
+    Logger.log("No se pudo guardar el archivo de la Carta de Porte: " + err);
+    return "";
+  }
+}
+
+// Convierte la ruta guardada en la celda ("Contrato Comercial_Files_/xxx.pdf")
+// en un link de descarga directa de Drive. Si ya es una URL o un data:
+// (archivo recién elegido, todavía no guardado en el Sheet), se devuelve igual.
+function resolverArchivoDrive(valor) {
+  if (!valor) return "";
+  var v = String(valor).trim();
+  if (v.indexOf("http") === 0 || v.indexOf("data:") === 0) return v;
+
+  var nombreArchivo = v.split("/").pop();
+  if (!nombreArchivo) return "";
+
+  var cache = CacheService.getScriptCache();
+  var clave = "arch_" + nombreArchivo;
+  var cacheado = cache.get(clave);
+  if (cacheado) return cacheado === "NO_ENCONTRADO" ? "" : cacheado;
+
+  try {
+    var archivos = DriveApp.getFilesByName(nombreArchivo);
+    if (archivos.hasNext()) {
+      var archivo = archivos.next();
+      try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) {
+        Logger.log("No se pudo compartir " + nombreArchivo + ": " + permErr);
+      }
+      var url = "https://drive.google.com/uc?export=download&id=" + archivo.getId();
+      cache.put(clave, url, 21600); // 6 horas
+      return url;
+    }
+  } catch (err) {
+    Logger.log("No se pudo resolver el archivo " + nombreArchivo + ": " + err);
+  }
+  cache.put(clave, "NO_ENCONTRADO", 21600);
+  return "";
+}
+
+// ========================================================
+// SCRIPT DE MIGRACIÓN ÚNICA: CONVIERTE LAS RUTAS DE APPSHEET
+// ("Contrato Comercial_Files_/xxx.pdf") DE LA COLUMNA "CP" EN
+// LINKS ESTABLES DE DESCARGA DIRECTA DE DRIVE.
+// ========================================================
+// Mismo problema que con las fotos de "Orden": resolver el archivo por
+// nombre contra Drive en CADA doGet() (una por cada uno de los ~458+
+// contratos) es lento e innecesario si el link ya quedó fijo en la celda.
+// Corré esta función UNA SOLA VEZ desde el editor de Apps Script
+// (seleccionar "convertirArchivosCPAFormatoEstable" en el desplegable de
+// funciones y tocar "Ejecutar"). Es segura de correr más de una vez: si una
+// celda ya tiene un link http o está vacía, la salta.
+//
+// Después de correrla, resolverArchivoDrive() ya no necesita buscar nada en
+// Drive para esas filas (el "if (v.indexOf('http') === 0) return v;" hace
+// que las devuelva tal cual, sin gastar cuota de Drive) — solo sigue
+// resolviendo por nombre los contratos nuevos que se suban desde ahora.
+function convertirArchivosCPAFormatoEstable() {
+  var COLUMNA_CP = 9; // índice 0-based de la columna "CP" en "Contrato Comercial"
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_CONTRATO);
+  var datos = sheet.getDataRange().getValues();
+
+  var celdasActualizadas = 0;
+  var celdasSinMatch = [];
+
+  for (var fila = 1; fila < datos.length; fila++) {
+    var valorCelda = datos[fila][COLUMNA_CP];
+    if (!valorCelda || typeof valorCelda !== "string") continue;
+
+    // Ya es un link http (de una corrida anterior de esta migración, o
+    // porque ya se subió desde la app web) o un data: (no debería pasar acá,
+    // pero por las dudas) → no tocamos.
+    if (valorCelda.indexOf("http") === 0) continue;
+    if (valorCelda.indexOf("data:") === 0) continue;
+
+    // La celda trae la ruta estilo AppSheet: "Contrato Comercial_Files_/xxx.pdf"
+    var nombreArchivo = valorCelda.split("/").pop();
+    if (!nombreArchivo) continue;
+
+    try {
+      var archivos = DriveApp.getFilesByName(nombreArchivo);
+      if (archivos.hasNext()) {
+        var archivo = archivos.next();
+        try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) {
+          Logger.log("No se pudo compartir " + nombreArchivo + ": " + permErr);
+        }
+        var linkEstable = "https://drive.google.com/uc?export=download&id=" + archivo.getId();
+        sheet.getRange(fila + 1, COLUMNA_CP + 1).setValue(linkEstable);
+        celdasActualizadas++;
+      } else {
+        celdasSinMatch.push("Fila " + (fila + 1) + ": no se encontró en Drive el archivo \"" + nombreArchivo + "\" (valor original: " + valorCelda + ")");
+      }
+    } catch (err) {
+      celdasSinMatch.push("Fila " + (fila + 1) + ": error buscando \"" + nombreArchivo + "\" → " + err);
+    }
+  }
+
+  Logger.log("Celdas de CP convertidas a link estable: " + celdasActualizadas);
+  Logger.log("Celdas con archivo que no se pudo resolver: " + celdasSinMatch.length);
+  if (celdasSinMatch.length > 0) {
+    Logger.log(celdasSinMatch.join("\n"));
+  }
 }
 
 // Guarda una foto base64 en la carpeta de imágenes (misma convención que

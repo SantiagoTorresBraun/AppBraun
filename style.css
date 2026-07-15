@@ -2104,6 +2104,20 @@ h3 {
     color: var(--color-text-muted);
     margin-top: 4px;
 }
+
+.archivo-link {
+    color: var(--color-primary);
+    text-decoration: underline;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.archivo-link:hover {
+    color: var(--color-primary-dark);
+}
  
 /* BOTÓN DE ACTUALIZAR EN EL HEADER (SIEMPRE VISIBLE) */
 .header-actions {

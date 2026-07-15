@@ -465,7 +465,8 @@ async function renderizarTablaContratos() {
                 carta_porte: c.carta_porte || '-',
                 kg_cp: parseFloat(c.kg_cp) || 0,
                 kg_descarga: parseFloat(c.kg_descarga) || 0,
-                observaciones: registro.Indicaciones_Descarga || '-'
+                observaciones: registro.Indicaciones_Descarga || '-',
+                archivo_cp: c.archivo_cp || ''
             });
         });
     });
@@ -487,7 +488,7 @@ async function renderizarTablaContratos() {
     if (contador) contador.textContent = `${filtradas.length} contrato${filtradas.length === 1 ? '' : 's'}`;
 
     if (filtradas.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#999;">No hay contratos que coincidan con los filtros.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:#999;">No hay contratos que coincidan con los filtros.</td></tr>`;
         return;
     }
 
@@ -507,6 +508,7 @@ async function renderizarTablaContratos() {
             <td data-label="Kg Descarga">${fmt(f.kg_descarga)}</td>
             <td data-label="Diferencia KG" class="${claseDif}"><b>${fmt(diferencia)}</b></td>
             <td data-label="Observaciones CP">${f.observaciones}</td>
+            <td data-label="Archivo">${archivoCpLinkHtml(f.archivo_cp)}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -540,7 +542,7 @@ function agregarFilaContrato() {
         </div>
         <div class="form-group">
             <label>Carta de Porte (archivo adjunto)</label>
-            <input type="file" class="cont-archivo-input" accept="image/*,.pdf" onchange="handleArchivoCP(this)">
+            <input type="file" class="cont-archivo-input" accept="image/*,.pdf,.doc,.docx" onchange="handleArchivoCP(this)">
             <input type="hidden" class="cont-item" data-field="archivo_cp">
             <div class="archivo-preview">Sin archivo</div>
         </div>
@@ -1414,6 +1416,15 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
     };
 }
 
+// Genera el link "Ver / descargar" para un archivo de Carta de Porte ya guardado
+// (URL de Drive que devuelve el backend, o un data:... recién elegido en el form).
+function archivoCpLinkHtml(valor) {
+    if (!valor) return 'Sin archivo';
+    const esDataUri = valor.indexOf('data:') === 0;
+    const attrDescarga = esDataUri ? ' download="carta-de-porte"' : '';
+    return `<a href="${valor}" target="_blank" rel="noopener" class="archivo-link"${attrDescarga}><i class="fas fa-paperclip"></i> Ver / descargar archivo</a>`;
+}
+
 // --- 8-B. ARCHIVO ADJUNTO DE LA CARTA DE PORTE (reemplaza el viejo campo "Link CP") ---
 function handleArchivoCP(inputEl) {
     const file = inputEl.files[0];
@@ -1760,7 +1771,7 @@ function cargarRegistroParaEditar(base64Data) {
             // Vista previa del archivo de la Carta de Porte, si había uno cargado
             const previewArchivo = card.querySelector('.archivo-preview');
             if (previewArchivo) {
-                previewArchivo.textContent = (c.archivo_cp && c.archivo_cp.length > 100) ? "📎 Archivo cargado" : "Sin archivo";
+                previewArchivo.innerHTML = archivoCpLinkHtml(c.archivo_cp);
             }
             // Disparamos el recálculo de Diferencia de Carga con los valores ya cargados
             const evt = new Event('input');
@@ -2048,7 +2059,7 @@ for (const campo of camposImagen) {
         const filasContrato = contratos.length > 0
             ? contratos.map(c => [
                 c.contrato_com, c.contrato_cli, c.carta_porte,
-                (c.archivo_cp && c.archivo_cp.length > 100) ? "Sí" : "No",
+                c.archivo_cp ? "Sí" : "No",
                 c.destino, c.kg_cp, c.kg_descarga, c.diferencia_carga
             ])
             : [["Sin contratos asociados", "", "", "", "", "", "", ""]];
@@ -2255,6 +2266,9 @@ function abrirDetalleCarga(registro) {
         detContratos.innerHTML = registro.Contratos.map((c, i) => `
             <div class="detalle-item-lista">
                 <strong>${c.contrato_com || '-'}</strong>
+                <div class="detalle-item-sublista">
+                    Carta de Porte: ${c.carta_porte || '-'} &nbsp;|&nbsp; ${archivoCpLinkHtml(c.archivo_cp)}
+                </div>
             </div>
         `).join('');
     }
