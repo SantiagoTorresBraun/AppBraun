@@ -43,6 +43,10 @@ function doPost(e) {
     // ==================== NUEVO: USUARIOS ======================
     if (accion === "agregar_usuario")  return agregarUsuario(data);
     if (accion === "eliminar_usuario") return eliminarUsuario(data);
+    // ==================== NUEVO: PRODUCCIÓN (muestreo a campo) ====================
+    if (accion === "guardar_muestreo")    return guardarMuestreo(data);
+    if (accion === "actualizar_muestreo") return actualizarMuestreo(data);
+    if (accion === "eliminar_muestreo")   return eliminarMuestreo(data);
     // ===========================================================
 
     if (accion === "eliminar") {
@@ -227,6 +231,10 @@ function doGet(e) {
     // ==================== NUEVO: USUARIOS =====================
     if (e && e.parameter && e.parameter.action === "read_usuarios") {
       return leerUsuarios();
+    }
+    // ==================== NUEVO: PRODUCCIÓN ====================
+    if (e && e.parameter && e.parameter.action === "read_muestreos") {
+      return leerMuestreos();
     }
     // ==========================================================
 
@@ -688,6 +696,158 @@ function convertirArchivosCPAFormatoEstable() {
   Logger.log("Celdas con archivo que no se pudo resolver: " + celdasSinMatch.length);
   if (celdasSinMatch.length > 0) {
     Logger.log(celdasSinMatch.join("\n"));
+  }
+}
+
+// ========================================================
+// MÓDULO PRODUCCIÓN — MUESTREO DE CAMPO
+//   Hojas: "Muestreo" (encabezado) + "Muestreo_Puntos" (observaciones).
+//   Mismo patrón que Control de Carga (Orden → Producto/Contrato).
+// ========================================================
+var NOMBRE_HOJA_MUESTREO = "Muestreo";
+var NOMBRE_HOJA_MUESTREO_PUNTOS = "Muestreo_Puntos";
+var NOMBRE_CARPETA_FOTOS_MUESTREO = "Produccion_Files_";
+
+var COLS_MUESTREO = ["Id_Muestreo", "Fecha", "Establecimiento", "Lote", "Campania",
+  "Cultivo", "Variedad", "Responsable", "Matricula", "Observaciones",
+  "usuario_registro", "Estado"];
+
+var COLS_MUESTREO_PUNTOS = ["Id_Punto", "Id_Muestreo", "Orden", "Lat", "Long",
+  "Precision_m", "Timestamp", "Cultivo", "Estado_Fenologico", "Tipo_Observacion",
+  "Objetivo", "Severidad", "Incidencia_pct", "Conteo_Valor", "Conteo_Unidad",
+  "Nota", "Foto"];
+
+// Devuelve una hoja; si no existe la crea con sus encabezados.
+function obtenerHojaConEncabezados(nombre, columnas) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(nombre);
+  if (!hoja) {
+    hoja = ss.insertSheet(nombre);
+    hoja.appendRow(columnas);
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+function buscarFilaPorId(hoja, idBuscado) {
+  if (!idBuscado || hoja.getLastRow() < 2) return -1;
+  var ids = hoja.getRange(1, 1, hoja.getLastRow(), 1).getDisplayValues();
+  for (var f = 1; f < ids.length; f++) {
+    if (String(ids[f][0]).trim() === String(idBuscado).trim()) return f + 1;
+  }
+  return -1;
+}
+
+// --- GUARDAR (_accion: "guardar_muestreo") ---
+function guardarMuestreo(data) {
+  var hojaM = obtenerHojaConEncabezados(NOMBRE_HOJA_MUESTREO, COLS_MUESTREO);
+  var hojaP = obtenerHojaConEncabezados(NOMBRE_HOJA_MUESTREO_PUNTOS, COLS_MUESTREO_PUNTOS);
+
+  // Evita duplicados si el dispositivo reintenta la sincronización.
+  if (data.Id_Muestreo && buscarFilaPorId(hojaM, data.Id_Muestreo) !== -1) {
+    return respuestaOk();
+  }
+
+  hojaM.appendRow([
+    data.Id_Muestreo || "", data.Fecha || "", data.Establecimiento || "", data.Lote || "",
+    data.Campania || "", data.Cultivo || "", data.Variedad || "", data.Responsable || "",
+    data.Matricula || "", data.Observaciones || "", data.usuario_registro || "",
+    data.Estado || "Cerrado"
+  ]);
+
+  if (data.Puntos && Array.isArray(data.Puntos)) {
+    data.Puntos.forEach(function (p, i) {
+      var idPunto = p.Id_Punto || Utilities.getUuid();
+      var foto = p.Foto || "";
+      if (String(foto).indexOf("data:") === 0) foto = guardarFotoMuestreoEnDrive(idPunto, foto);
+      hojaP.appendRow([
+        idPunto, data.Id_Muestreo || "", (p.Orden || (i + 1)), p.Lat || "", p.Long || "",
+        p.Precision_m || "", p.Timestamp || "", p.Cultivo || "", p.Estado_Fenologico || "",
+        p.Tipo_Observacion || "", p.Objetivo || "", p.Severidad || "", p.Incidencia_pct || "",
+        p.Conteo_Valor || "", p.Conteo_Unidad || "", p.Nota || "", foto
+      ]);
+    });
+  }
+  return respuestaOk();
+}
+
+function actualizarMuestreo(data) {
+  eliminarMuestreoInterno(data.Id_Muestreo);
+  return guardarMuestreo(data);
+}
+
+function eliminarMuestreo(data) {
+  eliminarMuestreoInterno(data.Id_Muestreo);
+  return respuestaOk();
+}
+
+function eliminarMuestreoInterno(id) {
+  if (!id) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaM = ss.getSheetByName(NOMBRE_HOJA_MUESTREO);
+  var hojaP = ss.getSheetByName(NOMBRE_HOJA_MUESTREO_PUNTOS);
+  if (hojaM) borrarFilasPorColumna(hojaM, 0, id);
+  if (hojaP) borrarFilasPorColumna(hojaP, 1, id);
+}
+
+// --- LECTURA (?action=read_muestreos) → join de las 2 hojas ---
+function leerMuestreos() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaM = ss.getSheetByName(NOMBRE_HOJA_MUESTREO);
+  var hojaP = ss.getSheetByName(NOMBRE_HOJA_MUESTREO_PUNTOS);
+  if (!hojaM) return respuestaJsonCalidad([]);
+
+  var rowsM = hojaM.getDataRange().getValues();
+  var rowsP = hojaP ? hojaP.getDataRange().getValues() : [];
+  if (rowsM.length <= 1) return respuestaJsonCalidad([]);
+
+  var out = [];
+  for (var i = 1; i < rowsM.length; i++) {
+    var r = rowsM[i];
+    if (!r[0]) continue;
+
+    var puntos = [];
+    for (var p = 1; p < rowsP.length; p++) {
+      if (rowsP[p][1] == r[0]) {
+        puntos.push({
+          Id_Punto: rowsP[p][0], Orden: rowsP[p][2], Lat: rowsP[p][3], Long: rowsP[p][4],
+          Precision_m: rowsP[p][5], Timestamp: rowsP[p][6], Cultivo: rowsP[p][7],
+          Estado_Fenologico: rowsP[p][8], Tipo_Observacion: rowsP[p][9], Objetivo: rowsP[p][10],
+          Severidad: rowsP[p][11], Incidencia_pct: rowsP[p][12], Conteo_Valor: rowsP[p][13],
+          Conteo_Unidad: rowsP[p][14], Nota: rowsP[p][15], Foto: resolverArchivoDrive(rowsP[p][16] || "")
+        });
+      }
+    }
+
+    out.push({
+      Id_Muestreo: r[0],
+      Fecha: r[1] ? (r[1] instanceof Date ? Utilities.formatDate(r[1], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(r[1])) : "",
+      Establecimiento: r[2], Lote: r[3], Campania: r[4], Cultivo: r[5], Variedad: r[6],
+      Responsable: r[7], Matricula: r[8], Observaciones: r[9], usuario_registro: r[10],
+      Estado: r[11], Puntos: puntos
+    });
+  }
+  return respuestaJsonCalidad(out.reverse());
+}
+
+// Guarda una foto base64 del muestreo en Drive y devuelve la ruta relativa.
+function guardarFotoMuestreoEnDrive(idPunto, base64) {
+  try {
+    var carpetas = DriveApp.getFoldersByName(NOMBRE_CARPETA_FOTOS_MUESTREO);
+    var carpeta = carpetas.hasNext() ? carpetas.next() : DriveApp.createFolder(NOMBRE_CARPETA_FOTOS_MUESTREO);
+
+    var partes = base64.split(",");
+    var tipo = (partes[0].match(/data:([^;]+)/) || [null, "image/jpeg"])[1];
+    var extension = EXTENSIONES_POR_MIME[tipo] || "jpg";
+    var nombre = (idPunto || Utilities.getUuid()) + ".foto." + new Date().getTime() + "." + extension;
+
+    var blob = Utilities.newBlob(Utilities.base64Decode(partes[1]), tipo, nombre);
+    var archivo = carpeta.createFile(blob);
+    archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return NOMBRE_CARPETA_FOTOS_MUESTREO + "/" + nombre;
+  } catch (err) {
+    Logger.log("No se pudo guardar la foto del muestreo: " + err);
+    return "";
   }
 }
 

@@ -135,8 +135,8 @@
                     </div>
                 </div>
 
-                <!-- Producción (en desarrollo) -->
-                <div class="menu-card active" onclick="mostrarProximamenteProduccion()">
+                <!-- Producción -->
+                <div class="menu-card active" onclick="abrirModuloProduccion()">
                     <div class="card-header">
                         <div class="card-icon production-icon">
                             <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -168,7 +168,7 @@
                         </div>
                         <div class="card-title-section">
                             <h3 class="card-title">Producción</h3>
-                            <span class="card-badge coming-badge">Próximamente</span>
+                            <span class="card-badge active-badge">Activo</span>
                         </div>
                     </div>
                     <div class="card-body">
@@ -1189,6 +1189,203 @@
         </div>
     </section>
 
+    <!-- ========================================================================= -->
+    <!-- --- MÓDULO PRODUCCIÓN: historial de muestreos + nuevo muestreo --- -->
+    <!-- ========================================================================= -->
+    <section id="view-modulo-produccion" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2>Muestreos de Campo</h2>
+                    <p class="header-subtitle">Recorridas georreferenciadas por lote</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="switchTabProduccion('nuevo')">
+                    <i class="fas fa-plus"></i> Nuevo Muestreo
+                </button>
+            </div>
+        </div>
+
+        <div class="container modulo-carga-container">
+            <!-- TAB: HISTORIAL -->
+            <div id="tab-content-historial-prod" class="tab-content">
+                <div class="filters-section">
+                    <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="filter-prod-fecha-desde">Desde</label>
+                            <input type="date" id="filter-prod-fecha-desde">
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter-prod-fecha-hasta">Hasta</label>
+                            <input type="date" id="filter-prod-fecha-hasta">
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter-prod-search">Búsqueda Rápida</label>
+                            <input type="text" id="filter-prod-search" placeholder="Establecimiento, lote, cultivo...">
+                        </div>
+                    </div>
+                </div>
+                <div id="lista-muestreos" class="muestreos-lista">
+                    <p class="lista-vacia">Todavía no hay muestreos cargados.</p>
+                </div>
+            </div>
+
+            <!-- TAB: NUEVO MUESTREO (encabezado del recorrido) -->
+            <div id="tab-content-nuevo-prod" class="tab-content hidden nuevo-registro-section">
+                <div class="form-header-nuevo">
+                    <h3>Nuevo Muestreo</h3>
+                    <p class="form-subtitle">Datos del recorrido antes de salir a marcar puntos</p>
+                </div>
+                <form id="form-muestreo">
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="mu-establecimiento">Establecimiento</label><input type="text" id="mu-establecimiento" placeholder="Ej. La Esperanza" required></div>
+                        <div class="form-group"><label for="mu-lote">Lote</label><input type="text" id="mu-lote" placeholder="Ej. Lote 7" required></div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="mu-campania">Campaña</label><input type="text" id="mu-campania" placeholder="2025/26"></div>
+                        <div class="form-group">
+                            <label for="mu-cultivo">Cultivo</label>
+                            <div class="enum-row">
+                                <select id="mu-cultivo" class="enum-select" data-enum="cultivoCampo" required></select>
+                                <button type="button" class="btn-enum-gestionar" onclick="abrirGestorOpcionesEnTab('cultivoCampo')" title="Gestionar cultivos"><i class="fas fa-cog"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="mu-variedad">Variedad</label><input type="text" id="mu-variedad" placeholder="Opcional"></div>
+                        <div class="form-group">
+                            <label for="mu-responsable">Responsable (Ing. Agr.)</label>
+                            <select id="mu-responsable" class="enum-select" data-enum="personal" required></select>
+                        </div>
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="mu-matricula">Matrícula profesional</label><input type="text" id="mu-matricula" placeholder="Mat. N°..."></div>
+                        <div class="form-group"><label for="mu-fecha">Fecha</label><input type="date" id="mu-fecha" required></div>
+                    </div>
+                    <button type="submit" class="btn-primary" style="margin-top:16px;">
+                        <i class="fas fa-map-location-dot"></i> Iniciar recorrido
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- MUESTREO ACTIVO: mapa de puntos + lista + acciones --- -->
+    <!-- ========================================================================= -->
+    <section id="view-muestreo-activo" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2 id="ma-titulo">Lote — Cultivo</h2>
+                    <p class="header-subtitle" id="ma-subtitulo">Establecimiento · Campaña</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="nuevoPunto()">
+                    <i class="fas fa-plus"></i> Nuevo Punto
+                </button>
+            </div>
+        </div>
+
+        <div class="container modulo-carga-container">
+            <div class="mapa-puntos-wrap">
+                <canvas id="mapa-puntos" class="mapa-puntos" width="600" height="360"></canvas>
+                <div class="mapa-leyenda">
+                    <span><i class="dot-sev sev-0"></i>Sin daño</span>
+                    <span><i class="dot-sev sev-1"></i>Leve</span>
+                    <span><i class="dot-sev sev-2"></i>Moderado</span>
+                    <span><i class="dot-sev sev-3"></i>Alto</span>
+                    <span><i class="dot-sev sev-4"></i>Crítico</span>
+                </div>
+            </div>
+
+            <div class="muestreo-contador"><span id="ma-contador">0 puntos</span></div>
+            <div id="lista-puntos" class="puntos-lista"></div>
+
+            <div class="muestreo-acciones">
+                <button type="button" class="btn-primary" onclick="generarReporteMuestreo('descargar')"><i class="fas fa-file-pdf"></i> Generar reporte PDF</button>
+                <button type="button" class="btn-whatsapp" onclick="generarReporteMuestreo('compartir')"><i class="fab fa-whatsapp"></i> Enviar por WhatsApp</button>
+                <button type="button" class="btn-eliminar-muestreo" onclick="eliminarMuestreoActual()"><i class="fas fa-trash"></i> Eliminar muestreo</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- CAPTURA DE PUNTO (observación georreferenciada) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-punto-captura" class="view hidden">
+        <div class="container modulo-carga-container" style="padding-top:16px;">
+            <div class="form-header-nuevo">
+                <h3 id="pc-titulo">Nuevo Punto</h3>
+                <p class="form-subtitle">Observación georreferenciada</p>
+            </div>
+            <form id="form-punto">
+                <!-- GPS -->
+                <div class="gps-box" id="gps-box">
+                    <div class="gps-info">
+                        <i class="fas fa-location-crosshairs gps-icon"></i>
+                        <div>
+                            <div id="gps-coords">Obteniendo ubicación…</div>
+                            <div id="gps-precision" class="gps-precision">—</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-gps-retry" onclick="capturarGPS()" title="Volver a medir"><i class="fas fa-rotate"></i></button>
+                </div>
+
+                <!-- Foto -->
+                <div class="form-group">
+                    <label>Foto (con coordenada estampada)</label>
+                    <input type="file" id="pc-foto-input" accept="image/*" capture="environment" style="display:none" onchange="handleFotoPunto(this)">
+                    <button type="button" class="btn-foto-punto" onclick="document.getElementById('pc-foto-input').click()">
+                        <i class="fas fa-camera"></i> Tomar / elegir foto
+                    </button>
+                    <div id="pc-foto-preview" class="foto-punto-preview"></div>
+                </div>
+
+                <!-- Tipo de observación -->
+                <div class="form-group">
+                    <label>Tipo de observación</label>
+                    <div class="chips-row" id="pc-tipo-chips"></div>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="pc-fenologia">Estado fenológico</label>
+                        <div class="enum-row">
+                            <select id="pc-fenologia" class="enum-select" data-enum="fenologia"></select>
+                            <button type="button" class="btn-enum-gestionar" onclick="abrirGestorOpcionesEnTab('fenologia')" title="Gestionar estados"><i class="fas fa-cog"></i></button>
+                        </div>
+                    </div>
+                    <div class="form-group"><label for="pc-objetivo">Objetivo / especie</label><input type="text" id="pc-objetivo" placeholder="Isoca, Roya, Yuyo colorado..."></div>
+                </div>
+
+                <!-- Severidad -->
+                <div class="form-group">
+                    <label>Severidad</label>
+                    <div class="chips-row severidad-chips" id="pc-severidad-chips"></div>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group"><label for="pc-incidencia">Incidencia (%)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="pc-incidencia" value="0"></div>
+                    <div class="form-group"><label for="pc-conteo">Conteo</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="pc-conteo" value="0"></div>
+                    <div class="form-group">
+                        <label for="pc-conteo-unidad">Unidad</label>
+                        <select id="pc-conteo-unidad" class="enum-select" data-enum="conteoUnidad"></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="pc-nota">Nota</label>
+                    <textarea id="pc-nota" rows="2" placeholder="Observaciones del punto..."></textarea>
+                </div>
+
+                <div class="punto-acciones">
+                    <button type="button" class="btn-cancel-punto" onclick="cancelarPunto()">Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-check"></i> Guardar punto</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
     <!-- MODAL GESTOR DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) -->
     <div id="modal-gestor-opciones" class="gestor-modal">
         <div class="gestor-backdrop" onclick="cerrarGestorOpciones()"></div>
@@ -1204,6 +1401,8 @@
                 <button type="button" class="gestor-tab" data-enum="envase" onclick="cambiarTabGestor('envase')">Envases</button>
                 <button type="button" class="gestor-tab" data-enum="destino" onclick="cambiarTabGestor('destino')">Destino</button>
                 <button type="button" class="gestor-tab" data-enum="elaboro" onclick="cambiarTabGestor('elaboro')">Elaboró</button>
+                <button type="button" class="gestor-tab" data-enum="cultivoCampo" onclick="cambiarTabGestor('cultivoCampo')">Cultivos</button>
+                <button type="button" class="gestor-tab" data-enum="fenologia" onclick="cambiarTabGestor('fenologia')">Fenología</button>
                 <button type="button" class="gestor-tab" data-enum="personal" onclick="cambiarTabGestor('personal')">Personal</button>
             </div>
             <div class="gestor-body">
@@ -1242,6 +1441,7 @@
     <script src="auth.js"></script>
     <script src="app.js"></script>
     <script src="calidad.js"></script>
+    <script src="produccion.js"></script>
     <!-- Placeholder del futuro Agente de IA (todavía no funcional): avatar animado, sin acción real -->
     <button id="fab-agente-ia" class="fab-agente-ia" title="Agente de IA — Próximamente" onclick="mostrarProximamenteAgenteIA()">
         <svg class="avatar-ia-svg" viewBox="0 0 64 64" aria-hidden="true">

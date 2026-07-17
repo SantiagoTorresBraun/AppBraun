@@ -1,6 +1,6 @@
 // --- 1. CONFIGURACIÓN BASE DE DATOS LOCAL (IndexedDB) ---
 let db;
-const request = indexedDB.open("AppBraunDB_v4", 2);
+const request = indexedDB.open("AppBraunDB_v4", 3);
 
 request.onupgradeneeded = function(e) {
     db = e.target.result;
@@ -15,6 +15,10 @@ request.onupgradeneeded = function(e) {
     if (!db.objectStoreNames.contains("controles_calidad")) {
         db.createObjectStore("controles_calidad", { keyPath: "id", autoIncrement: true });
     }
+    // Cola offline del módulo Producción (muestreo de campo)
+    if (!db.objectStoreNames.contains("muestreos")) {
+        db.createObjectStore("muestreos", { keyPath: "id", autoIncrement: true });
+    }
 };
 
 request.onsuccess = function(e) {
@@ -26,6 +30,8 @@ request.onsuccess = function(e) {
     cargarTicketsDesdeGoogle();
     if (navigator.onLine) sincronizarTicketsPendientes();
     sincronizarUsuariosDesdeSheet();
+    if (typeof cargarMuestreosDesdeGoogle === 'function') cargarMuestreosDesdeGoogle();
+    if (typeof sincronizarMuestreosPendientes === 'function' && navigator.onLine) sincronizarMuestreosPendientes();
 };
 request.onerror = function(e) { console.error("Error IndexedDB", e); };
 
@@ -49,7 +55,11 @@ const ENUMS_DEFAULT = {
     tipoGrano: ["Kabuli", "Desi"],
     destino: ["CAP. CORTES"],
     responsables: ["Soporte", "Operaciones", "Administración"],
-    personal: ["Santiago Torres", "Melisa Braun", "Jonathan Rui", "Lucas Ramis", "Carla Candoni", "Alejo Chamorro"]
+    personal: ["Santiago Torres", "Melisa Braun", "Jonathan Rui", "Lucas Ramis", "Carla Candoni", "Alejo Chamorro"],
+    // --- Producción (muestreo de campo) ---
+    cultivoCampo: ["Soja", "Maíz", "Trigo", "Girasol", "Sorgo", "Cebada", "Maní", "Garbanzo", "Poroto Mung"],
+    fenologia: ["VE - Emergencia", "V1-V3", "V4-V6", "Vn - Vegetativo", "VT/R1 - Floración", "R2", "R3", "R4", "R5 - Llenado", "R6", "Madurez"],
+    conteoUnidad: ["plantas/m²", "malezas/m²", "orugas/m", "chinches/m", "cañas/m", "espigas/m²", "%"]
 };
 
 function cargarEnums() {
@@ -248,6 +258,22 @@ function cambiarVista(idDestino) {
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-ticketera') {
             document.getElementById('header-title').textContent = "Ticketera";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-modulo-produccion') {
+            document.getElementById('header-title').textContent = "Producción";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-muestreo-activo') {
+            document.getElementById('header-title').textContent = "Muestreo de Campo";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-punto-captura') {
+            document.getElementById('header-title').textContent = "Nuevo Punto";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-detalle-muestreo') {
+            document.getElementById('header-title').textContent = "Detalle del Muestreo";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         }
@@ -686,12 +712,6 @@ function mostrarProximamenteAgenteIA() {
     alert("🤖 Muy pronto vas a poder charlar acá con tu Agente de IA.\n\n¡Ya estamos trabajando en eso!");
 }
 
-// Módulo Producción: la tarjeta ya está en el menú pero el módulo todavía
-// está en desarrollo. Avisamos en vez de abrir una vista vacía.
-function mostrarProximamenteProduccion() {
-    alert("🌾 El módulo de Producción está en desarrollo.\n\n¡Muy pronto vas a poder gestionarlo desde acá!");
-}
-
 // --- 5. CONTROL DE CONEXIÓN ---
 function updateOnlineStatus() {
     const badge = document.getElementById("status-badge");
@@ -702,6 +722,8 @@ function updateOnlineStatus() {
         cargarHistorialDesdeGoogle();
         sincronizarTicketsPendientes();
         if (typeof sincronizarCalidadPendientes === 'function') sincronizarCalidadPendientes();
+        if (typeof sincronizarMuestreosPendientes === 'function') sincronizarMuestreosPendientes();
+        if (typeof cargarMuestreosDesdeGoogle === 'function') cargarMuestreosDesdeGoogle();
     } else {
         badge.textContent = "Offline";
         badge.className = "offline";
