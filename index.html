@@ -65,11 +65,25 @@
                 <div class="menu-card active" onclick="cambiarVista('view-submenu-carga')">
                     <div class="card-header">
                         <div class="card-icon cargo-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M18 18.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM9 18.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-                                <path d="M20 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm0 10H4v-8h16v8z"/>
-                                <rect x="1" y="4" width="2" height="4" fill="currentColor"/>
-                                <rect x="21" y="4" width="2" height="4" fill="currentColor"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Montaña de grano -->
+                                <path d="M5 25 Q16 12 27 25 Z" fill="#E0A32E"/>
+                                <circle cx="12" cy="22" r="1" fill="#fff" fill-opacity=".55"/>
+                                <circle cx="18" cy="19" r="1" fill="#fff" fill-opacity=".55"/>
+                                <circle cx="21" cy="23" r="1" fill="#fff" fill-opacity=".55"/>
+                                <!-- Batea / acoplado -->
+                                <path d="M5 25 h22 v9 H5 z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M5 24.5 v10 h22" stroke="#A71D1D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                                <!-- Cabina -->
+                                <path d="M29 20 h6.5 l4.5 6 v8 h-11 z" fill="#A71D1D"/>
+                                <path d="M30.5 22 h4 l2.6 4 h-6.6 z" fill="#fff" fill-opacity=".9"/>
+                                <!-- Chasis -->
+                                <rect x="4" y="34" width="37" height="2.4" rx="1.2" fill="#A71D1D"/>
+                                <!-- Ruedas -->
+                                <circle cx="13" cy="38" r="4" fill="#A71D1D"/>
+                                <circle cx="13" cy="38" r="1.5" fill="#fff"/>
+                                <circle cx="34" cy="38" r="4" fill="#A71D1D"/>
+                                <circle cx="34" cy="38" r="1.5" fill="#fff"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -89,8 +103,23 @@
                 <div class="menu-card active" onclick="cambiarVista('view-submenu-calidad')">
                     <div class="card-header">
                         <div class="card-icon quality-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Mango de la lupa -->
+                                <line x1="31" y1="31" x2="41" y2="41" stroke="#A71D1D" stroke-width="5" stroke-linecap="round"/>
+                                <!-- Lente -->
+                                <circle cx="20" cy="20" r="14" fill="#fff"/>
+                                <circle cx="20" cy="20" r="14" stroke="#A71D1D" stroke-width="3"/>
+                                <!-- Granos peritados -->
+                                <g fill="#E0A32E">
+                                    <ellipse cx="15" cy="18" rx="3" ry="4" transform="rotate(-18 15 18)"/>
+                                    <ellipse cx="23" cy="16" rx="3" ry="4" transform="rotate(14 23 16)"/>
+                                    <ellipse cx="19.5" cy="24" rx="3" ry="4" transform="rotate(-4 19.5 24)"/>
+                                </g>
+                                <g stroke="#fff" stroke-width="1" stroke-linecap="round" opacity=".7">
+                                    <line x1="15" y1="15.5" x2="15" y2="20.5"/>
+                                    <line x1="23" y1="13.5" x2="23" y2="18.5"/>
+                                    <line x1="19.5" y1="21.5" x2="19.5" y2="26.5"/>
+                                </g>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -106,12 +135,62 @@
                     </div>
                 </div>
 
+                <!-- Producción (en desarrollo) -->
+                <div class="menu-card active" onclick="mostrarProximamenteProduccion()">
+                    <div class="card-header">
+                        <div class="card-icon production-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Sol -->
+                                <circle cx="37" cy="12" r="5" fill="#E0A32E"/>
+                                <g stroke="#E0A32E" stroke-width="1.8" stroke-linecap="round">
+                                    <line x1="37" y1="3.5" x2="37" y2="5.5"/>
+                                    <line x1="45.5" y1="12" x2="43.5" y2="12"/>
+                                    <line x1="43" y1="6" x2="41.6" y2="7.4"/>
+                                    <line x1="43" y1="18" x2="41.6" y2="16.6"/>
+                                </g>
+                                <!-- Campo -->
+                                <path d="M3 37 Q24 31 45 37 V45 H3 Z" fill="#5E8C4A"/>
+                                <path d="M3 37 Q24 31 45 37" stroke="#4b7a3b" stroke-width="1.2" fill="none" opacity=".6"/>
+                                <!-- Brotes -->
+                                <g stroke="#3f6b31" stroke-width="1.6" stroke-linecap="round" fill="none">
+                                    <path d="M30 41 V37 M28.5 38.5 30 37 31.5 38.5"/>
+                                    <path d="M35 42 V38 M33.5 39.5 35 38 36.5 39.5"/>
+                                    <path d="M40 41 V37 M38.5 38.5 40 37 41.5 38.5"/>
+                                </g>
+                                <!-- Agrónoma -->
+                                <path d="M11 39 Q11 29 17 29 Q23 29 23 39 Z" fill="#A71D1D"/>
+                                <line x1="21" y1="32" x2="30" y2="28" stroke="#A71D1D" stroke-width="2.8" stroke-linecap="round"/>
+                                <circle cx="17" cy="23" r="3.5" fill="#A71D1D"/>
+                                <ellipse cx="17" cy="20.5" rx="7" ry="1.9" fill="#A71D1D"/>
+                                <path d="M13.5 20.5 Q14 16.5 17 16.5 Q20 16.5 20.5 20.5 Z" fill="#A71D1D"/>
+                                <path d="M13.8 19.6 Q17 20.8 20.2 19.6" stroke="#E0A32E" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Producción</h3>
+                            <span class="card-badge coming-badge">Próximamente</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Seguimiento y registro de la producción a campo</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
                 <!-- Ticketera -->
                 <div class="menu-card active" onclick="abrirTicketera()">
                     <div class="card-header">
                         <div class="card-icon support-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-2.96-3.83c-.375-.48-.102-1.083.378-1.458.48-.375 1.083-.102 1.458.378l1.71 2.21 1.99-2.57c.42-.54 1.23-.63 1.77-.23.54.4.63 1.21.23 1.75z"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Ticket -->
+                                <rect x="5" y="15" width="38" height="18" rx="3.5" fill="#A71D1D" fill-opacity=".14"/>
+                                <rect x="5" y="15" width="38" height="18" rx="3.5" stroke="#A71D1D" stroke-width="2.4"/>
+                                <line x1="31" y1="16" x2="31" y2="32" stroke="#A71D1D" stroke-width="1.6" stroke-dasharray="2 2.6"/>
+                                <!-- Check -->
+                                <path d="M12 24.5 l3.2 3.2 l6.5 -6.8" stroke="#E0A32E" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                                <circle cx="37" cy="24" r="2" fill="#A71D1D" fill-opacity=".5"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -131,9 +210,18 @@
                 <div class="menu-card active" onclick="abrirVistaContratos()">
                     <div class="card-header">
                         <div class="card-icon contracts-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
-                                <path d="M8 12h8v1.5H8zM8 15h8v1.5H8zM8 9h3v1.5H8z"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Hoja con esquina doblada -->
+                                <path d="M11 5 H28 L38 15 V38 A5 5 0 0 1 33 43 H16 A5 5 0 0 1 11 38 Z" fill="#A71D1D" fill-opacity=".12"/>
+                                <path d="M11 5 H28 L38 15 V38 A5 5 0 0 1 33 43 H16 A5 5 0 0 1 11 38 Z" stroke="#A71D1D" stroke-width="2.4" stroke-linejoin="round"/>
+                                <path d="M28 5 V13 A2 2 0 0 0 30 15 H38" stroke="#A71D1D" stroke-width="2.4" fill="none" stroke-linejoin="round"/>
+                                <!-- Renglones -->
+                                <g stroke="#A71D1D" stroke-width="2" stroke-linecap="round" opacity=".5">
+                                    <line x1="16" y1="22" x2="28" y2="22"/>
+                                    <line x1="16" y1="27" x2="31" y2="27"/>
+                                </g>
+                                <!-- Firma -->
+                                <path d="M15 34 q3.5 -4.5 7 0 t7 0" stroke="#E0A32E" stroke-width="2.4" fill="none" stroke-linecap="round"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -172,15 +260,23 @@
                 <div class="menu-card active" onclick="abrirModuloCarga('PT')">
                     <div class="card-header">
                         <div class="card-icon cargo-icon">
-                            <svg viewBox="0 0 200 140" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <!-- Caja PT -->
-                                <rect x="30" y="30" width="80" height="50" fill="#ffffff" stroke="currentColor" stroke-width="3" rx="4"/>
-                                <text x="70" y="65" font-size="28" font-weight="bold" text-anchor="middle" fill="currentColor">PT</text>
-                                <!-- Camión -->
-                                <rect x="10" y="75" width="120" height="35" fill="none" stroke="currentColor" stroke-width="2.5" rx="3"/>
-                                <circle cx="40" cy="115" r="10" fill="currentColor"/>
-                                <circle cx="110" cy="115" r="10" fill="currentColor"/>
-                                <rect x="115" y="80" width="25" height="20" fill="currentColor" rx="2"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Bolsas (producto terminado) -->
+                                <path d="M11 25 C7.5 25 7 20 8 18 C8.3 16.8 9 16.2 9.8 16 L9.2 14 L12.8 14 L12.2 16 C13 16.2 13.7 16.8 14 18 C15 20 14.5 25 11 25 Z" fill="#E0A32E"/>
+                                <path d="M20 25 C16.5 25 16 20 17 18 C17.3 16.8 18 16.2 18.8 16 L18.2 14 L21.8 14 L21.2 16 C22 16.2 22.7 16.8 23 18 C24 20 23.5 25 20 25 Z" fill="#E0A32E"/>
+                                <line x1="8.4" y1="20.5" x2="13.6" y2="20.5" stroke="#c98a1e" stroke-width="1.2"/>
+                                <line x1="17.4" y1="20.5" x2="22.6" y2="20.5" stroke="#c98a1e" stroke-width="1.2"/>
+                                <!-- Batea -->
+                                <path d="M5 25 h22 v9 H5 z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M5 24.5 v10 h22" stroke="#A71D1D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                                <!-- Cabina -->
+                                <path d="M29 20 h6.5 l4.5 6 v8 h-11 z" fill="#A71D1D"/>
+                                <path d="M30.5 22 h4 l2.6 4 h-6.6 z" fill="#fff" fill-opacity=".9"/>
+                                <!-- Chasis -->
+                                <rect x="4" y="34" width="37" height="2.4" rx="1.2" fill="#A71D1D"/>
+                                <!-- Ruedas -->
+                                <circle cx="13" cy="38" r="4" fill="#A71D1D"/><circle cx="13" cy="38" r="1.5" fill="#fff"/>
+                                <circle cx="34" cy="38" r="4" fill="#A71D1D"/><circle cx="34" cy="38" r="1.5" fill="#fff"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -203,15 +299,23 @@
                     </div>
                     <div class="card-header">
                         <div class="card-icon cargo-icon">
-                            <svg viewBox="0 0 200 140" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <!-- Caja MP -->
-                                <rect x="30" y="30" width="80" height="50" fill="#ffffff" stroke="currentColor" stroke-width="3" rx="4"/>
-                                <text x="70" y="65" font-size="28" font-weight="bold" text-anchor="middle" fill="currentColor">MP</text>
-                                <!-- Camión -->
-                                <rect x="10" y="75" width="120" height="35" fill="none" stroke="currentColor" stroke-width="2.5" rx="3"/>
-                                <circle cx="40" cy="115" r="10" fill="currentColor"/>
-                                <circle cx="110" cy="115" r="10" fill="currentColor"/>
-                                <rect x="115" y="80" width="25" height="20" fill="currentColor" rx="2"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Grano suelto (materia prima) -->
+                                <path d="M5 25 Q16 12 27 25 Z" fill="#E0A32E"/>
+                                <circle cx="12" cy="22" r="1" fill="#fff" fill-opacity=".55"/>
+                                <circle cx="18" cy="19" r="1" fill="#fff" fill-opacity=".55"/>
+                                <circle cx="21" cy="23" r="1" fill="#fff" fill-opacity=".55"/>
+                                <!-- Batea -->
+                                <path d="M5 25 h22 v9 H5 z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M5 24.5 v10 h22" stroke="#A71D1D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                                <!-- Cabina -->
+                                <path d="M29 20 h6.5 l4.5 6 v8 h-11 z" fill="#A71D1D"/>
+                                <path d="M30.5 22 h4 l2.6 4 h-6.6 z" fill="#fff" fill-opacity=".9"/>
+                                <!-- Chasis -->
+                                <rect x="4" y="34" width="37" height="2.4" rx="1.2" fill="#A71D1D"/>
+                                <!-- Ruedas -->
+                                <circle cx="13" cy="38" r="4" fill="#A71D1D"/><circle cx="13" cy="38" r="1.5" fill="#fff"/>
+                                <circle cx="34" cy="38" r="4" fill="#A71D1D"/><circle cx="34" cy="38" r="1.5" fill="#fff"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -242,10 +346,24 @@
                 <div class="menu-card active" onclick="abrirModuloCalidad('GARBANZO')">
                     <div class="card-header">
                         <div class="card-icon quality-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="9" cy="10" r="5"/>
-                                <circle cx="16" cy="15" r="4"/>
-                                <path d="M9 3c1.5 0 2.5 1 2.5 1L10 6.5 7.5 5S8 3 9 3z"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Bol de muestra -->
+                                <path d="M6 25 a18 18 0 0 0 36 0 Z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M6 25 a18 18 0 0 0 36 0" stroke="#A71D1D" stroke-width="2.4" fill="none"/>
+                                <line x1="5" y1="25" x2="43" y2="25" stroke="#E0A32E" stroke-width="2" stroke-linecap="round"/>
+                                <!-- Garbanzos -->
+                                <g fill="#E0A32E">
+                                    <circle cx="16" cy="21" r="4.2"/>
+                                    <circle cx="25" cy="20" r="4.5"/>
+                                    <circle cx="21" cy="24" r="3.8"/>
+                                </g>
+                                <g fill="#c98a1e">
+                                    <path d="M16 16.6 l1.8 1.4 -2 0.7 z"/>
+                                    <path d="M25 15.3 l1.8 1.4 -2 0.7 z"/>
+                                </g>
+                                <!-- Brote verde -->
+                                <line x1="25" y1="20" x2="25" y2="14" stroke="#5E8C4A" stroke-width="1.4" stroke-linecap="round"/>
+                                <path d="M25 15.5 q0.3 -4 4.2 -5 q-1 4 -4.2 5" fill="#5E8C4A"/>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -265,9 +383,23 @@
                 <div class="menu-card active" onclick="abrirModuloCalidad('POROTO_MUNG')">
                     <div class="card-header">
                         <div class="card-icon quality-icon">
-                            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                <ellipse cx="8" cy="12" rx="4" ry="5"/>
-                                <ellipse cx="16" cy="12" rx="4" ry="5"/>
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Bol de muestra -->
+                                <path d="M6 25 a18 18 0 0 0 36 0 Z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M6 25 a18 18 0 0 0 36 0" stroke="#A71D1D" stroke-width="2.4" fill="none"/>
+                                <line x1="5" y1="25" x2="43" y2="25" stroke="#E0A32E" stroke-width="2" stroke-linecap="round"/>
+                                <!-- Vaina dorada -->
+                                <path d="M27 16.5 q5 -3 8.5 -1 q-3.5 3.2 -8.5 1 z" fill="#E0A32E"/>
+                                <!-- Porotos mung (verdes) -->
+                                <g fill="#5E8C4A">
+                                    <ellipse cx="15" cy="21" rx="3" ry="4.6" transform="rotate(-22 15 21)"/>
+                                    <ellipse cx="24" cy="20" rx="3" ry="4.6" transform="rotate(16 24 20)"/>
+                                    <ellipse cx="20" cy="24" rx="3" ry="4.6" transform="rotate(-6 20 24)"/>
+                                </g>
+                                <g stroke="#dff0d0" stroke-width="1" stroke-linecap="round" opacity=".85">
+                                    <line x1="15.2" y1="18.7" x2="15.8" y2="23"/>
+                                    <line x1="23.7" y1="17.8" x2="24.3" y2="22"/>
+                                </g>
                             </svg>
                         </div>
                         <div class="card-title-section">
@@ -418,7 +550,7 @@
                                 <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
                             </div>
                         </div>
-                        <div class="form-group"><label for="cal-kg">Kg</label><input type="number" id="cal-kg" step="0.01" value="0"></div>
+                        <div class="form-group"><label for="cal-kg">Kg</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-kg" value="0"></div>
                     </div>
 
                     <!-- SECCIÓN 2: ANÁLISIS DE CALIBRE -->
@@ -451,8 +583,8 @@
                     <!-- SECCIÓN 4: CONDICIÓN -->
                     <h3><i class="fas fa-vial"></i> Condición de la Muestra</h3>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="cal-humedad">Humedad (%)</label><input type="number" id="cal-humedad" step="0.01" min="0" max="100" value="0"></div>
-                        <div class="form-group"><label for="cal-materia-extrana">Materia Extraña (%)</label><input type="number" id="cal-materia-extrana" step="0.01" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label for="cal-humedad">Humedad (%)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-humedad" value="0"></div>
+                        <div class="form-group"><label for="cal-materia-extrana">Materia Extraña (%)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-materia-extrana" value="0"></div>
                     </div>
                     <div class="checklist-item"><p>Insectos Vivos o Muertos</p>
                         <div class="si-no-toggle">
@@ -591,7 +723,12 @@
  
                     <div class="section-dynamic-header">
                         <h3>Contrato Comercial</h3>
-                        <button type="button" class="btn-secondary-add" onclick="agregarFilaContrato()"><i class="fas fa-plus"></i> Añadir Contrato</button>
+                        <div class="section-actions-group">
+                            <button type="button" class="btn-gestionar-opciones" onclick="abrirGestorOpcionesEnTab('destino')" title="Gestionar opciones de Destino de Mercadería">
+                                <i class="fas fa-cog"></i> Opciones
+                            </button>
+                            <button type="button" class="btn-secondary-add" onclick="agregarFilaContrato()"><i class="fas fa-plus"></i> Añadir Contrato</button>
+                        </div>
                     </div>
                     <div id="wrapper-contratos-dinamicos"></div>
  
@@ -659,13 +796,14 @@
                         <label for="elaboro">Elaboró</label>
                         <div class="enum-row">
                             <select id="elaboro" class="enum-select" data-enum="elaboro" required></select>
-                            <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
-                            <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                            <button type="button" class="btn-enum-gestionar" onclick="abrirGestorOpcionesEnTab('elaboro')" title="Gestionar opciones de Elaboró">
+                                <i class="fas fa-cog"></i>
+                            </button>
                         </div>
                     </div>
  
                     <div class="form-group"><label for="indicaciones">Indicaciones para la Descarga</label><input type="text" id="indicaciones"></div>
-                    <div class="form-group"><label for="kg-cargados">Total Kg Cargados</label><input type="number" id="kg-cargados" value="0"></div>
+                    <div class="form-group"><label for="kg-cargados">Total Kg Cargados</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="kg-cargados" value="0"></div>
  
                     <h3>Registro Fotográfico (Obligatorio 8 fotos)</h3>
                     <div class="photo-grid">
@@ -1064,6 +1202,8 @@
                 <button type="button" class="gestor-tab" data-enum="calibre" onclick="cambiarTabGestor('calibre')">Calibres</button>
                 <button type="button" class="gestor-tab" data-enum="tipoCarga" onclick="cambiarTabGestor('tipoCarga')">Tipos de Carga</button>
                 <button type="button" class="gestor-tab" data-enum="envase" onclick="cambiarTabGestor('envase')">Envases</button>
+                <button type="button" class="gestor-tab" data-enum="destino" onclick="cambiarTabGestor('destino')">Destino</button>
+                <button type="button" class="gestor-tab" data-enum="elaboro" onclick="cambiarTabGestor('elaboro')">Elaboró</button>
                 <button type="button" class="gestor-tab" data-enum="personal" onclick="cambiarTabGestor('personal')">Personal</button>
             </div>
             <div class="gestor-body">
@@ -1102,6 +1242,23 @@
     <script src="auth.js"></script>
     <script src="app.js"></script>
     <script src="calidad.js"></script>
-    <button id="fab-ticketera" class="fab-ticketera" title="Nueva Ticketera" onclick="abrirTicketera()"><i class="fas fa-ticket-alt"></i></button>
+    <!-- Placeholder del futuro Agente de IA (todavía no funcional): avatar animado, sin acción real -->
+    <button id="fab-agente-ia" class="fab-agente-ia" title="Agente de IA — Próximamente" onclick="mostrarProximamenteAgenteIA()">
+        <svg class="avatar-ia-svg" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="32" fill="#f4e9d8"/>
+            <path d="M16 34 Q15 47 20 55 L25 55 Q22 45 22 33 Z" fill="#6b4226"/>
+            <path d="M48 34 Q49 47 44 55 L39 55 Q42 45 42 33 Z" fill="#6b4226"/>
+            <ellipse cx="32" cy="36" rx="12" ry="13" fill="#f2c9a0"/>
+            <path d="M20 30 Q22 21 32 20 Q42 21 44 30 Q40 25 32 25 Q24 25 20 30 Z" fill="#6b4226"/>
+            <ellipse cx="32" cy="21" rx="19" ry="5" fill="#c8a165"/>
+            <path d="M19 21 Q21 9 32 9 Q43 9 45 21 Z" fill="#d9b578"/>
+            <ellipse class="ojo-ia" cx="27" cy="37" rx="1.6" ry="2.2" fill="#3a2416"/>
+            <ellipse class="ojo-ia" cx="37" cy="37" rx="1.6" ry="2.2" fill="#3a2416"/>
+            <path d="M27 43 Q32 47 37 43" stroke="#8a4b32" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <path d="M21 55 Q32 61 43 55 L38 51 Q32 54 26 51 Z" fill="#8a1f1f"/>
+            <path d="M19 57 Q32 64 45 57 L45 64 L19 64 Z" fill="#5c7a52"/>
+        </svg>
+        <span class="badge-ia">IA</span>
+    </button>
 </body>
 </html>

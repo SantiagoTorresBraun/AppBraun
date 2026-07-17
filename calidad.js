@@ -152,8 +152,8 @@ function construirCamposAnaliticos() {
             div.innerHTML = `
                 <label for="${slugCampoCalidad(nombre)}">${nombre}</label>
                 <div class="input-pct-wrap">
-                    <input type="number" id="${slugCampoCalidad(nombre)}" class="${cssClase}"
-                           data-campo="${nombre}" step="0.01" min="0" max="100" value="0" inputmode="decimal">
+                    <input type="text" inputmode="decimal" id="${slugCampoCalidad(nombre)}" class="${cssClase} campo-numero-ar"
+                           data-campo="${nombre}" value="0">
                     <span>%</span>
                 </div>`;
             wrapper.appendChild(div);
@@ -167,7 +167,7 @@ function construirCamposAnaliticos() {
 // --- 5. CAMPOS CALCULADOS (fórmulas del modelo AppSheet) ---
 function leerSumaInputs(selector) {
     let suma = 0;
-    document.querySelectorAll(selector).forEach(inp => { suma += parseFloat(inp.value) || 0; });
+    document.querySelectorAll(selector).forEach(inp => { suma += parseNumeroAR(inp.value); });
     return suma;
 }
 
@@ -175,15 +175,15 @@ function recalcularTotalesCalidad() {
     const totalBuenos = leerSumaInputs('.input-calibre-cal');   // 10mm + 9mm + 8mm + 7mm + Bajo zaranda
     const totalDanios = leerSumaInputs('.input-defecto-cal');   // suma de defectos físicos
     const totalMuestra = totalBuenos + totalDanios;             // Total Muestra Cargada
-    const kg = parseFloat(document.getElementById('cal-kg').value) || 0;
+    const kg = parseNumeroAR(document.getElementById('cal-kg').value);
     // Total Muestra %: porcentaje analizado sobre 100 (control de que la muestra cierre)
     const totalMuestraPct = totalMuestra;
 
-    document.getElementById('total-granos-buenos').textContent = totalBuenos.toFixed(2) + " %";
-    document.getElementById('total-danios').textContent = totalDanios.toFixed(2) + " %";
-    document.getElementById('total-muestra-cargada').textContent = totalMuestra.toFixed(2);
+    document.getElementById('total-granos-buenos').textContent = formatNumeroAR(totalBuenos, 2) + " %";
+    document.getElementById('total-danios').textContent = formatNumeroAR(totalDanios, 2) + " %";
+    document.getElementById('total-muestra-cargada').textContent = formatNumeroAR(totalMuestra, 2);
     const elPct = document.getElementById('total-muestra-pct');
-    elPct.textContent = totalMuestraPct.toFixed(2) + " %";
+    elPct.textContent = formatNumeroAR(totalMuestraPct, 2) + " %";
     // Alerta visual si la muestra no cierra en 100%
     elPct.closest('.calidad-total-card').classList.toggle('descuadrada', Math.abs(totalMuestraPct - 100) > 0.5 && totalMuestraPct > 0);
 
@@ -264,10 +264,10 @@ function construirRegistroCalidad(idParaGuardar) {
         "Tipo": document.getElementById('cal-tipo').value,
         "Calibre": document.getElementById('cal-calibre').value,
         "Envase": document.getElementById('cal-envase').value,
-        "Kg": parseFloat(document.getElementById('cal-kg').value) || 0,
+        "Kg": parseNumeroAR(document.getElementById('cal-kg').value),
 
-        "Humedad": parseFloat(document.getElementById('cal-humedad').value) || 0,
-        "Materia Extraña": parseFloat(document.getElementById('cal-materia-extrana').value) || 0,
+        "Humedad": parseNumeroAR(document.getElementById('cal-humedad').value),
+        "Materia Extraña": parseNumeroAR(document.getElementById('cal-materia-extrana').value),
         "Insectos Vivos o Muertos": document.querySelector('input[name="cal_insectos"]:checked').value,
         "Olor": document.querySelector('input[name="cal_olor"]:checked').value,
         "observaciones": document.getElementById('cal-observaciones').value,
@@ -289,7 +289,7 @@ function construirRegistroCalidad(idParaGuardar) {
 
     // Variables analíticas dinámicas (calibres y defectos del grano activo)
     document.querySelectorAll('.input-calibre-cal, .input-defecto-cal').forEach(inp => {
-        registro[inp.dataset.campo] = parseFloat(inp.value) || 0;
+        registro[inp.dataset.campo] = parseNumeroAR(inp.value);
     });
 
     return registro;
@@ -306,7 +306,7 @@ document.getElementById('form-calidad').addEventListener('submit', function(e) {
 
     const totales = recalcularTotalesCalidad();
     if (totales.totalMuestra > 0 && Math.abs(totales.totalMuestraPct - 100) > 0.5) {
-        const seguir = confirm(`Atención: la muestra suma ${totales.totalMuestraPct.toFixed(2)}% (calibres + defectos) y no cierra en 100%.\n\n¿Querés guardar igual?`);
+        const seguir = confirm(`Atención: la muestra suma ${formatNumeroAR(totales.totalMuestraPct, 2)}% (calibres + defectos) y no cierra en 100%.\n\n¿Querés guardar igual?`);
         if (!seguir) return;
     }
 
@@ -765,16 +765,16 @@ function cargarCalidadParaEditar(base64Data) {
         poblarSelect(document.getElementById('cal-tipo'), 'tipoGrano', item["Tipo"] || "");
         poblarSelect(document.getElementById('cal-calibre'), 'calibre', item["Calibre"] || "");
         poblarSelect(document.getElementById('cal-envase'), 'envase', item["Envase"] || "");
-        document.getElementById('cal-kg').value = item["Kg"] || 0;
+        document.getElementById('cal-kg').value = valorPlanoParaEditar(item["Kg"] || 0);
 
         // Variables analíticas
         document.querySelectorAll('.input-calibre-cal, .input-defecto-cal').forEach(inp => {
-            inp.value = item[inp.dataset.campo] || 0;
+            inp.value = valorPlanoParaEditar(item[inp.dataset.campo] || 0);
         });
 
         // Condición
-        document.getElementById('cal-humedad').value = item["Humedad"] || 0;
-        document.getElementById('cal-materia-extrana').value = item["Materia Extraña"] || 0;
+        document.getElementById('cal-humedad').value = valorPlanoParaEditar(item["Humedad"] || 0);
+        document.getElementById('cal-materia-extrana').value = valorPlanoParaEditar(item["Materia Extraña"] || 0);
         const radioInsectos = document.querySelector(`input[name="cal_insectos"][value="${item["Insectos Vivos o Muertos"] || 'NO'}"]`);
         if (radioInsectos) radioInsectos.checked = true;
         const radioOlor = document.querySelector(`input[name="cal_olor"][value="${item["Olor"] || 'NO'}"]`);

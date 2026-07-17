@@ -603,29 +603,30 @@ h3 {
 }
 
 .card-icon {
-    width: 56px;
-    height: 56px;
-    min-width: 56px;
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
+    border-radius: 16px;
     font-size: 2rem;
     transition: all 0.35s ease;
     position: relative;
 }
 
 .card-icon svg {
-    width: 32px;
-    height: 32px;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    width: 44px;
+    height: 44px;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.12));
 }
 
-/* Iconos unificados con identidad de marca: fondo rojo muy claro + icono rojo Braun */
+/* Iconos unificados con identidad de marca: fondo rojo muy claro + ilustración duotono */
 .cargo-icon,
 .quality-icon,
 .support-icon,
-.contracts-icon {
+.contracts-icon,
+.production-icon {
     background: rgba(167, 29, 29, 0.08);
     color: #A71D1D;
 }
@@ -1094,13 +1095,14 @@ h3 {
     }
 
     .card-icon {
-        width: 48px;
-        height: 48px;
+        width: 56px;
+        height: 56px;
+        min-width: 56px;
     }
 
     .card-icon svg {
-        width: 28px;
-        height: 28px;
+        width: 38px;
+        height: 38px;
     }
 }
 
@@ -1146,13 +1148,14 @@ h3 {
     }
 
     .card-icon {
-        width: 44px;
-        height: 44px;
+        width: 52px;
+        height: 52px;
+        min-width: 52px;
     }
 
     .card-icon svg {
-        width: 24px;
-        height: 24px;
+        width: 36px;
+        height: 36px;
     }
 
     .card-title {
@@ -2090,7 +2093,23 @@ h3 {
     color: var(--color-danger);
     border-color: var(--color-danger);
 }
- 
+
+.btn-enum-gestionar {
+    width: 40px;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: #f5f5f7;
+    font-size: 1.05rem;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+.btn-enum-gestionar:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
 /* CAMPOS CALCULADOS (SOLO LECTURA) DENTRO DE LAS TARJETAS DINÁMICAS */
 .campo-calculado {
     background-color: #f0f0f0 !important;
@@ -2171,26 +2190,68 @@ h3 {
     .ticketera-grid { grid-template-columns: 1fr; }
 }
 
-/* FAB para acceso rápido a la ticketera */
-.fab-ticketera {
+/* FAB con el avatar placeholder del futuro Agente de IA (sin funcionalidad real todavía) */
+.fab-agente-ia {
     position: fixed;
     right: 18px;
     bottom: 18px;
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: var(--color-primary);
-    color: white;
+    background: #fff;
     border: none;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    padding: 0;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 0 0 3px rgba(183, 28, 28, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 999;
     cursor: pointer;
+    overflow: visible;
+    animation: fabIaPulso 3.2s ease-in-out infinite;
 }
-.fab-ticketera i { font-size: 1.1rem; }
-.fab-ticketera:active { transform: scale(0.98); }
+.fab-agente-ia:active { transform: scale(0.96); }
+
+.avatar-ia-svg {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    animation: fabIaBamboleo 3.2s ease-in-out infinite;
+}
+
+.ojo-ia {
+    transform-origin: center;
+    animation: fabIaParpadeo 4.5s ease-in-out infinite;
+}
+
+.badge-ia {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+@keyframes fabIaBamboleo {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+@keyframes fabIaPulso {
+    0%, 100% { box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 0 0 3px rgba(183, 28, 28, 0.12); }
+    50% { box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 0 0 7px rgba(183, 28, 28, 0.05); }
+}
+
+@keyframes fabIaParpadeo {
+    0%, 92%, 100% { transform: scaleY(1); }
+    96% { transform: scaleY(0.1); }
+}
 
 /* Ajustes para el botón de ticketera en el header */
 #btn-ticketera-header { color: white; }

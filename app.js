@@ -92,6 +92,68 @@ function poblarSelect(select, enumKey, valorSeleccionado) {
     });
 }
 
+// --- FORMATO NUMÉRICO ES-AR: coma decimal, punto de miles (ej: 1.234,56) ---
+// parseNumeroAR: lo que el usuario tipeó / lo que se ve en un campo enmascarado
+// ("1.234,56") -> número JS, para calcular o para armar el payload que se manda al backend.
+// formatNumeroAR: un número (o el string plano "1234.56" tal como llega guardado
+// del Sheet/IndexedDB) -> texto es-AR, para mostrarlo en pantalla.
+function parseNumeroAR(valor) {
+    if (valor === null || valor === undefined) return 0;
+    if (typeof valor === 'number') return valor;
+    const limpio = String(valor).trim().replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(limpio);
+    return isNaN(num) ? 0 : num;
+}
+
+function formatNumeroAR(valor, maxDecimales) {
+    const num = typeof valor === 'number' ? valor : (parseFloat(valor) || 0);
+    return num.toLocaleString('es-AR', { maximumFractionDigits: maxDecimales === undefined ? 2 : maxDecimales });
+}
+
+// Versión "plana" (coma decimal, SIN punto de miles) de un valor guardado
+// (plano, tal como llega del backend/IndexedDB), para poblar un campo
+// enmascarado al editar un registro existente. Importante no usar acá el
+// punto de miles: el disparo sintético de "input" que hace el recálculo de
+// Total Kg / Diferencia pasaría por el saneador de arriba, que convierte
+// cualquier "." en "," y arruinaría el valor recién puesto.
+function valorPlanoParaEditar(valor) {
+    if (valor === '' || valor === null || valor === undefined) return '';
+    const num = typeof valor === 'number' ? valor : (parseFloat(valor) || 0);
+    return String(num).replace('.', ',');
+}
+
+// --- CAMPOS NUMÉRICOS ENMASCARADOS (clase .campo-numero-ar) ---
+// Mientras se edita se ve el número "plano" (dígitos + una coma decimal, sin
+// punto de miles); recién al salir del campo (blur) se formatea con el punto
+// de miles. Usa delegación de eventos sobre document, así funciona también en
+// los inputs que se crean dinámicamente (productos, contratos, calibres y
+// defectos de Control de Calidad) sin tener que conectar cada uno a mano.
+document.addEventListener('input', function (e) {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains('campo-numero-ar')) return;
+    let v = el.value.replace(/\./g, ',');       // el teclado numérico de celular solo tiene ".", lo tratamos como coma
+    v = v.replace(/[^0-9,]/g, '');               // solo dígitos y coma
+    const primeraComa = v.indexOf(',');
+    if (primeraComa !== -1) {
+        v = v.slice(0, primeraComa + 1) + v.slice(primeraComa + 1).replace(/,/g, '');
+    }
+    if (v !== el.value) el.value = v;
+}, true); // fase de captura: corre antes que los listeners de recálculo puestos directo en cada input
+
+document.addEventListener('focusin', function (e) {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains('campo-numero-ar') || el.readOnly) return;
+    if (el.value.trim() === '') return;
+    el.value = String(parseNumeroAR(el.value)).replace('.', ',');
+});
+
+document.addEventListener('focusout', function (e) {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains('campo-numero-ar') || el.readOnly) return;
+    if (el.value.trim() === '') return;
+    el.value = formatNumeroAR(parseNumeroAR(el.value), 2);
+});
+
 function agregarOpcionEnum(select, enumKey) {
     const nueva = prompt("Escribí la nueva opción a agregar:");
     if (!nueva || !nueva.trim()) return;
@@ -211,6 +273,12 @@ function switchTab(tabName) {
         const btnNuevo = document.getElementById('tab-btn-nuevo');
         if (btnNuevo) btnNuevo.classList.add('active');
         document.getElementById('tab-content-nuevo').classList.remove('hidden');
+        // Recién ahora el tab es visible: si el canvas de firma se había
+        // inicializado con ancho 0 (porque este tab estaba oculto), lo
+        // redimensionamos. initCanvasFirma no duplica los listeners de dibujo
+        // si ya estaban puestos.
+        initCanvasFirma('canvas-firma-chofer');
+        initCanvasFirma('canvas-firma-control');
     } else {
         const btnHistorial = document.getElementById('tab-btn-historial');
         if (btnHistorial) btnHistorial.classList.add('active');
@@ -288,9 +356,9 @@ function agregarFilaProducto() {
             </div>
         </div>
         <div class="form-group-row">
-            <div class="form-group"><label>Cant. Envases</label><input type="number" class="prod-item campo-cantidad" data-field="cantidad" value="1"></div>
-            <div class="form-group"><label>Kg Envase</label><input type="number" class="prod-item campo-kgenvase" data-field="kg_envase" value="25"></div>
-            <div class="form-group"><label>Total Kg</label><input type="text" class="prod-item campo-calculado campo-total-kg" data-field="total_kg" readonly></div>
+            <div class="form-group"><label>Cant. Envases</label><input type="text" inputmode="decimal" class="prod-item campo-cantidad campo-numero-ar" data-field="cantidad" value="1"></div>
+            <div class="form-group"><label>Kg Envase</label><input type="text" inputmode="decimal" class="prod-item campo-kgenvase campo-numero-ar" data-field="kg_envase" value="25"></div>
+            <div class="form-group"><label>Total Kg</label><input type="text" class="prod-item campo-calculado campo-total-kg campo-numero-ar" data-field="total_kg" readonly></div>
         </div>
     `;
     wrapper.appendChild(card);
@@ -303,9 +371,9 @@ function agregarFilaProducto() {
     const inputKgEnvase = card.querySelector('.campo-kgenvase');
     const inputTotal = card.querySelector('.campo-total-kg');
     function recalcularTotalProducto() {
-        const cant = parseFloat(inputCantidad.value) || 0;
-        const kgEnv = parseFloat(inputKgEnvase.value) || 0;
-        inputTotal.value = (cant * kgEnv).toFixed(2);
+        const cant = parseNumeroAR(inputCantidad.value);
+        const kgEnv = parseNumeroAR(inputKgEnvase.value);
+        inputTotal.value = formatNumeroAR(cant * kgEnv, 2);
     }
     inputCantidad.addEventListener('input', recalcularTotalProducto);
     inputKgEnvase.addEventListener('input', recalcularTotalProducto);
@@ -322,6 +390,14 @@ let gestorEnumActivo = 'producto';
 
 function abrirGestorOpciones() {
     cambiarTabGestor(gestorEnumActivo);
+    document.getElementById('modal-gestor-opciones').classList.add('active');
+}
+
+// Igual que abrirGestorOpciones(), pero abre directo en la pestaña pedida
+// (para los botones de engranaje que viven junto a un campo puntual, como
+// "Destino de Mercadería" o "Elaboró", en vez del botón general de "Opciones").
+function abrirGestorOpcionesEnTab(enumKey) {
+    cambiarTabGestor(enumKey);
     document.getElementById('modal-gestor-opciones').classList.add('active');
 }
 
@@ -533,11 +609,7 @@ function agregarFilaContrato() {
             <div class="form-group"><label>Carta de Porte</label><input type="text" class="cont-item" data-field="carta_porte" placeholder="10233036961"></div>
             <div class="form-group">
                 <label>Destino de Mercadería</label>
-                <div class="enum-row">
-                    <select class="cont-item enum-select" data-field="destino" data-enum="destino"></select>
-                    <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
-                    <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción">−</button>
-                </div>
+                <select class="cont-item enum-select" data-field="destino" data-enum="destino"></select>
             </div>
         </div>
         <div class="form-group">
@@ -547,9 +619,9 @@ function agregarFilaContrato() {
             <div class="archivo-preview">Sin archivo</div>
         </div>
         <div class="form-group-row">
-            <div class="form-group"><label>Kg CP</label><input type="number" class="cont-item campo-kgcp" data-field="kg_cp" value="0"></div>
-            <div class="form-group"><label>Kg Descarga</label><input type="number" class="cont-item campo-kgdescarga" data-field="kg_descarga" value="0"></div>
-            <div class="form-group"><label>Diferencia de Carga</label><input type="text" class="cont-item campo-calculado campo-diferencia" data-field="diferencia_carga" readonly></div>
+            <div class="form-group"><label>Kg CP</label><input type="text" inputmode="decimal" class="cont-item campo-kgcp campo-numero-ar" data-field="kg_cp" value="0"></div>
+            <div class="form-group"><label>Kg Descarga</label><input type="text" inputmode="decimal" class="cont-item campo-kgdescarga campo-numero-ar" data-field="kg_descarga" value="0"></div>
+            <div class="form-group"><label>Diferencia de Carga</label><input type="text" class="cont-item campo-calculado campo-diferencia campo-numero-ar" data-field="diferencia_carga" readonly></div>
         </div>
     `;
     wrapper.appendChild(card);
@@ -561,9 +633,9 @@ function agregarFilaContrato() {
     const inputKgDescarga = card.querySelector('.campo-kgdescarga');
     const inputDiferencia = card.querySelector('.campo-diferencia');
     function recalcularDiferencia() {
-        const kgCP = parseFloat(inputKgCP.value) || 0;
-        const kgDesc = parseFloat(inputKgDescarga.value) || 0;
-        inputDiferencia.value = (kgDesc - kgCP).toFixed(2);
+        const kgCP = parseNumeroAR(inputKgCP.value);
+        const kgDesc = parseNumeroAR(inputKgDescarga.value);
+        inputDiferencia.value = formatNumeroAR(kgDesc - kgCP, 2);
     }
     inputKgCP.addEventListener('input', recalcularDiferencia);
     inputKgDescarga.addEventListener('input', recalcularDiferencia);
@@ -605,6 +677,19 @@ document.getElementById('form-login').addEventListener('submit', async function(
 function cerrarSesion() {
     cerrarSesionAuth();
     cambiarVista('view-login');
+}
+
+// Botón flotante con el avatar del futuro Agente de IA: todavía no hace nada,
+// solo avisa que está en camino (reemplaza el acceso directo a la Ticketera,
+// que ya tiene su propia tarjeta en el menú y su botón en el header).
+function mostrarProximamenteAgenteIA() {
+    alert("🤖 Muy pronto vas a poder charlar acá con tu Agente de IA.\n\n¡Ya estamos trabajando en eso!");
+}
+
+// Módulo Producción: la tarjeta ya está en el menú pero el módulo todavía
+// está en desarrollo. Avisamos en vez de abrir una vista vacía.
+function mostrarProximamenteProduccion() {
+    alert("🌾 El módulo de Producción está en desarrollo.\n\n¡Muy pronto vas a poder gestionarlo desde acá!");
 }
 
 // --- 5. CONTROL DE CONEXIÓN ---
@@ -658,13 +743,26 @@ function actualizarManualmente() {
 function initCanvasFirma(id) {
     const canvas = document.getElementById(id);
     if(!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let drawing = false;
+    // Si el tab "Nuevo" todavía está oculto (display:none), offsetWidth da 0:
+    // fijar canvas.width = 0 en ese momento deja la firma inutilizable para
+    // siempre, aunque el tab se muestre después. Mejor no tocar el tamaño
+    // todavía; switchTab('nuevo') vuelve a llamar a esta función apenas el
+    // tab es visible.
+    if (canvas.offsetWidth === 0) return;
 
+    const ctx = canvas.getContext("2d");
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight || 150;
     ctx.strokeStyle = "#111111";
     ctx.lineWidth = 3;
+
+    // Los listeners de dibujo se ponen una sola vez por canvas: esta función
+    // se vuelve a llamar cada vez que se abre/edita un registro (para
+    // redimensionar), y no queremos ir acumulando handlers duplicados.
+    if (canvas.dataset.firmaInit === '1') return;
+    canvas.dataset.firmaInit = '1';
+
+    let drawing = false;
 
     function getPos(e) {
         const rect = canvas.getBoundingClientRect();
@@ -760,27 +858,21 @@ function createImageModal() {
     if (document.querySelector('.image-modal')) return;
     const modal = document.createElement('div');
     modal.className = 'image-modal';
-        tr.innerHTML = `
-            <td>${item.Fecha || '-'}</td>
-            <td><b>${listaProductos}</b>${etiquetaPendiente}</td>
-            <td>${listaContratos}</td>
-            <td><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'aceptado'}">${item.ESTATUS || 'ACEPTADO'}</span></td>
-            <td>${item.Kg_Cargados || '0'} kg</td>
-            <td>
-                <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro" aria-label="Editar registro">
-                    <i class="fas fa-pen" style="color:#ef6c00; font-size: 1.1rem;"></i>
-                </button>
-                <button class="btn-table-action" onclick="eliminarRegistro('${dataString}')" title="Eliminar registro" aria-label="Eliminar registro">
-                    <i class="fas fa-trash" style="color:#c62828; font-size: 1.1rem;"></i>
-                </button>
-            </td>
-        `;
+    modal.innerHTML = `
+        <div class="backdrop"></div>
+        <div class="content">
+            <div class="close-btn">&times;</div>
+            <div class="nav-prev">&#10094;</div>
+            <div class="img-inner"></div>
+            <div class="nav-next">&#10095;</div>
+            <div class="counter"></div>
+            <div class="dots"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 
-        // Añadir etiquetas legibles a cada celda para la vista móvil (data-label)
-        const headerLabels = ['Fecha','Producto/s','Contrato/s Comercial','Estatus','Kg','Acciones'];
-        tr.querySelectorAll('td').forEach((td, i) => {
-            td.setAttribute('data-label', headerLabels[i] || '');
-        });
+    const backdrop = modal.querySelector('.backdrop');
+    const closeBtn = modal.querySelector('.close-btn');
     const navPrev = modal.querySelector('.nav-prev');
     const navNext = modal.querySelector('.nav-next');
     const imgInner = modal.querySelector('.img-inner');
@@ -1359,7 +1451,7 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
     document.querySelectorAll('#wrapper-productos-dinamicos .dynamic-item-card').forEach(card => {
         const item = {};
         card.querySelectorAll('.prod-item').forEach(input => {
-            item[input.dataset.field] = input.value;
+            item[input.dataset.field] = input.classList.contains('campo-numero-ar') ? parseNumeroAR(input.value) : input.value;
         });
         listaProductos.push(item);
     });
@@ -1368,7 +1460,7 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
     document.querySelectorAll('#wrapper-contratos-dinamicos .dynamic-item-card').forEach(card => {
         const item = {};
         card.querySelectorAll('.cont-item').forEach(input => {
-            item[input.dataset.field] = input.value;
+            item[input.dataset.field] = input.classList.contains('campo-numero-ar') ? parseNumeroAR(input.value) : input.value;
         });
         listaContratos.push(item);
     });
@@ -1397,7 +1489,7 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
         ESTATUS: document.querySelector('input[name="estatus"]:checked').value,
         Elaboro: document.getElementById("elaboro").value,
         Indicaciones_Descarga: document.getElementById("indicaciones").value,
-        Kg_Cargados: document.getElementById("kg-cargados").value,
+        Kg_Cargados: parseNumeroAR(document.getElementById("kg-cargados").value),
 
         Correo: document.getElementById("correo-envio").value,
         Estado_Correo: document.getElementById("estado-correo").value,
@@ -1610,6 +1702,11 @@ document.getElementById('filter-status').addEventListener('change', filtrarYRend
 document.getElementById('filter-lote').addEventListener('input', filtrarYRenderizarTabla);
 document.getElementById('filter-posicion').addEventListener('input', filtrarYRenderizarTabla);
 
+// Formatea kilos con separador de miles es-AR (ej: 31380 -> "31.380")
+function fmtKg(valor) {
+    return formatNumeroAR(valor, 2);
+}
+
 async function filtrarYRenderizarTabla() {
     const txt = document.getElementById('filter-search').value.toLowerCase();
     const fechaDesde = document.getElementById('filter-fecha-desde').value;
@@ -1682,7 +1779,7 @@ async function filtrarYRenderizarTabla() {
             <td data-label="Producto" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
             <td data-label="Contrato" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
             <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'aceptado'}">${item.ESTATUS || 'ACEPTADO'}</span></td>
-            <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${item.Kg_Cargados || '0'} kg</td>
+            <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${fmtKg(item.Kg_Cargados)} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro">
                     <i class="fas fa-pen" style="color:#ef6c00; font-size: 1.1rem; cursor:pointer;"></i>
@@ -1722,7 +1819,7 @@ function cargarRegistroParaEditar(base64Data) {
         document.getElementById("patente-acoplado").value = item.Patente_Acoplado || "";
         poblarSelect(document.getElementById("elaboro"), "elaboro", item.Elaboro || "");
         document.getElementById("indicaciones").value = item.Indicaciones_Descarga || "";
-        document.getElementById("kg-cargados").value = item.Kg_Cargados || 0;
+        document.getElementById("kg-cargados").value = valorPlanoParaEditar(item.Kg_Cargados || 0);
         document.getElementById("correo-envio").value = item.Correo || "";
         document.getElementById("estado-correo").value = item.Estado_Correo || "Sin enviar";
 
@@ -1740,6 +1837,8 @@ function cargarRegistroParaEditar(base64Data) {
                 const valorGuardado = p[input.dataset.field] || '';
                 if (input.tagName === 'SELECT') {
                     poblarSelect(input, input.dataset.enum, valorGuardado);
+                } else if (input.classList.contains('campo-numero-ar')) {
+                    input.value = valorPlanoParaEditar(valorGuardado);
                 } else {
                     input.value = valorGuardado;
                 }
@@ -1764,6 +1863,8 @@ function cargarRegistroParaEditar(base64Data) {
                 const valorGuardado = c[input.dataset.field] || '';
                 if (input.tagName === 'SELECT') {
                     poblarSelect(input, input.dataset.enum, valorGuardado);
+                } else if (input.classList.contains('campo-numero-ar')) {
+                    input.value = valorPlanoParaEditar(valorGuardado);
                 } else {
                     input.value = valorGuardado;
                 }
@@ -2240,7 +2341,7 @@ function abrirDetalleCarga(registro) {
     document.getElementById('det-fecha').textContent = registro.Fecha || '-';
     document.getElementById('det-tipo').textContent = registro.Tipo_Carga || '-';
     document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? registro.ESTATUS.toLowerCase() : 'aceptado'}">${registro.ESTATUS || 'ACEPTADO'}</span>`;
-    document.getElementById('det-kg').textContent = (registro.Kg_Cargados || '0') + ' kg';
+    document.getElementById('det-kg').textContent = fmtKg(registro.Kg_Cargados) + ' kg';
     
     // Llenar productos
     const detProductos = document.getElementById('det-productos');
