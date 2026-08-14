@@ -134,6 +134,90 @@ function diagRecorrer(carpeta, sangria, out, nivel) {
   }
 }
 
+// --------------------------------------------------------
+// 3) ¿PUEDE LA APP ESCRIBIR EN DRIVE?  <-- LA PRUEBA CLAVE
+//    Intenta crear una foto de prueba igual que cuando se guarda
+//    un control de calidad, y despues la borra.
+//    Si esto falla, NINGUNA foto se puede guardar y el motivo
+//    aparece escrito abajo con todas las letras.
+// --------------------------------------------------------
+function diagnosticoEscrituraEnDrive() {
+  var out = [];
+  out.push("========================================");
+  out.push("  PRUEBA DE ESCRITURA EN DRIVE");
+  out.push("========================================");
+
+  // 1) ¿Podemos abrir la carpeta de fotos de calidad?
+  var carpeta;
+  try {
+    var it = DriveApp.getFoldersByName("Control de Calidad_Images");
+    if (!it.hasNext()) {
+      out.push("FALLO: no se encontro la carpeta 'Control de Calidad_Images'.");
+      Logger.log(out.join("\n"));
+      return out.join("\n");
+    }
+    carpeta = it.next();
+    out.push("Carpeta encontrada: " + carpeta.getName());
+    out.push("  ID: " + carpeta.getId());
+  } catch (err) {
+    out.push("FALLO al buscar la carpeta: " + err);
+    out.push("");
+    out.push(">>> Suele significar que el proyecto NO esta autorizado para Drive.");
+    Logger.log(out.join("\n"));
+    return out.join("\n");
+  }
+
+  // 2) ¿Podemos CREAR un archivo? (esto es lo que falla si falta el permiso)
+  var archivo = null;
+  try {
+    // Un PNG de 1x1 px en base64: lo mismo que hace la app, pero minusculo.
+    var base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    var blob = Utilities.newBlob(Utilities.base64Decode(base64), "image/png", "PRUEBA_BORRAR.png");
+    archivo = carpeta.createFile(blob);
+    out.push("");
+    out.push("CREAR ARCHIVO: OK");
+    out.push("  " + archivo.getUrl());
+  } catch (err) {
+    out.push("");
+    out.push("*** FALLO AL CREAR EL ARCHIVO ***");
+    out.push("  " + err);
+    out.push("");
+    out.push(">>> ESTA ES LA CAUSA de que las fotos no se guarden.");
+    out.push(">>> Lo mas comun: el proyecto quedo autorizado SOLO para leer Drive.");
+    out.push(">>> Solucion: en el editor, ejecutar cualquier funcion a mano y");
+    out.push(">>> ACEPTAR TODOS los permisos que pida (incluido el de Drive).");
+    Logger.log(out.join("\n"));
+    return out.join("\n");
+  }
+
+  // 3) ¿Podemos darle permiso de lectura publica? (sin esto la foto no se ve)
+  try {
+    archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    out.push("COMPARTIR (link publico): OK");
+  } catch (err) {
+    out.push("COMPARTIR: FALLO -> " + err);
+    out.push(">>> El archivo se crea pero queda PRIVADO: la app lo va a mostrar vacio.");
+  }
+
+  // 4) Limpieza
+  try {
+    archivo.setTrashed(true);
+    out.push("Archivo de prueba borrado: OK");
+  } catch (err) {
+    out.push("No se pudo borrar el archivo de prueba: " + err);
+    out.push("(borralo a mano de la carpeta: se llama PRUEBA_BORRAR.png)");
+  }
+
+  out.push("");
+  out.push("RESULTADO: Drive funciona. Si igual no se guardan las fotos,");
+  out.push("el problema NO esta en los permisos de Drive.");
+
+  var texto = out.join("\n");
+  Logger.log(texto);
+  return texto;
+}
+
+
 // Devuelve la ruta de una carpeta, tipo "Mi unidad / APP_Braun_2026 / Images".
 function diagRutaDeCarpeta(carpeta) {
   var partes = [carpeta.getName()];
