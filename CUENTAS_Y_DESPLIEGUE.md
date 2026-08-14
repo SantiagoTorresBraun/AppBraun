@@ -87,7 +87,60 @@ Esperar 1–2 minutos y recargar <https://santiagotorresbraun.github.io/AppBraun
 
 ---
 
-## 6. Datos de referencia
+## 6. Permisos de Google (OAuth) — leer esto si "no se guardan las fotos"
+
+El backend necesita **tres permisos** de la cuenta de Google. Están declarados a mano en
+`appsscript.json`, y esa declaración **no es opcional**: sin ella Google los deduce del código, y
+si la autorización se otorgó antes de que el código creara archivos, queda congelada con un
+permiso insuficiente.
+
+```json
+"oauthScopes": [
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/drive",
+  "https://www.googleapis.com/auth/script.send_mail"
+]
+```
+
+| Permiso | Para qué | Si falta |
+|---|---|---|
+| `spreadsheets` | Leer y escribir el Sheet | No se guarda **nada** |
+| `drive` | Crear las fotos y los archivos en Drive | Las fotos **no se guardan** y la celda queda vacía |
+| `script.send_mail` | Correos de la Ticketera | No salen las notificaciones |
+
+### El caso real (14/08/2026)
+
+Durante meses las fotos de Control de Calidad no se guardaban. La autorización, otorgada el
+**3 de julio**, tenía el permiso de Drive en **"Ver y descargar"** — es decir, **solo lectura**.
+`DriveApp.Folder.createFile` fallaba con:
+
+```
+You do not have permission to call DriveApp.Folder.createFile.
+Required permissions: https://www.googleapis.com/auth/drive
+```
+
+Como el código viejo se tragaba ese error y devolvía `""`, la fila se guardaba con las celdas de
+imagen **vacías y sin ningún aviso**, y la app borraba la foto del celular. Se perdieron
+definitivamente.
+
+### Cómo verificar y arreglar
+
+1. **Diagnosticar**: ejecutar `diagnosticoEscrituraEnDrive()` de [99_diagnostico.gs](99_diagnostico.gs).
+   Crea un archivo de prueba y lo borra. Si falla, imprime el motivo exacto.
+2. **Declarar los scopes** en `appsscript.json` (bloque de arriba) y guardar.
+3. **Revocar la autorización vieja** en <https://myaccount.google.com/permissions> → `App_BRC`
+   → *Eliminar todo el acceso*. **Este paso es imprescindible**: cambiar el manifiesto no
+   invalida el permiso ya otorgado, y Google no vuelve a preguntar por su cuenta.
+4. **Re-autorizar**: ejecutar cualquier función y aceptar. Verificar que el permiso de Drive diga
+   **"Ver, modificar, crear y eliminar archivos de Google Drive"** y no "Ver y descargar".
+5. **Nueva implementación** (punto 5 de este documento). La Web App usa los permisos vigentes al
+   momento de implementar: sin este paso sigue corriendo con la autorización vieja.
+
+> Mientras dura el paso 3, la app **no guarda**. Hacerlo en un momento sin operarios cargando.
+
+---
+
+## 7. Datos de referencia
 
 | Qué | Valor |
 |---|---|
@@ -101,11 +154,13 @@ archivos `.gs` en [INVENTARIO_APPS_SCRIPT.md](INVENTARIO_APPS_SCRIPT.md).
 
 ---
 
-## 7. Errores que ya pasaron (para no repetirlos)
+## 8. Errores que ya pasaron (para no repetirlos)
 
 | Error | Qué provocó | Cómo se evita |
 |---|---|---|
+| **Permiso de Drive en solo lectura** | La causa real de que las fotos de calidad no se guardaran. `createFile` fallaba y la celda quedaba vacía. | Punto 6. Diagnosticar con `diagnosticoEscrituraEnDrive()`. |
 | Tener dos copias del backend en Apps Script | `Sin titulo 4.gs` duplicaba `doPost` y `guardarFotoCalidadEnDrive`. Los `.gs` se fusionan en un único espacio global y **la última definición gana**: las fotos se subían privadas y, si fallaban, la celda quedaba vacía sin aviso. | Un solo archivo con el backend. Ver [INVENTARIO_APPS_SCRIPT.md](INVENTARIO_APPS_SCRIPT.md). |
+| Tragarse los errores con `return ""` | Sin el mensaje de error, el problema del permiso de Drive estuvo invisible desde julio. | Que las funciones **propaguen** el error en vez de devolver vacío. |
 | El repo desactualizado respecto de Apps Script | Casi se pisan mejoras del backend con una versión vieja del repo. | Después de tocar Apps Script, copiar el código al repo y commitear. |
 | Push con la cuenta de GitHub equivocada | `403 Permission denied`. | Ver punto 3. |
 | Buscar las carpetas de Drive **por nombre** | Un renombre hacía que la app creara una carpeta nueva y vacía en la raíz de Mi unidad, y los archivos quedaban huérfanos. | Ahora se buscan **por ID** (`obtenerCarpetaApp()`). |

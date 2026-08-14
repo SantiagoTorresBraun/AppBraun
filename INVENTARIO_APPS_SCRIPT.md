@@ -132,7 +132,7 @@ esa función, así que hubo que dejarlas convertidas en la propia celda.
 |---|---|---|
 | `URL_APP_TICKETERA = "http://127.0.0.1:5500/..."` — el botón "Abrir Ticketera" de los correos apunta a la PC local de quien lo recibe, así que **no le funciona a nadie** | `Código.gs` | 🔴 Sin resolver — falta saber la URL pública de la app |
 | La implementación activa puede ser más vieja que el código del editor (editar **no** publica) | Implementaciones | ❓ Verificar en *Implementar → Administrar implementaciones* |
-| Posible falta del scope `.../auth/drive`: deja leer pero no crear archivos | Autorización | ❓ Verificar en *Ejecuciones* |
+| **Falta del scope `.../auth/drive`: dejaba leer pero no crear archivos** — la autorización del 3 de julio tenía Drive en "Ver y descargar". **Era la causa raíz de que no se guardaran las fotos.** | Autorización | ✅ **RESUELTO el 14/08/2026**: se declararon los `oauthScopes` en `appsscript.json`, se revocó el acceso viejo y se re-autorizó. Ver punto 6 de [CUENTAS_Y_DESPLIEGUE.md](CUENTAS_Y_DESPLIEGUE.md). |
 
 ---
 
