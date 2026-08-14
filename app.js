@@ -37,6 +37,56 @@ request.onerror = function(e) { console.error("Error IndexedDB", e); };
 
 // --- CONFIGURACIÓN DE CONEXIÓN Y VARIABLES GLOBALES ---
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxER7E6CJhddVOrP7gaTDSM1albRvEAGUHnWcdBM7SoXzDJeklCvZDY_Aj0Cd1Xv6znyA/exec";
+
+// --- ENVÍO AL BACKEND CON CONFIRMACIÓN REAL ---------------------------------
+// Manda un POST al Apps Script y avisa SI EL GUARDADO SALIÓ BIEN.
+//
+// Antes todos los envíos usaban mode:"no-cors". Con esa opción el navegador no
+// deja leer la respuesta, así que el .then() se cumplía SIEMPRE — incluso si el
+// backend había fallado — y la app borraba el registro de su cola local igual.
+// Así se perdieron fotos de Control de Calidad durante meses: Drive rechazaba
+// la subida, el backend avisaba del error y nadie lo escuchaba.
+//
+// El truco para poder leer la respuesta es el Content-Type "text/plain": con
+// "application/json" el navegador manda antes una petición OPTIONS (preflight)
+// que Apps Script no sabe responder. Con text/plain no hay preflight y se puede
+// usar CORS normal. El backend ya parsea el cuerpo como texto.
+//
+// Devuelve una promesa que:
+//   - se resuelve  -> el backend confirmó el guardado
+//   - se rechaza   -> hubo un error REAL y NO hay que borrar el registro local
+//
+// Si el navegador o la red impiden leer la respuesta, reintenta a la vieja
+// usanza para no dejar al operario sin poder guardar: en ese caso devuelve
+// { sinConfirmar: true } y el comportamiento es el de siempre.
+function enviarAlBackend(payload) {
+    const cuerpo = JSON.stringify(payload);
+    const cabeceras = { "Content-Type": "text/plain;charset=utf-8" };
+
+    return fetch(WEB_APP_URL, { method: "POST", headers: cabeceras, body: cuerpo })
+        .then(res => res.text())
+        .then(texto => {
+            let data = null;
+            try { data = JSON.parse(texto); } catch (e) { /* respuesta no-JSON: la damos por buena */ }
+
+            if (data && (data.status === "error" || data.ok === false)) {
+                const err = new Error(data.message || data.error || "El servidor rechazó el guardado");
+                err.rechazadoPorBackend = true;
+                throw err;
+            }
+            return { confirmado: true, respuesta: data };
+        })
+        .catch(err => {
+            // El backend contestó y dijo que NO: se propaga para conservar el registro.
+            if (err && err.rechazadoPorBackend) throw err;
+
+            // No se pudo leer la respuesta (CORS, red, navegador viejo).
+            // Reintento sin confirmación: es exactamente lo que hacía antes.
+            console.warn("No se pudo leer la respuesta del backend, reintentando sin confirmación:", err);
+            return fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", headers: cabeceras, body: cuerpo })
+                .then(() => ({ confirmado: false, sinConfirmar: true }));
+        });
+}
 let historialGeneral = []; 
 let tipoCargaActual = "PT"; 
 let vistaHistorialNavegacion = []; 
@@ -1158,11 +1208,13 @@ function agregarUsuarioUI() {
 
     // Persistir en la hoja "Usuarios" para el resto de los dispositivos
     if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-        fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ _accion: 'agregar_usuario', nombre: nombre, email: email })
-        }).catch(err => console.error('No se pudo guardar el usuario en el servidor:', err));
+        enviarAlBackend({ _accion: 'agregar_usuario', nombre: nombre, email: email })
+            .catch(err => {
+                console.error('No se pudo guardar el usuario en el servidor:', err);
+                if (err && err.rechazadoPorBackend) {
+                    alert('⚠️ El usuario quedó solo en este dispositivo: el servidor lo rechazó.\n\nMotivo: ' + err.message);
+                }
+            });
     } else {
         alert('Sin conexión: el usuario quedó solo en este dispositivo. Volvé a agregarlo con internet para que lo vean todos.');
     }
@@ -1181,11 +1233,13 @@ function quitarUsuarioUI(email, nombre) {
     guardarUsuariosExtra(obtenerUsuariosExtra().filter(u => String(u.email).toLowerCase() !== email));
 
     if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-        fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ _accion: 'eliminar_usuario', email: email })
-        }).catch(err => console.error('No se pudo eliminar el usuario en el servidor:', err));
+        enviarAlBackend({ _accion: 'eliminar_usuario', email: email })
+            .catch(err => {
+                console.error('No se pudo eliminar el usuario en el servidor:', err);
+                if (err && err.rechazadoPorBackend) {
+                    alert('⚠️ El usuario se quitó de este dispositivo pero NO del servidor.\n\nMotivo: ' + err.message);
+                }
+            });
     }
 
     renderizarListaUsuarios();
@@ -1234,11 +1288,8 @@ function sincronizarTicketsPendientes() {
         const payload = Object.assign({ _accion: 'crear_ticket' }, item);
         delete payload.id;
 
-        fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
+        // El ticket sale de la cola local solo si el backend confirmó que lo creó.
+        enviarAlBackend(payload)
         .then(() => {
             const delTx = db.transaction(['ticketera_tickets'], 'readwrite');
             delTx.objectStore('ticketera_tickets').delete(idKey).onsuccess = function() {
@@ -1260,11 +1311,14 @@ function aplicarCambioTicket(item, patch, accion) {
     const idx = historialTickets.findIndex(t => t.id_ticket === item.id_ticket);
     if (idx !== -1) Object.assign(historialTickets[idx], patch);
     if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-        fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.assign({ _accion: accion || 'actualizar_ticket', id_ticket: item.id_ticket }, patch))
-        }).catch(err => console.error('No se pudo actualizar el ticket en el servidor:', err));
+        enviarAlBackend(Object.assign({ _accion: accion || 'actualizar_ticket', id_ticket: item.id_ticket }, patch))
+            .catch(err => {
+                console.error('No se pudo actualizar el ticket en el servidor:', err);
+                if (err && err.rechazadoPorBackend) {
+                    alert('⚠️ El cambio del ticket NO se guardó en el servidor.\n\n' +
+                          'Motivo: ' + err.message + '\n\nVolvé a intentarlo.');
+                }
+            });
     }
     renderTicketsTicketera();
 }
@@ -1582,20 +1636,19 @@ function enviarPorCorreo() {
     const idTemporal = idRegistroEnEdicion || ("BC-" + Date.now());
     const registro = construirRegistroDesdeFormulario(idTemporal);
 
-    fetch(WEB_APP_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ _accion: "enviar_correo" }, registro))
-    })
-    .then(() => {
-        // mode:no-cors no permite leer la respuesta real del servidor,
-        // así que solo podemos confirmar que la petición salió sin error de red.
-        estadoInput.value = "Enviado (sin confirmación del servidor)";
+    enviarAlBackend(Object.assign({ _accion: "enviar_correo" }, registro))
+    .then(resultado => {
+        // Ahora sí se puede saber si el servidor lo aceptó de verdad.
+        estadoInput.value = resultado.sinConfirmar
+            ? "Enviado (sin confirmación del servidor)"
+            : "Enviado";
     })
     .catch(err => {
         console.error("Error al enviar por correo:", err);
-        estadoInput.value = "Error de conexión";
+        estadoInput.value = err && err.rechazadoPorBackend ? "Rechazado por el servidor" : "Error de conexión";
+        if (err && err.rechazadoPorBackend) {
+            alert("⚠️ El correo NO se pudo enviar.\n\nMotivo: " + err.message);
+        }
     });
 }
 
@@ -1649,12 +1702,15 @@ function actualizarRegistroExistente(registro) {
                 if (idx !== -1) historialGeneral[idx] = registro;
 
                 if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-                    fetch(WEB_APP_URL, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(Object.assign({ _accion: "actualizar" }, registro))
-                    }).catch(err => console.error("No se pudo sincronizar la edición con el servidor:", err));
+                    enviarAlBackend(Object.assign({ _accion: "actualizar" }, registro))
+                        .catch(err => {
+                            console.error("No se pudo sincronizar la edición con el servidor:", err);
+                            if (err && err.rechazadoPorBackend) {
+                                alert("⚠️ Los cambios NO se guardaron en el servidor.\n\n" +
+                                      "Motivo: " + err.message + "\n\n" +
+                                      "Volvé a entrar al registro y guardá de nuevo.");
+                            }
+                        });
                 }
 
                 finalizarGuardadoUI("¡Cambios guardados! Si el registro ya estaba sincronizado con Sheets, confirmá que tu Google Apps Script soporte la acción \"actualizar\" por Id_Carga.", true);
@@ -2009,12 +2065,15 @@ function eliminarRegistro(base64Data) {
         //    script esté preparado para atender action=delete; si no lo está,
         //    el registro se borra acá pero puede seguir existiendo en la Hoja).
         if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-            fetch(WEB_APP_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _accion: "eliminar", Id_Carga: item.Id_Carga })
-            }).catch(err => console.error("No se pudo notificar el borrado al servidor:", err));
+            enviarAlBackend({ _accion: "eliminar", Id_Carga: item.Id_Carga })
+                .catch(err => {
+                    console.error("No se pudo notificar el borrado al servidor:", err);
+                    if (err && err.rechazadoPorBackend) {
+                        alert("⚠️ El registro se borró de este dispositivo pero NO del servidor.\n\n" +
+                              "Motivo: " + err.message + "\n\n" +
+                              "Va a volver a aparecer la próxima vez que se recargue el historial.");
+                    }
+                });
         }
 
     } catch (error) {
@@ -2627,18 +2686,25 @@ function sincronizarDatosPendientes() {
         if (cursor) {
             const item = cursor.value;
             const idKey = item.id;
-            fetch(WEB_APP_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(item)
-            })
+            // Igual que en Control de Calidad: la carga se borra de la cola local
+            // SOLO si el backend confirmó que la guardó. Si falla (por ejemplo, no
+            // puede subir el archivo de la Carta de Porte a Drive), queda pendiente
+            // y se reintenta, en vez de desaparecer sin aviso.
+            enviarAlBackend(item)
             .then(() => {
                 const delTx = db.transaction(["controles_carga"], "readwrite");
                 delTx.objectStore("controles_carga").delete(idKey).onsuccess = function() {
                     renderOfflineCount();
                     sincronizarDatosPendientes();
                 };
+            })
+            .catch(err => {
+                console.error("No se pudo sincronizar la carga:", err);
+                if (err && err.rechazadoPorBackend) {
+                    alert("⚠️ La carga no se pudo guardar en el servidor y quedó pendiente en este dispositivo.\n\n" +
+                          "Motivo: " + err.message + "\n\n" +
+                          "No borres los datos del navegador: se va a reintentar sola.");
+                }
             });
         }
     };

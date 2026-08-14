@@ -171,6 +171,17 @@ function guardarRegistroCompleto(data) {
   var sheetProducto = ss.getSheetByName(NOMBRE_HOJA_PRODUCTO);
   var sheetContrato = ss.getSheetByName(NOMBRE_HOJA_CONTRATO);
 
+  // IDEMPOTENCIA: si ya existe una fila con este Id_Carga, no se inserta otra.
+  // El mismo POST puede llegar dos veces (cola offline que reintenta, red
+  // inestable, doble toque en Guardar, o el reintento del front cuando no pudo
+  // leer la respuesta). Los módulos de Calidad, Producción y Ticketera ya tenían
+  // este chequeo; Control de Carga era el único que podía duplicar la carga.
+  // Ojo: la acción "actualizar" borra la fila vieja ANTES de llamar acá, así que
+  // este chequeo no interfiere con las ediciones.
+  if (data.Id_Carga && buscarFilaPorId(sheetOrden, data.Id_Carga) !== -1) {
+    return;
+  }
+
   // ---- Fila principal en "Orden" ----
   // Mapeo EXACTO al orden real de columnas de tu hoja "Orden".
   // Archivo, PDF, CP1-CP5 y "Estado" no los envía el frontend hoy: quedan vacíos.
@@ -1082,10 +1093,9 @@ function aplicarFormatoPorcentajeCalidad(hoja, fila, encabezados, columnasEscrit
 
 var HOJA_TICKETS = "Tickets";
 // URL donde está publicada la app (para el botón "Abrir Ticketera" del correo).
-// CAMBIAR cuando la app se publique en su dominio definitivo.
-// ⚠️ PENDIENTE: 127.0.0.1 es "esta computadora", así que el botón del correo
-// no le funciona a ningún destinatario. Reemplazar por la URL pública real.
-var URL_APP_TICKETERA = "http://127.0.0.1:5500/AppBraun-main/index.html";
+// Antes apuntaba a http://127.0.0.1:5500 — "esta computadora" — así que el botón
+// no le funcionaba a ningún destinatario del correo.
+var URL_APP_TICKETERA = "https://santiagotorresbraun.github.io/AppBraun/";
 
 var COLUMNAS_TICKETS = [
   "id_ticket", "fecha_creacion", "fecha_cierre",

@@ -307,16 +307,36 @@ quedaba privada y la app no podía mostrarla.
 (usa `mode: "no-cors"`, que no permite leer si el guardado salió bien), la foto se perdía
 definitivamente. Ahora la celda queda con `ERROR_SUBIDA: <motivo>` para poder detectarlo.
 
-> ⚠️ **Pendiente relacionado**: el `mode: "no-cors"` de [calidad.js:390](calidad.js#L390) hace que
-> el front **no pueda saber si el backend guardó bien**. Borra el registro local igual. Es la causa
-> raíz de cualquier pérdida silenciosa futura y conviene resolverlo aparte.
+### ✅ Resuelto: el front ahora sabe si el guardado salió bien
+
+Hasta el 14/08/2026 **todos** los envíos usaban `mode: "no-cors"`. Con esa opción el navegador no
+deja leer la respuesta, así que el `.then()` se cumplía **siempre** — aunque el backend hubiera
+fallado — y la app borraba el registro de su cola local igual. Esa es la razón por la que las
+fotos se perdían **sin que nadie se enterara**.
+
+Ahora todos los envíos pasan por **`enviarAlBackend()`** ([app.js](app.js), arriba de todo):
+
+- Manda el POST con `Content-Type: text/plain`, que **no dispara preflight** (Apps Script no sabe
+  responder `OPTIONS`), y así se puede usar CORS normal y **leer la respuesta**.
+- Si el backend responde error, la promesa **se rechaza** y el registro **no se borra**: queda en
+  el dispositivo y se reintenta. Además se le avisa al operario con un mensaje concreto.
+- Si el navegador o la red impiden leer la respuesta, **reintenta con `no-cors`** como antes, para
+  no dejar a nadie sin poder guardar. En ese caso devuelve `{ sinConfirmar: true }`.
+
+Como el reintento podría llegar a mandar el mismo POST dos veces, `guardarRegistroCompleto()`
+recibió el mismo chequeo de idempotencia que ya tenían Calidad, Producción y Ticketera: si el
+`Id_Carga` ya existe en la hoja `Orden`, no se inserta otra fila.
 
 ---
 
 ## 10. Pendientes
 
 - [ ] **Copia de seguridad**: hoy no hay ninguna rutina de backup del Sheet ni del Drive.
-- [ ] **`mode: "no-cors"`** en el guardado de calidad (ver punto 9): impide confirmar el guardado.
+- [x] ~~`mode: "no-cors"`~~ — resuelto el 14/08/2026 con `enviarAlBackend()`.
 - [ ] **Fotos de Control de Carga en base64 dentro de la celda** (ver punto 5): migrarlas a Drive.
+      **Ojo**: no es solo un cambio de backend. Hoy `app.js` arma el PDF del reporte con
+      `doc.addImage(base64)`, que necesita la imagen embebida; si las celdas pasaran a guardar un
+      link, **el PDF de Control de Carga dejaría de mostrar las fotos** hasta adaptarlo para que
+      las descargue primero (como ya hace `calidad.js` con `cargarImagenParaPDF()`).
 - [ ] **Confirmar que el Sheet `1RXqKN0E…` es el mismo** donde está pegado el Apps Script.
       Se verifica corriendo `diagnosticoDrive()` y comparando el ID que imprime.

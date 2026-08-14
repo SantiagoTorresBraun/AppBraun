@@ -358,12 +358,18 @@ function actualizarCalidadExistente(registro) {
                 const idx = historialCalidad.findIndex(r => r["Id_Calidad"] === registro["Id_Calidad"]);
                 if (idx !== -1) historialCalidad[idx] = registro;
                 if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-                    fetch(WEB_APP_URL, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(Object.assign({ _accion: "actualizar_calidad" }, registro))
-                    }).catch(err => console.error("No se pudo sincronizar la edición de calidad:", err));
+                    enviarAlBackend(Object.assign({ _accion: "actualizar_calidad" }, registro))
+                        .catch(err => {
+                            console.error("No se pudo sincronizar la edición de calidad:", err);
+                            // El registro ya estaba sincronizado, así que no hay copia local
+                            // que conservar: lo único que se puede hacer es avisar, para que
+                            // el operario reintente en vez de creer que quedó guardado.
+                            if (err && err.rechazadoPorBackend) {
+                                alert("⚠️ Los cambios NO se guardaron en el servidor.\n\n" +
+                                      "Motivo: " + err.message + "\n\n" +
+                                      "Volvé a entrar al control y guardá de nuevo.");
+                            }
+                        });
                 }
             } else if (navigator.onLine) {
                 sincronizarCalidadPendientes();
@@ -387,19 +393,25 @@ function sincronizarCalidadPendientes() {
         const payload = Object.assign({ _accion: "guardar_calidad" }, item);
         delete payload.id; // el id local de IndexedDB no viaja al Sheet
 
-        fetch(WEB_APP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        })
+        // El registro se borra de la cola local SOLO si el backend confirmó que
+        // lo guardó. Si Drive rechaza las fotos (o falla cualquier otra cosa),
+        // el control queda en el dispositivo con sus fotos y se reintenta en la
+        // próxima sincronización, en vez de perderse en silencio.
+        enviarAlBackend(payload)
         .then(() => {
             const delTx = db.transaction(["controles_calidad"], "readwrite");
             delTx.objectStore("controles_calidad").delete(idKey).onsuccess = function() {
                 sincronizarCalidadPendientes(); // procesa el siguiente de la cola
             };
         })
-        .catch(err => console.error("No se pudo sincronizar el control de calidad:", err));
+        .catch(err => {
+            console.error("No se pudo sincronizar el control de calidad:", err);
+            if (err && err.rechazadoPorBackend) {
+                alert("⚠️ El control de calidad no se pudo guardar en el servidor y quedó pendiente en este dispositivo.\n\n" +
+                      "Motivo: " + err.message + "\n\n" +
+                      "No cierres sesión ni borres los datos del navegador: se va a reintentar solo.");
+            }
+        });
     };
 }
 
@@ -834,12 +846,15 @@ function eliminarCalidad(base64Data) {
 
         // 3) Avisar al backend (el Apps Script debe atender _accion: "eliminar_calidad")
         if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-            fetch(WEB_APP_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _accion: "eliminar_calidad", "Id_Calidad": item["Id_Calidad"], "Grano": item["Grano"] || granoActual })
-            }).catch(err => console.error("No se pudo notificar el borrado de calidad:", err));
+            enviarAlBackend({ _accion: "eliminar_calidad", "Id_Calidad": item["Id_Calidad"], "Grano": item["Grano"] || granoActual })
+                .catch(err => {
+                    console.error("No se pudo notificar el borrado de calidad:", err);
+                    if (err && err.rechazadoPorBackend) {
+                        alert("⚠️ El control se borró de este dispositivo pero NO del servidor.\n\n" +
+                              "Motivo: " + err.message + "\n\n" +
+                              "Va a volver a aparecer la próxima vez que se recargue el historial.");
+                    }
+                });
         }
     } catch (error) {
         console.error("Error al eliminar el control de calidad:", error);

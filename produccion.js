@@ -427,12 +427,10 @@ function sincronizarMuestreosPendientes() {
             const payload = Object.assign({ _accion: 'actualizar_muestreo' }, item);
             delete payload.id;
             delete payload._synced;
-            fetch(WEB_APP_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
+            // Solo se marca como sincronizado si el backend lo confirmó. Si falla
+            // (por ejemplo, no puede subir la foto del punto a Drive), queda con
+            // _synced:false y se reintenta en la próxima pasada.
+            enviarAlBackend(payload)
             .then(function () {
                 const up = db.transaction(['muestreos'], 'readwrite');
                 const store = up.objectStore('muestreos');
@@ -443,7 +441,14 @@ function sincronizarMuestreosPendientes() {
                     store.put(rec);
                 };
             })
-            .catch(err => console.error('No se pudo sincronizar el muestreo:', err));
+            .catch(function (err) {
+                console.error('No se pudo sincronizar el muestreo:', err);
+                if (err && err.rechazadoPorBackend) {
+                    alert('⚠️ El muestreo no se pudo guardar en el servidor y quedó pendiente en este dispositivo.\n\n' +
+                          'Motivo: ' + err.message + '\n\n' +
+                          'No borres los datos del navegador: se va a reintentar solo.');
+                }
+            });
         });
     };
 }
@@ -518,10 +523,15 @@ function eliminarMuestreoActual() {
         tx.objectStore('muestreos').delete(id);
     }
     if (navigator.onLine && !WEB_APP_URL.includes('AQUÍ_VA')) {
-        fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ _accion: 'eliminar_muestreo', Id_Muestreo: idM })
-        }).catch(() => {});
+        enviarAlBackend({ _accion: 'eliminar_muestreo', Id_Muestreo: idM })
+            .catch(function (err) {
+                console.error('No se pudo notificar el borrado del muestreo:', err);
+                if (err && err.rechazadoPorBackend) {
+                    alert('⚠️ El muestreo se borró de este dispositivo pero NO del servidor.\n\n' +
+                          'Motivo: ' + err.message + '\n\n' +
+                          'Va a volver a aparecer la próxima vez que se recargue el historial.');
+                }
+            });
     }
     historialMuestreos = (historialMuestreos || []).filter(m => m.Id_Muestreo !== idM);
     muestreoActual = null;
