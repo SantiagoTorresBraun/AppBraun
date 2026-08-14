@@ -32,7 +32,9 @@
 
 | Archivo | Qué documenta |
 |---|---|
+| **CUENTAS_Y_DESPLIEGUE.md** | **Qué cuenta hace falta para cada cosa y dónde se sube cada cambio.** Las dos mitades de la app (frontend en GitHub Pages / backend en Apps Script), las cuentas de Google y de GitHub, cómo publicar cada tipo de cambio y los errores que ya pasaron. Empezar por acá ante la duda de "¿esto va a GitHub o a Apps Script?". |
 | **ALMACENAMIENTO_DATOS.md** | **Dónde se guardan los datos**: ID del Google Sheet, qué guarda cada hoja, las carpetas de Google Drive, el almacenamiento local del dispositivo (IndexedDB/localStorage) y el checklist para cuando algo deja de guardarse. Empezar por acá ante cualquier duda de persistencia. |
+| **INVENTARIO_APPS_SCRIPT.md** | Inventario del proyecto de Apps Script `App_BRC`: qué hace cada archivo `.gs`, cuáles son migraciones históricas ya ejecutadas y el registro del duplicado que rompía el guardado de fotos. |
 
 ## Documentación de sesiones anteriores (registro histórico de cambios)
 

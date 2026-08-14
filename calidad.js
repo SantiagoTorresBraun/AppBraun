@@ -901,22 +901,40 @@ function cargarImagenParaPDF(src) {
     });
 }
 
-// Recorta una imagen al aspecto de su caja (estilo "cover") para que no se deforme.
-function recortarImagenACaja(dataUrl, ratio) {
+// Prepara una foto para el PDF: la achica si es enorme, pero NO la recorta.
+//
+// Antes esto era recortarImagenACaja(), que hacía un recorte estilo "cover"
+// contra una caja vertical (87x100). Con las fotos apaisadas que sacan los
+// operarios eso descartaba los costados y se comía las etiquetas del cartel
+// ("9mm" quedaba en "mm"). Ahora se conserva la foto entera y es el dibujado
+// el que la encaja centrada dentro de la celda (ver PÁGINA 2 del PDF).
+//
+// Devuelve { data, ancho, alto } para no tener que releer las medidas después.
+function prepararImagenPDF(dataUrl, ladoMaximo) {
+    const MAX = ladoMaximo || 1400;
     return new Promise(resolve => {
         if (!dataUrl) return resolve(null);
         const img = new Image();
         img.onload = () => {
             try {
-                const iw = img.width, ih = img.height;
-                let sw = iw, sh = iw / ratio;
-                if (sh > ih) { sh = ih; sw = ih * ratio; }
-                const sx = (iw - sw) / 2, sy = (ih - sh) / 2;
+                let w = img.width, h = img.height;
+                if (!w || !h) return resolve(null);
+
+                // Solo se achica si algún lado supera el máximo; nunca se agranda.
+                const escala = Math.min(1, MAX / Math.max(w, h));
+                w = Math.round(w * escala);
+                h = Math.round(h * escala);
+
                 const c = document.createElement('canvas');
-                c.width = Math.min(1000, Math.round(sw));
-                c.height = Math.round(c.width / ratio);
-                c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
-                resolve(c.toDataURL('image/jpeg', 0.82));
+                c.width = w; c.height = h;
+                const ctx = c.getContext('2d');
+                // Fondo blanco: si la foto viniera con transparencia, en el PDF
+                // el canal alfa se ve negro.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+
+                resolve({ data: c.toDataURL('image/jpeg', 0.82), ancho: w, alto: h });
             } catch (e) { resolve(null); }
         };
         img.onerror = () => resolve(null);
@@ -1028,9 +1046,10 @@ async function generarPDFCalidad(base64Data) {
         })();
 
         // ---- Descargar las fotos ANTES de armar el documento ----
-        const RATIO_FOTO = 87 / 100; // ancho/alto de la celda de foto en la página 2
+        // Se guardan enteras (con sus medidas reales): el encuadre se resuelve
+        // al dibujarlas en la página 2, para que ninguna quede recortada.
         const fotosCargadas = await Promise.all([1, 2, 3, 4].map(i =>
-            cargarImagenParaPDF(item[`imagen ${i}`]).then(d => recortarImagenACaja(d, RATIO_FOTO))
+            cargarImagenParaPDF(item[`imagen ${i}`]).then(d => prepararImagenPDF(d))
         ));
 
         // ================= PÁGINA 1: REPORTE =================
@@ -1172,28 +1191,77 @@ async function generarPDFCalidad(base64Data) {
         // ================= PÁGINA 2: FOTOS =================
         const etiquetasFotos = ["MUESTRA GENERAL 1:", "FOTO EN MANO 2:", "CALIBRES 3:", "DAÑOS 4:"];
         const fotosDisponibles = fotosCargadas
-            .map((d, i) => ({ data: d, titulo: etiquetasFotos[i] }))
-            .filter(f => f.data);
+            .map((f, i) => f ? Object.assign({}, f, { titulo: etiquetasFotos[i] }) : null)
+            .filter(Boolean);
+
         if (fotosDisponibles.length > 0) {
             doc.addPage();
-            const anchoCelda = 87, altoFoto = 100, gap = 8;
-            fotosDisponibles.forEach((f, idx) => {
-                const col = idx % 2, fila = Math.floor(idx / 2);
-                const fx = margen + col * (anchoCelda + gap);
-                const fy = 16 + fila * (altoFoto + 22);
-                doc.setFillColor(PDF_NARANJA_FOTO[0], PDF_NARANJA_FOTO[1], PDF_NARANJA_FOTO[2]);
-                doc.rect(fx, fy, anchoCelda, 8, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(9.5);
-                doc.setFont(undefined, 'bolditalic');
-                doc.text(f.titulo, fx + anchoCelda / 2, fy + 5.5, { align: 'center' });
-                try { doc.addImage(f.data, 'JPEG', fx, fy + 8, anchoCelda, altoFoto); }
-                catch (e) {
-                    doc.setTextColor(120, 120, 120);
-                    doc.setFont(undefined, 'normal');
-                    doc.text("(no se pudo incluir la imagen)", fx + 4, fy + 20);
+
+            const anchoCelda = 87;   // 87 + 8 + 87 = 182 = ancho útil de la hoja
+            const gap = 8;
+            const ALTO_BARRA = 8;    // franja naranja del título
+            const ALTO_MAX_FOTO = 108;
+            const SEP_FILAS = 12;
+            const Y_INICIAL = 16;
+            const LIMITE_Y = 283;    // A4 son 297 mm: dejamos margen inferior
+
+            let yFila = Y_INICIAL;
+
+            // Se recorre de a dos fotos (una fila). La altura de cada fila la
+            // define la foto que más necesite, así una apaisada no arrastra a
+            // una vertical a un tamaño ridículo ni deja media hoja en blanco.
+            for (let i = 0; i < fotosDisponibles.length; i += 2) {
+                const filaFotos = fotosDisponibles.slice(i, i + 2);
+
+                const altoFila = Math.min(
+                    ALTO_MAX_FOTO,
+                    Math.max.apply(null, filaFotos.map(function (f) {
+                        return anchoCelda / (f.ancho / f.alto); // alto si ocupa todo el ancho
+                    }))
+                );
+
+                // Salto de página controlado: la fila entra entera o pasa a la
+                // siguiente hoja. Nunca queda una foto cortada al pie.
+                if (yFila + ALTO_BARRA + altoFila > LIMITE_Y) {
+                    doc.addPage();
+                    yFila = Y_INICIAL;
                 }
-            });
+
+                filaFotos.forEach(function (f, col) {
+                    const fx = margen + col * (anchoCelda + gap);
+
+                    // Barra de título
+                    doc.setFillColor(PDF_NARANJA_FOTO[0], PDF_NARANJA_FOTO[1], PDF_NARANJA_FOTO[2]);
+                    doc.rect(fx, yFila, anchoCelda, ALTO_BARRA, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(9.5);
+                    doc.setFont(undefined, 'bolditalic');
+                    doc.text(f.titulo, fx + anchoCelda / 2, yFila + 5.5, { align: 'center' });
+
+                    // Fondo gris claro de la celda: las bandas que sobran cuando
+                    // la foto no tiene la misma proporción quedan prolijas.
+                    const yCelda = yFila + ALTO_BARRA;
+                    doc.setFillColor(244, 244, 244);
+                    doc.rect(fx, yCelda, anchoCelda, altoFila, 'F');
+
+                    // Encaje "contain": la foto entra COMPLETA y centrada.
+                    const ratio = f.ancho / f.alto;
+                    let w = anchoCelda, h = w / ratio;
+                    if (h > altoFila) { h = altoFila; w = h * ratio; }
+                    const ox = fx + (anchoCelda - w) / 2;
+                    const oy = yCelda + (altoFila - h) / 2;
+
+                    try { doc.addImage(f.data, 'JPEG', ox, oy, w, h); }
+                    catch (e) {
+                        doc.setTextColor(120, 120, 120);
+                        doc.setFontSize(9);
+                        doc.setFont(undefined, 'normal');
+                        doc.text("(no se pudo incluir la imagen)", fx + 4, yCelda + 20);
+                    }
+                });
+
+                yFila += ALTO_BARRA + altoFila + SEP_FILAS;
+            }
         }
 
         // ================= PÁGINA 3: GRÁFICOS =================
