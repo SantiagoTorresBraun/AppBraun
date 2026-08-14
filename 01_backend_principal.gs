@@ -1,3 +1,78 @@
+// ============================================================
+// ESPEJO DEL BACKEND EN PRODUCCIÓN
+// ============================================================
+// Copia fiel del archivo "Código.gs" del proyecto de Apps Script
+// "mIGRACION" (ID 18iIQlwh_9BT_HBnhdUgSUw2oGHqytkEI-7bv8UvwJ4dx4hbsZQPnD-vU),
+// que está pegado adentro del Sheet BD_BRC.
+//
+// Sincronizado el 14/08/2026.
+//
+// La FUENTE DE VERDAD sigue siendo el editor de Apps Script: este archivo es
+// una copia para poder leer y revisar el código sin entrar al editor. Si se
+// modifica acá, hay que copiarlo al editor y volver a "Implementar → Nueva
+// versión" para que la app en producción lo use.
+//
+// Reemplaza a "Codigo-COMPLETO-para-pegar.gs", que quedó desactualizado.
+// ============================================================
+
+// ========================================================
+// CONFIGURACIÓN DE CARPETAS DE DRIVE  (ÚNICO LUGAR A TOCAR)
+// ========================================================
+// Todo vive dentro de "APP_Braun_2026" en el Drive de
+// santiago.torres@braunrelacionescomerciales.com.ar
+//
+// Se identifican por ID y NO por nombre: el ID no cambia nunca, aunque la
+// carpeta se renombre, se mueva o cambie de dueño. Antes se buscaban por
+// nombre y cualquier renombre hacía que la app creara una carpeta nueva
+// vacía en la raíz de Mi unidad.
+// Para obtener un ID: abrir la carpeta en Drive y copiarlo de la barra de
+// direcciones -> https://drive.google.com/drive/folders/ESTE_ES_EL_ID
+var ID_CARPETA_MADRE            = "16KZ6y9waJ085okNZtAR9xopGWa392AVN"; // APP_Braun_2026
+var ID_SUBCARPETA_FILE          = "19UR340CNxQzAh1HEghgAKR5KldvAcF4S"; // APP_Braun_2026/File
+var ID_SUBCARPETA_IMAGES        = "1I1wrnxYh9Z4IUkiMVTl5Hy2b3t6oF-e-"; // APP_Braun_2026/Images
+
+// Las tres carpetas donde la app GUARDA lo nuevo:
+var ID_CARPETA_CALIDAD_IMAGES   = "1H7tnYi-9J4R-XpwHCTzUHN3Iq5mMJqVV"; // fotos de Control de Calidad
+var ID_CARPETA_CONTRATO_FILES   = "1LqczuwlcwXYINxHYR61UEQ-DsWaEeV9t"; // archivos de Carta de Porte
+var ID_CARPETA_PRODUCCION_FILES = ""; // fotos de muestreo — todavía no existe, se crea sola (ver abajo)
+
+// Nombres de respaldo, por si algún ID queda vacío o falla.
+var CARPETA_FOTOS_CALIDAD     = "Control de Calidad_Images";
+var CARPETA_ARCHIVOS_CONTRATO = "Contrato Comercial_Files_";
+var CARPETA_FOTOS_MUESTREO    = "Produccion_Files_";
+
+// Devuelve la carpeta donde guardar, en este orden de preferencia:
+//   1) por ID (lo normal y lo confiable)
+//   2) si no hay ID o falla, la busca por nombre en todo el Drive
+//   3) si tampoco existe, la CREA dentro de la carpeta padre indicada
+//      (nunca en la raíz de Mi unidad, que era el problema anterior)
+function obtenerCarpetaApp(idCarpeta, nombreRespaldo, idCarpetaPadre) {
+  if (idCarpeta) {
+    try {
+      return DriveApp.getFolderById(idCarpeta);
+    } catch (err) {
+      Logger.log("El ID de la carpeta '" + nombreRespaldo + "' no sirve (" + idCarpeta + "): " + err +
+                 " — se busca por nombre.");
+    }
+  }
+
+  var encontradas = DriveApp.getFoldersByName(nombreRespaldo);
+  if (encontradas.hasNext()) return encontradas.next();
+
+  // No existe: la creamos DENTRO de la carpeta padre, no suelta en Mi unidad.
+  var padre;
+  try {
+    padre = DriveApp.getFolderById(idCarpetaPadre);
+  } catch (err) {
+    Logger.log("No se pudo abrir la carpeta padre " + idCarpetaPadre + ": " + err);
+    padre = DriveApp.getRootFolder();
+  }
+  var nueva = padre.createFolder(nombreRespaldo);
+  Logger.log("Se creó la carpeta '" + nombreRespaldo + "' con ID " + nueva.getId() +
+             " — conviene pegar ese ID en la configuración de arriba.");
+  return nueva;
+}
+
 // ========================================================
 // CONFIGURACIÓN DE HOJAS
 // ========================================================
@@ -441,15 +516,78 @@ function resolverImagenDrive(valor) {
   try {
     var archivos = DriveApp.getFilesByName(nombreArchivo);
     if (archivos.hasNext()) {
-      var url = "https://drive.google.com/thumbnail?id=" + archivos.next().getId() + "&sz=w600";
+      var archivo = archivos.next();
+      // Nos aseguramos de que sea visible: las fotos subidas por AppSheet (o por
+      // versiones viejas de esta app) pueden estar privadas y devolver 403.
+      try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) { }
+      var url = "https://drive.google.com/thumbnail?id=" + archivo.getId() + "&sz=w600";
       cache.put(clave, url, 21600); // 6 horas
       return url;
     }
   } catch (err) {
     Logger.log("No se pudo resolver la imagen " + nombreArchivo + ": " + err);
   }
-  cache.put(clave, "NO_ENCONTRADO", 21600);
+  // Negativo con vida corta (10 min): una foto recién subida puede tardar en
+  // aparecer en la búsqueda de Drive, y cachear el fallo 6 hs la dejaba
+  // invisible el resto del día.
+  cache.put(clave, "NO_ENCONTRADO", 600);
   return "";
+}
+
+// --- MANTENIMIENTO (correr UNA vez a mano desde el editor de Apps Script) ---
+// Comparte todas las fotos ya existentes en "Control de Calidad_Images" y limpia
+// el caché de resoluciones fallidas. Sirve para recuperar las fotos que se
+// subieron mientras faltaba el setSharing.
+function repararFotosCalidad() {
+  var carpeta = obtenerCarpetaApp(ID_CARPETA_CALIDAD_IMAGES, CARPETA_FOTOS_CALIDAD, ID_SUBCARPETA_IMAGES);
+  var cache = CacheService.getScriptCache();
+  var archivos = carpeta.getFiles();
+  var compartidos = 0, fallidos = 0;
+  while (archivos.hasNext()) {
+    var archivo = archivos.next();
+    try {
+      archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      compartidos++;
+    } catch (err) {
+      fallidos++;
+      Logger.log("No se pudo compartir " + archivo.getName() + ": " + err);
+    }
+    try { cache.remove("img_" + archivo.getName()); } catch (cacheErr) { }
+  }
+  Logger.log("Fotos de calidad compartidas: " + compartidos + " (fallidas: " + fallidos + ")");
+}
+
+// --- MANTENIMIENTO (correr UNA vez a mano desde el editor de Apps Script) ---
+// Aplica el formato de porcentaje a TODAS las filas de las columnas de
+// porcentaje, en la hoja de cada grano. Repara de una sola pasada las filas que
+// la app insertó sin formato: el 0,88 que estaba guardado ya significaba 88%, y
+// al ponerle el formato pasa a verse "88,00%" y se relee como 88.
+//
+// ⚠️ Las filas que además fueron EDITADAS después quedaron divididas dos veces
+// (0,643 → 0,00643). Esas no se pueden reparar automáticamente porque no hay
+// forma de saber cuántas veces se dividió cada valor: hay que corregirlas a mano.
+function repararFormatoPorcentajesCalidad() {
+  Object.keys(HOJAS_CALIDAD_POR_GRANO).forEach(function (grano) {
+    var hoja = obtenerHojaCalidad(grano);
+    if (!hoja) { Logger.log("Sin hoja para " + grano); return; }
+
+    var ultimaFila = hoja.getLastRow();
+    if (ultimaFila < 2) { Logger.log(grano + ": hoja sin datos"); return; }
+
+    var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]
+      .map(function (h) { return String(h).trim(); });
+
+    var a1s = [];
+    for (var c = 0; c < encabezados.length; c++) {
+      if (COLUMNAS_PORCENTAJE_CALIDAD.indexOf(encabezados[c]) === -1) continue;
+      var letra = letraColumna(c + 1);
+      a1s.push(letra + "2:" + letra + ultimaFila);
+    }
+
+    if (a1s.length === 0) { Logger.log(grano + ": no se encontraron columnas de porcentaje"); return; }
+    hoja.getRangeList(a1s).setNumberFormat("0.00%");
+    Logger.log(grano + ": formato % aplicado a " + a1s.length + " columnas (filas 2 a " + ultimaFila + ")");
+  });
 }
 
 // --- GUARDADO (_accion: "guardar_calidad") ---
@@ -460,6 +598,13 @@ function guardarCalidad(body) {
   var grano = body["Grano"] || "GARBANZO";
   var hoja = obtenerHojaCalidad(grano);
   if (!hoja) return respuestaJsonCalidad({ ok: false, error: "No existe la hoja de calidad del grano " + grano });
+
+  // IDEMPOTENCIA: la app puede reintentar el mismo POST (cola offline que se
+  // sincroniza dos veces, red inestable, doble toque en Guardar). Sin este
+  // chequeo cada reintento agregaba otra fila con el mismo Id_Calidad.
+  if (body["Id_Calidad"] && buscarFilaPorIdCalidad(hoja, body["Id_Calidad"]) !== -1) {
+    return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
+  }
 
   var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]
     .map(function (h) { return String(h).trim(); });
@@ -473,8 +618,9 @@ function guardarCalidad(body) {
       return guardarFotoCalidadEnDrive(body["Id_Calidad"], h, valor);
     }
 
-    // Porcentajes: la app manda 25.2; si la columna tiene formato %, en la
-    // celda debe escribirse 0.252 para que se vea "25,20%"
+    // Porcentajes: la app manda 25.2 y en la celda va 0.252, que con el formato
+    // de porcentaje se ve "25,20%". El formato se aplica abajo, después de
+    // insertar la fila (appendRow no lo hereda de las filas de arriba).
     if (COLUMNAS_PORCENTAJE_CALIDAD.indexOf(h) !== -1 && typeof valor === "number") {
       return valor / 100;
     }
@@ -483,6 +629,7 @@ function guardarCalidad(body) {
   });
 
   hoja.appendRow(fila);
+  aplicarFormatoPorcentajeCalidad(hoja, hoja.getLastRow(), encabezados, null);
   return respuestaJsonCalidad({ ok: true });
 }
 
@@ -495,6 +642,8 @@ function actualizarCalidad(body) {
 
   var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]
     .map(function (h) { return String(h).trim(); });
+
+  var columnasEscritas = [];
 
   for (var c = 0; c < encabezados.length; c++) {
     var h = encabezados[c];
@@ -512,7 +661,13 @@ function actualizarCalidad(body) {
     }
 
     hoja.getRange(filaIdx, c + 1).setValue(valor);
+    columnasEscritas.push(c);
   }
+
+  // Las filas viejas (o las que quedaron mal formateadas) se normalizan acá:
+  // sin el formato %, "0,88" se relee como 0,88 y la próxima edición volvería
+  // a dividir por 100.
+  aplicarFormatoPorcentajeCalidad(hoja, filaIdx, encabezados, columnasEscritas);
 
   return respuestaJsonCalidad({ ok: true });
 }
@@ -563,7 +718,7 @@ function buscarFilaPorIdCalidad(hoja, idCalidad) {
 // Misma carpeta y convención de nombre de archivo que ya usa AppSheet
 // ("Contrato Comercial_Files_/<id>.CP.<timestamp>.<ext>"), para que los
 // archivos cargados desde la app web y desde AppSheet convivan sin choques.
-var NOMBRE_CARPETA_ARCHIVOS_CONTRATO = "Contrato Comercial_Files_";
+// (El nombre y el ID de esta carpeta están arriba, en la CONFIGURACIÓN DE CARPETAS.)
 
 var EXTENSIONES_POR_MIME = {
   "application/pdf": "pdf",
@@ -581,8 +736,7 @@ var EXTENSIONES_POR_MIME = {
 // la ruta relativa que se guarda en la celda "CP".
 function guardarArchivoContratoEnDrive(idContrato, base64) {
   try {
-    var carpetas = DriveApp.getFoldersByName(NOMBRE_CARPETA_ARCHIVOS_CONTRATO);
-    var carpeta = carpetas.hasNext() ? carpetas.next() : DriveApp.createFolder(NOMBRE_CARPETA_ARCHIVOS_CONTRATO);
+    var carpeta = obtenerCarpetaApp(ID_CARPETA_CONTRATO_FILES, CARPETA_ARCHIVOS_CONTRATO, ID_SUBCARPETA_FILE);
 
     var partes = base64.split(",");
     var tipo = (partes[0].match(/data:([^;]+)/) || [null, "application/octet-stream"])[1];
@@ -594,7 +748,7 @@ function guardarArchivoContratoEnDrive(idContrato, base64) {
     // Sin esto, el link que le damos al front no se puede abrir/descargar
     // (el archivo quedaría privado, solo visible para el dueño de la carpeta).
     archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return NOMBRE_CARPETA_ARCHIVOS_CONTRATO + "/" + nombre;
+    return CARPETA_ARCHIVOS_CONTRATO + "/" + nombre;
   } catch (err) {
     Logger.log("No se pudo guardar el archivo de la Carta de Porte: " + err);
     return "";
@@ -706,7 +860,7 @@ function convertirArchivosCPAFormatoEstable() {
 // ========================================================
 var NOMBRE_HOJA_MUESTREO = "Muestreo";
 var NOMBRE_HOJA_MUESTREO_PUNTOS = "Muestreo_Puntos";
-var NOMBRE_CARPETA_FOTOS_MUESTREO = "Produccion_Files_";
+// (El nombre y el ID de esta carpeta están arriba, en la CONFIGURACIÓN DE CARPETAS.)
 
 var COLS_MUESTREO = ["Id_Muestreo", "Fecha", "Establecimiento", "Lote", "Campania",
   "Cultivo", "Variedad", "Responsable", "Matricula", "Observaciones",
@@ -833,8 +987,9 @@ function leerMuestreos() {
 // Guarda una foto base64 del muestreo en Drive y devuelve la ruta relativa.
 function guardarFotoMuestreoEnDrive(idPunto, base64) {
   try {
-    var carpetas = DriveApp.getFoldersByName(NOMBRE_CARPETA_FOTOS_MUESTREO);
-    var carpeta = carpetas.hasNext() ? carpetas.next() : DriveApp.createFolder(NOMBRE_CARPETA_FOTOS_MUESTREO);
+    // Si ID_CARPETA_PRODUCCION_FILES está vacío, la crea dentro de
+    // APP_Braun_2026/File y deja el ID nuevo en el log para configurarlo.
+    var carpeta = obtenerCarpetaApp(ID_CARPETA_PRODUCCION_FILES, CARPETA_FOTOS_MUESTREO, ID_SUBCARPETA_FILE);
 
     var partes = base64.split(",");
     var tipo = (partes[0].match(/data:([^;]+)/) || [null, "image/jpeg"])[1];
@@ -844,7 +999,7 @@ function guardarFotoMuestreoEnDrive(idPunto, base64) {
     var blob = Utilities.newBlob(Utilities.base64Decode(partes[1]), tipo, nombre);
     var archivo = carpeta.createFile(blob);
     archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return NOMBRE_CARPETA_FOTOS_MUESTREO + "/" + nombre;
+    return CARPETA_FOTOS_MUESTREO + "/" + nombre;
   } catch (err) {
     Logger.log("No se pudo guardar la foto del muestreo: " + err);
     return "";
@@ -855,9 +1010,7 @@ function guardarFotoMuestreoEnDrive(idPunto, base64) {
 // AppSheet) y devuelve la ruta relativa para la celda.
 function guardarFotoCalidadEnDrive(idCalidad, columna, base64) {
   try {
-    var carpeta;
-    var carpetas = DriveApp.getFoldersByName("Control de Calidad_Images");
-    carpeta = carpetas.hasNext() ? carpetas.next() : DriveApp.createFolder("Control de Calidad_Images");
+    var carpeta = obtenerCarpetaApp(ID_CARPETA_CALIDAD_IMAGES, CARPETA_FOTOS_CALIDAD, ID_SUBCARPETA_IMAGES);
 
     var partes = base64.split(",");
     var tipo = (partes[0].match(/data:(image\/\w+)/) || [null, "image/jpeg"])[1];
@@ -865,11 +1018,56 @@ function guardarFotoCalidadEnDrive(idCalidad, columna, base64) {
     var nombre = idCalidad + "." + columna + "." + new Date().getTime() + "." + extension;
 
     var blob = Utilities.newBlob(Utilities.base64Decode(partes[1]), tipo, nombre);
-    carpeta.createFile(blob);
+    var archivo = carpeta.createFile(blob);
+    // Sin este permiso el archivo queda privado: la ruta se graba en la celda,
+    // pero la app recibe 403 al pedir la imagen (lh3.googleusercontent.com) y
+    // el operario ve "Sin foto" como si nunca se hubiera guardado.
+    try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) {
+      Logger.log("No se pudo compartir la foto " + nombre + ": " + permErr);
+    }
+    // La foto es nueva: si esta ruta quedó cacheada como "NO_ENCONTRADO" en un
+    // intento anterior, la limpiamos para que se resuelva en la próxima lectura.
+    try { CacheService.getScriptCache().remove("img_" + nombre); } catch (cacheErr) { }
     return "Control de Calidad_Images/" + nombre;
   } catch (err) {
+    // NO devolvemos "" a propósito. Antes, si Drive fallaba (típico: el proyecto
+    // autorizado sin el scope .../auth/drive, que deja leer pero no crear), la
+    // fila se guardaba con las celdas de imagen VACÍAS y la app borraba el
+    // registro de su cola: las fotos se perdían sin que nadie se enterara.
+    // Propagando el error, doPost responde {status:"error"}, la app conserva el
+    // registro (con las fotos en base64) y lo reintenta cuando se arregle.
     Logger.log("No se pudo guardar la foto en Drive: " + err);
-    return "";
+    throw new Error("No se pudo guardar la foto '" + columna + "' en Drive: " + err +
+      " — revisá que el proyecto esté autorizado con el scope https://www.googleapis.com/auth/drive");
+  }
+}
+
+// Convierte un índice de columna (1 = A) en su letra de notación A1.
+function letraColumna(indice) {
+  var letra = "";
+  while (indice > 0) {
+    var resto = (indice - 1) % 26;
+    letra = String.fromCharCode(65 + resto) + letra;
+    indice = Math.floor((indice - 1) / 26);
+  }
+  return letra;
+}
+
+// Fuerza el formato de porcentaje en las celdas que lo necesitan.
+// appendRow() NO hereda el formato de las filas de arriba: sin esto, la app
+// mandaba 88, el backend escribía 0.88 y la celda lo mostraba como "0,88" en
+// lugar de "88,00%". Al releer la hoja eso volvía como 0,88 y cada edición
+// dividía otra vez por 100 (88 → 0,88 → 0,0088).
+function aplicarFormatoPorcentajeCalidad(hoja, fila, encabezados, columnasEscritas) {
+  var a1s = [];
+  for (var c = 0; c < encabezados.length; c++) {
+    if (COLUMNAS_PORCENTAJE_CALIDAD.indexOf(encabezados[c]) === -1) continue;
+    if (columnasEscritas && columnasEscritas.indexOf(c) === -1) continue;
+    a1s.push(letraColumna(c + 1) + fila);
+  }
+  if (a1s.length > 0) {
+    try { hoja.getRangeList(a1s).setNumberFormat("0.00%"); }
+    catch (err) { Logger.log("No se pudo aplicar el formato % en la fila " + fila + ": " + err); }
   }
 }
 
@@ -885,6 +1083,8 @@ function guardarFotoCalidadEnDrive(idCalidad, columna, base64) {
 var HOJA_TICKETS = "Tickets";
 // URL donde está publicada la app (para el botón "Abrir Ticketera" del correo).
 // CAMBIAR cuando la app se publique en su dominio definitivo.
+// ⚠️ PENDIENTE: 127.0.0.1 es "esta computadora", así que el botón del correo
+// no le funciona a ningún destinatario. Reemplazar por la URL pública real.
 var URL_APP_TICKETERA = "http://127.0.0.1:5500/AppBraun-main/index.html";
 
 var COLUMNAS_TICKETS = [
