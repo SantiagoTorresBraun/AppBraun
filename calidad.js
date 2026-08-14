@@ -870,6 +870,12 @@ function eliminarCalidad(base64Data) {
 const LOGO_SENASA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMoAAAA0CAYAAADL/afBAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAADhVJREFUeNrsXU2OnEgWDpdqb+YExUgj9dL0CUxvelvcwPgETqs1a1PrVqvwCYxPYLydjakTDLUcqSVTJ2h8Ag+R/b30y8gXEASQzizzJGQXCfEiXrz/eBE8+fr1q7LBv/7zv6D7J+muuLtCNQ3a7kr//PWnVs0Av//xR4S+6X8Dh1ea7qr+/dtvhSeuGFfg+Fqt8QFn64BDt5vq97rnK9wLcc91jKW+uvebkeNLR85vi3HVHrT04SlNj8JjXMQfY6Ai+nN4IglKJyB6AFl3vVDzwn0nKNFEAdGDz7vryrcP3bWRiGHBp3G9mtDlL5rZO3xlDw5N78/s1nv8+8ITX9bhyx3Hp5n+qefY7jC2xlFA8ok8daPbcFQ8en6fe+J5wLh2PHIhCEkKbTi3kGh4NlFIdN8+TBAS6sMntDWEr54oJApM+KFrq8+SZcbfLybQX+O7BaO40PPphLFpRqyHaAkhqWbgqTe6HbQ35AE8n4DnCjySi4ICIXk3kXiLAAafz9jkO7Rpw5dNFWyT+WENJQgXINlzjGHIhVIzKIJeWmq3aUZaPnPgg3YmXK9ozi6YkCQQEnWCQkIaaW4BLnpcoTcLDKVA28eCTR8+uIN3C9NSC+v1zOPqUzoKruDbGecsuGRBe6FOFxKLkNxDuwz5yBGCYlOrPdOaUAhK0x4feTCoZEH4G0H7xiNo/QXjq/piqg5fDHwvBHxZz3g0U8WwBq5JCsJ1JdAyFZIlqWVcpQMdKPCX5j9FG7ZxbeA6uSomTYONMK4tDS9J85yiuzXgmtx3xHBNDGgmyy0BXoKYzCSaCa9dA2QIUtbhU4KwuAqKVgKxS+AKIdK+e2PBN/T+mOxVhbHZaFkI/r4JvckNA0oogk/G/WvHeWhG8kghKJz4ggnKKYM02T7xSjEBn4/FzSfEI5mLkDjgu1poTgqLBTAt3UFGaYSQcEXwcCRek2j47KJzu+ITtyY2aDzeqR3beSpM1ugA0ecdI37wwXd3DOL7rEdNmDdp7h4WGpdoXS/U+AWZUxGK2JMId4KvvMIyICmKaCi966jpjxpTX4wI4k5NUDY+GSQdvHb//NJdL7v/B1O0/gpe2pkSDGPb0u7XP3Ss2F3/7P7OjjmWS4s7shTce75XKjmD9LkTljsEYi7CpstDatdVecPfzh4rQ3uWerjCnRD0v8IiZaHc1jwqzF07JjZFjBTPIih//vpT2cUpL1VPCnFGM+yFQzN3N+iPlkzHczViFRaClY6tG1LLrKt8bwGJoYSWjFF1oui/FsvyagTtv2hl5ZJ5RLpbC+FsC8bb9HAnLIU67XUUBSFrZpjUXdmFT8D8iIRE03PxBWYouZsZFA2V5sRQdG2PdSzmFv6LM/J3W5jRObIdVH/1PRIZ7QkISayOWIWBeGKulfJr1V9R8WEJC0kr8+mxXK8pZfbQThGCwVcz9KlQx8/65er7w9HjLayU02r81LWda205BI9gsXFdHrnGq5rKmLAsVJ4QObanNY1UuWoru5DgZgZFUXrERktYEymme4v5GaPIPo2cO91+iD64ls2kFsHKFUvtw5pIc/wRzzVTxnV5ZI36bMIE08amLbOx8oTS8f0NnnUpu7C5D48BYuHee63xPeZkjHCGpJCo5MbV+iHu+GDcvzLq9ELh3bvu92SOcR07RvkyQQv+pYM59XdKeLSbCEtUWKzNjwShxQVdyoJV0NDvUIvm40WUltg0HFAAs43r2IJSeb63GfjbleDFnFbuEQlKs5CQmBuorvrK4x3iSROGvKHmXAXFNx0bCLFF5DlxLlbuwWLVHivEM9FyaN4o5vCByBL39YGP2xV8b0GZu65qM9M7roWS6SMRitoSBwQjmcnXrbkeW3qE568HxiIJTeqhUMWs5OURJyifkBquhSD8BSbMJaMRQEieOwpFH77izBcqtftrptZ1VqlCJrGyZebAsNr6ZMotxWsrj6qw78PFFY97lGJteCu3xu9PgStTPafGYFxRD48cTVD06SvZFCGDRjcXkq7V9G2mxVh8rtkebkm7SToJi6SFvOv/vRCb6b/fgXHmwtV2bb21COYbNW21/o6vzmvh7nDp02ukXZ63U8d1DNfrXk0sTKMdgwv07aVUIDkzvqewRqfkuh2zL5maf+/IvSX+2CjPzOr3FhRdgBjPcegdiuE+zti3930LjQvg6/OV5yxrcdk6rF2Q1wvMdyNZFQjmXAys20mkWi9ajF5AWB4u1DJl9lqDvOwEJJ7rZEgQIsEEf5lI6NcurtBM+PpcPNtvdzPi+dijCH6ZoO11u+9dxgirHanpuy/1+1FfdQOUX6z8t3RoHGZdWrY9KXLGWi9NkFqX7i9pphB8JWpc+q9GQFd64ks9XcjWJQEA1yyBVs6nlLqwtmo1cGoMq3iIlVtJSYWYq8b7MYSgdDwxknCFI+hXKf+jYhPHcdXAURlzvqXfk76zh1dYYYXjBfMrrLAKygorrIKywgorrIKywgqroKywwoxweS4dZem6Rv2dxmtxX98L2aN6U1dh3Ke9KDpNGPOFRtrhaO50ZF/0qljKMNb/sr8PvpIl9DniqWEBz8EzBv6GnsezoYC/MXEYNNp7D/c2/EQT6RlhPBn7s+S1U8JxTgcHi7M5Kc26Kxe68GeM/2dsng/SyMC7q2FjvLTjjaHz3S7OREjosw9E3JJVu6b4rTKe4feJmTWhMqPdjD1P9/XkbEDET2wiYlx02keFZxJ8dMgEPSHmIRap8YzGkxvj5fjfMfyhBX9s4E/VfgnO7j0mhLfG1oG9ZyzwhtE4M4QjMeahEYQsxm8b7DjlQpEbZT5DtEsF3Fum520DcrW/5hbionfqoSrjc7EoodpfLCz4jzYtyDSvJtJnJmR0MIG+XwpCGdAWUjCgra4oYVpKT1As9OUjJs92Mn1s9ElBs0dot1Jy3ZlmlJQt/OUG/sjSH3r3hikTZ2DtlaDNTpsPHCy4rc4FvcznEsbMhUk7NbxBq2VzXaGtnFmTAmPNDc+D3mmV/FWD87IoYIaQmEGwODFd0n0IwwMTsoRNUCFM6B5j2PaTGya+sXS/Bv5M6DdpwsIQRl4VW1v2fQeG+9IKwpBb9pkkOAMg9jwHWMIZ2OaB0X3r4gr7UYiJQ+O3GgKZjeCVxnDFSQj7rEY1ZE3P6VwvMttbN8cgaMzdIuN+ygUAzEUHRUc+X7b16HtGGl5gkAJ9mMq0EsMUpoBCOEuLSzIFgp55oH3vKZ7LiflBE35caiLQLvHc0UpxV4Mxe3/e5GyCeUbsEuZ054fbTkih+zDHETP5pMWl+qtGCKojqdJYMzZzp8KB7qdq/3gdzTDX0MTKZuHo093SUaKaEZhVC4Tx5+yjpy3rR4j7geTKjhQO7spkDsKbQ1DIbUuhJKg/gTrcZUi0ax2Fo2HvBYwGUY9bWJ29oLCzZHOY45gPzNDUrWAlMlwxYwx9Hu7P0mRqJobGa7i/K5jrgp8v1uejo12N95ZN4u4rXpjg3efagL8ml8XiytAXougTbrZYpmZumO5nyGhXMescclpaMnmxkSzZc70MwWmMBAXRM8LzUn8K0/Li4MNC2Td6cdwb1q8U7bcsjqPMKY2Vdr9mZ+96gfHpe3yUsi0Yw3CTH5laEhO+y5ShvRtDoPjzERETAWjGhKNi1oqEr7V8Jm8vcIVQvOapTMFVIjezxlgyFiM1DH+BCSa8EbNuhdEuMXUoZN0y3G9wWd0nJADot9KI3Urj3VBIftDelEh9q1bOhAyVRLtM7e+hKSy4c1jSQB1+tSxHH/hYKcnQa1HW6uEVVnCAdWV+hRVWQVlhhXngXIL5bUDLFohqMyZgmbAI/n3CgjjagceDxkzJZRYVYgRaiKrhS9fwf2sjQC2N0gvznY200IgAWo8jMO5l6tsB1hkr0+DtbktXdN/hi294osLozwbxSyqNURo7gtzCoJfG81d374nRH8Xxdve1L/+zsQMyRhyRs/43GD99YrAS5idBTEHzl+K3r9QPCtIRJ2Y/ukWhwHlXxyRkxVIQlmcy9gJJj9Me9UTGEMq9PDzl6NXhOgR/p1L2LdYp+pQawWaJdwu1v2BotpuzsVECQPclFco+fD4wemXQa2MZJ10knA9Slg4LpzHaKfDOxpgfk5YbvLMdW89xrLGabz3orLNe2ywFtONBbRQEQ2skSg3HhjDR4WbphD6Uaj8PTyu+Qc/Jh5Wyr/gm6nDff0BlLLRy7tC13VhhuSrQgxQIVQaMZaT3RkZK087lcAg9VyW0vCvEaH/0/LDqhnrJY2/PKUbRk3arWFVsD1O3zPSnzMWKZizZoM9IFDYmhIBHwuTG0MhUmhOabiSrWaLfIqx5kCLYcG1t6S/v41gmbMgKs3opDtSfii3oKS7kLowLRue04PNDC6YV5r20WOZCfTu08McWFDDdnRr/xaqEaZtmookOGKOTELTKUhpBcYhlchu0U6nDso0CLkdjujrA1Rgl82GPpm4hbKHH58Zz4JOs+J7rZRkjxSSu81MbzL5ha0qFQN+AxXMB3LPghxYUbi0smp6qbQPUguXsTNkQTFP7ah2D6VO1v2DVWLTnQWkEm1zOyCRoLcUXtlo0c2+MIGgRi32oj/FAvGSjNblx9ZAVl2ISJdSaCbSgmJIUQ9oXowrCWBtjXCRWuVSPAFDiUMNMh2C+jLSasUGJF1TmyN4oFhAfuBfMmhBDRzzrBvchxURFrG6pEawNVRZkPBnBvk3JT5bPBpIbsdqvnWrRdo2s0Ya5oJSFo6RIZVgHW4W0zX2KjDYKsx4OK+TJgDUpLLTYE1hdDydsG9A0j40NaqVa4MNI/xdgACfC4/WlljlCAAAAAElFTkSuQmCC";
 
 // Paleta del reporte (colores fijos por identidad, nunca por posición)
+// Nota legal del pie del reporte. Está acá porque se usa dos veces: una para
+// medir cuánto espacio ocupa (y así reservarlo antes de dibujar la tabla) y
+// otra para escribirla. Si estuviera duplicada, el cálculo y el texto real
+// podrían quedar desfasados.
+const TEXTO_NOTA_LEGAL_CALIDAD = "Este informe corresponde a un control de proceso o de cosecha en campo. Los resultados son orientativos y reflejan solo la muestra analizada; no representan la totalidad del lote ni deben considerarse como un certificado final de calidad.";
+
 const PDF_ROJO_BRAUN = [163, 30, 30];      // header y acentos
 const PDF_MARRON_TABLA = [66, 52, 46];     // barras oscuras de las tablas
 const PDF_NARANJA_FOTO = [211, 84, 42];    // banners de la página de fotos
@@ -955,6 +961,34 @@ function prepararImagenPDF(dataUrl, ladoMaximo) {
         img.onerror = () => resolve(null);
         img.src = dataUrl;
     });
+}
+
+// Dibuja una imagen respetando su proporción real dentro de una caja.
+// Sin esto hay que hardcodear ancho y alto, y si no coinciden con la relación
+// real del archivo el logo sale estirado o aplastado. Con getImageProperties()
+// se lee la medida verdadera y se ajusta sola.
+//
+// alineacion: 'izquierda' | 'derecha' | 'centro' (horizontal dentro de la caja).
+// Devuelve la altura realmente usada, para poder seguir dibujando debajo.
+function pdfImagenProporcional(doc, imagen, x, y, anchoCaja, altoCaja, alineacion) {
+    try {
+        const props = doc.getImageProperties(imagen);
+        const ratio = props.width / props.height;
+
+        // "contain": entra completa, sin recortes ni deformación
+        let w = anchoCaja, h = w / ratio;
+        if (h > altoCaja) { h = altoCaja; w = h * ratio; }
+
+        let ox = x;
+        if (alineacion === 'derecha') ox = x + (anchoCaja - w);
+        else if (alineacion === 'centro') ox = x + (anchoCaja - w) / 2;
+
+        const oy = y + (altoCaja - h) / 2; // siempre centrada en vertical
+        doc.addImage(imagen, 'PNG', ox, oy, w, h);
+        return h;
+    } catch (e) {
+        return 0;
+    }
 }
 
 function pdfLuminanciaHex(hex) {
@@ -1075,7 +1109,9 @@ async function generarPDFCalidad(base64Data) {
         doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
         doc.text("Reporte de Calidad", margen + 7, 21.5);
-        try { doc.addImage(LOGO_BRAUN_BLANCO, 'PNG', margen + anchoUtil - 42, 13, 34, 12.5); } catch (e) { }
+        // Logo pegado al lado derecho de la barra, con su proporción real y
+        // centrado verticalmente dentro de los 18 mm de alto del header.
+        pdfImagenProporcional(doc, LOGO_BRAUN_BLANCO, margen + anchoUtil - 46, 10, 38, 13, 'derecha');
 
         // Cliente / N° Proceso
         let y = 42;
@@ -1120,9 +1156,9 @@ async function generarPDFCalidad(base64Data) {
             doc.text(String(val), xIzq + 35, yIzq, { maxWidth: wIzq - 36 });
             yIzq += 9;
         });
-        // Sello SENASA
-        try { doc.addImage(LOGO_SENASA, 'PNG', xIzq + 2, yIzq + 2, 44, 11.3); } catch (e) { }
-        yIzq += 18;
+        // Sello SENASA (también con su proporción real)
+        const altoSenasa = pdfImagenProporcional(doc, LOGO_SENASA, xIzq + 2, yIzq + 2, 44, 13, 'izquierda');
+        yIzq += altoSenasa + 6;
 
         // ---- Tabla derecha: "Análisis" ----
         const xDer = 98, wDer = 98;
@@ -1138,7 +1174,28 @@ async function generarPDFCalidad(base64Data) {
             ], total: null }
         ];
         const totalFilas = grupos.reduce((s, g) => s + g.filas.length + (g.total ? 1 : 0), 0);
-        const altoFila = Math.max(5.4, Math.min(7, (268 - (yTablas + 7)) / totalFilas));
+
+        // ---- Reserva de espacio para el pie (observaciones + nota legal) ----
+        // Se mide ANTES de dibujar la tabla. Sin esto, el alto de fila se elegía
+        // mirando solo la tabla: con granos de muchos defectos (Poroto Mung tiene
+        // 28 filas contra 24 de Garbanzo) la tabla llegaba casi al pie y las
+        // observaciones se iban solas a una hoja nueva, que quedaba casi vacía.
+        // Ahora las filas se comprimen apenas lo necesario para que todo entre.
+        const LIMITE_INFERIOR = 285;   // A4 = 297 mm, dejamos margen al pie
+        const SEP_TABLA_OBS = 10;
+
+        // splitTextToSize corta según el tamaño de fuente ACTIVO, así que hay que
+        // fijar el mismo que se va a usar al escribir; si no, la cuenta de líneas
+        // no coincide con lo que después se dibuja.
+        doc.setFontSize(10);
+        const textoObs = doc.splitTextToSize(String(item["observaciones"] || '-'), anchoUtil - 32);
+        doc.setFontSize(8);
+        const textoNota = doc.splitTextToSize(TEXTO_NOTA_LEGAL_CALIDAD, anchoUtil - 24);
+        const altoBloquePie = Math.max(6, textoObs.length * 4.6) + 6      // observaciones
+                            + 4.5 + textoNota.length * 3.6 + 4;          // nota legal
+
+        const yTopeTabla = LIMITE_INFERIOR - altoBloquePie - SEP_TABLA_OBS;
+        const altoFila = Math.max(4.6, Math.min(7, (yTopeTabla - (yTablas + 7)) / totalFilas));
 
         doc.setFillColor(PDF_MARRON_TABLA[0], PDF_MARRON_TABLA[1], PDF_MARRON_TABLA[2]);
         doc.rect(xDer, yTablas, wDer, 7, 'F');
@@ -1180,28 +1237,27 @@ async function generarPDFCalidad(base64Data) {
         });
 
         // ---- Observaciones + nota legal ----
-        let yObs = Math.max(yIzq, yFila) + 10;
-        if (yObs > 262) { doc.addPage(); yObs = 20; }
+        // Solo se pasa a otra hoja si el bloque REALMENTE no entra. Antes se
+        // comparaba contra un número fijo (262) sin mirar cuánto ocupaba el
+        // contenido, y saltaba de página aunque hubiera lugar de sobra.
+        let yObs = Math.max(yIzq, yFila) + SEP_TABLA_OBS;
+        if (yObs + altoBloquePie > LIMITE_INFERIOR) { doc.addPage(); yObs = 20; }
+
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
         doc.setTextColor(PDF_ROJO_BRAUN[0], PDF_ROJO_BRAUN[1], PDF_ROJO_BRAUN[2]);
         doc.text("Observaciones:", margen, yObs);
         doc.setFont(undefined, 'normal');
         doc.setTextColor(45, 45, 45);
-        const obs = doc.splitTextToSize(String(item["observaciones"] || '-'), anchoUtil - 32);
-        doc.text(obs, margen + 32, yObs);
-        yObs += Math.max(6, obs.length * 4.6) + 6;
+        doc.text(textoObs, margen + 32, yObs);
+        yObs += Math.max(6, textoObs.length * 4.6) + 6;
 
         doc.setFontSize(8);
         doc.setFont(undefined, 'bolditalic');
         doc.setTextColor(80, 80, 80);
         doc.text("Nota:", margen + 12, yObs);
         doc.setFont(undefined, 'italic');
-        const nota = doc.splitTextToSize(
-            "Este informe corresponde a un control de proceso o de cosecha en campo. Los resultados son orientativos y reflejan solo la muestra analizada; no representan la totalidad del lote ni deben considerarse como un certificado final de calidad.",
-            anchoUtil - 24
-        );
-        doc.text(nota, margen + 12, yObs + 4.5);
+        doc.text(textoNota, margen + 12, yObs + 4.5);
 
         // ================= PÁGINA 2: FOTOS =================
         const etiquetasFotos = ["MUESTRA GENERAL 1:", "FOTO EN MANO 2:", "CALIBRES 3:", "DAÑOS 4:"];
