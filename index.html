@@ -699,16 +699,20 @@
                     <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
  
                     <div class="section-dynamic-header">
-                        <h3>Cargar de Mercadería</h3>
+                        <h3>Cargar de Mercadería <span class="contador-items" id="contador-productos">1</span></h3>
                         <div class="section-actions-group">
                             <button type="button" class="btn-gestionar-opciones" onclick="abrirGestorOpciones()" title="Gestionar opciones de Productos, Calibres, Tipos y Envases">
                                 <i class="fas fa-cog"></i> Opciones
                             </button>
-                            <button type="button" class="btn-secondary-add" onclick="agregarFilaProducto()"><i class="fas fa-plus"></i> Añadir Producto</button>
                         </div>
                     </div>
-                    <div id="wrapper-productos-dinamicos"></div>
- 
+                    <div id="wrapper-productos-dinamicos" data-contador="contador-productos"></div>
+                    <!-- El botón va ABAJO de la lista: es donde queda el pulgar
+                         al terminar de completar el último ítem. -->
+                    <button type="button" class="btn-agregar-item" onclick="agregarFilaProducto({ enfocar: true })">
+                        <i class="fas fa-plus"></i> Añadir otro producto
+                    </button>
+
                     <div class="form-group"><label for="chofer">Nombre y Apellido del chofer</label><input type="text" id="chofer" required></div>
                     <div class="form-group-row">
                         <div class="form-group"><label for="patente-chasis">Patente Chasis</label><input type="text" id="patente-chasis" required></div>
@@ -722,16 +726,18 @@
                     </div>
  
                     <div class="section-dynamic-header">
-                        <h3>Contrato Comercial</h3>
+                        <h3>Contrato Comercial <span class="contador-items" id="contador-contratos">1</span></h3>
                         <div class="section-actions-group">
                             <button type="button" class="btn-gestionar-opciones" onclick="abrirGestorOpcionesEnTab('destino')" title="Gestionar opciones de Destino de Mercadería">
                                 <i class="fas fa-cog"></i> Opciones
                             </button>
-                            <button type="button" class="btn-secondary-add" onclick="agregarFilaContrato()"><i class="fas fa-plus"></i> Añadir Contrato</button>
                         </div>
                     </div>
-                    <div id="wrapper-contratos-dinamicos"></div>
- 
+                    <div id="wrapper-contratos-dinamicos" data-contador="contador-contratos"></div>
+                    <button type="button" class="btn-agregar-item" onclick="agregarFilaContrato({ enfocar: true })">
+                        <i class="fas fa-plus"></i> Añadir otro contrato
+                    </button>
+
                     <h3>Lista de Verificación</h3>
                     <div class="checklist-item"><p>¿Aplica etiqueta?</p>
                         <div class="si-no-toggle">

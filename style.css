@@ -3198,3 +3198,172 @@ h3 {
     #toast-correo-cont { right: 10px; left: 10px; bottom: 74px; max-width: none; }
     .correo-content { width: 96vw; max-height: 92vh; }
 }
+
+/* ============================================================================= */
+/* TARJETAS DINÁMICAS: ACORDEÓN, DUPLICAR Y AGREGAR (carga desde el celular)    */
+/* ============================================================================= */
+
+/* Contador de ítems al lado del título de la sección */
+.contador-items {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    margin-left: 8px;
+    border-radius: 12px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+/* Botón de agregar al final de la lista: ancho completo y bien alto para el pulgar */
+.btn-agregar-item {
+    width: 100%;
+    margin: 0 0 22px;
+    padding: 15px;
+    background: #fff;
+    color: var(--color-primary);
+    border: 2px dashed var(--color-primary);
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn-agregar-item:hover { background: #fdf3f3; }
+.btn-agregar-item:active { transform: scale(0.99); background: #fbe9e9; }
+
+/* --- Encabezado de cada tarjeta: toca para abrir o cerrar --- */
+.dynamic-card-header {
+    cursor: pointer;
+    user-select: none;
+    gap: 10px;
+    align-items: flex-start;
+}
+.card-header-texto {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.card-titulo { white-space: nowrap; }
+
+/* El resumen solo se ve cuando la tarjeta está cerrada */
+.card-resumen {
+    display: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text-dark);
+    text-transform: none;
+    letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dynamic-item-card.colapsada .card-resumen { display: block; }
+.dynamic-item-card.colapsada .dynamic-card-body { display: none; }
+.dynamic-item-card.colapsada {
+    padding-bottom: 6px;
+    background: #fff;
+}
+.dynamic-item-card.colapsada .dynamic-card-header {
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+/* Tarjeta con un campo obligatorio sin completar */
+.dynamic-item-card.con-error {
+    border-left-color: var(--color-danger);
+    box-shadow: 0 0 0 2px rgba(198, 40, 40, 0.12);
+}
+
+.card-header-acciones {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.btn-card-accion {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.95rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-card-accion:hover { background: #eeeeee; color: var(--color-primary); }
+.btn-card-accion.borrar:hover { background: #fdecea; color: var(--color-danger); }
+/* Con un solo ítem no se puede borrar: no tendría sentido dejar la lista vacía */
+.dynamic-item-card.unico .btn-card-accion.borrar { display: none; }
+
+.card-chevron {
+    color: #bdbdbd;
+    font-size: 0.85rem;
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+}
+.dynamic-item-card.colapsada .card-chevron { transform: rotate(180deg); }
+
+@media (max-width: 600px) {
+    /* En el celular las acciones tienen que ser cómodas de tocar */
+    .btn-card-accion { width: 42px; height: 42px; font-size: 1.05rem; }
+    .card-resumen { font-size: 0.88rem; }
+    .btn-agregar-item { padding: 17px; font-size: 1.02rem; }
+    .dynamic-item-card { padding: 13px 12px; }
+}
+
+/* El encabezado de sección ahora lleva el contador de ítems: en pantallas
+   angostas tiene que poder envolver en vez de desbordarse a la derecha. */
+.section-dynamic-header {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.section-dynamic-header h3 {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Los campos en fila eran flex SIN min-width:0, asi que no podian achicarse por
+   debajo de su ancho natural y se desbordaban de la pantalla del celular (la
+   fila de Cant. Envases / Kg Envase / Total Kg se salia a la derecha).
+   Con min-width:0 se encogen, y en pantallas angostas la fila envuelve. */
+.form-group-row .form-group {
+    min-width: 0;
+}
+@media (max-width: 600px) {
+    .form-group-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .form-group-row .form-group {
+        flex: 1 1 130px;
+    }
+}
+
+@media (max-width: 600px) {
+    /* En el celular una sola línea corta el resumen justo en el lote, que es lo
+       que distingue un ítem de otro: se permiten dos líneas. */
+    .dynamic-item-card.colapsada .card-resumen {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        white-space: normal;
+        overflow: hidden;
+        line-height: 1.3;
+    }
+}

@@ -395,18 +395,162 @@ function abrirModuloCarga(tipo) {
     }, 150);
 }
 
-// --- 3. FUNCIONES DINÁMICAS (AGREGAR PRODUCTOS Y CONTRATOS) ---
-function agregarFilaProducto() {
+// =========================================================================
+// --- 3. TARJETAS DINÁMICAS (PRODUCTOS Y CONTRATOS) -----------------------
+// =========================================================================
+// Esto se carga desde el celular, parado al lado del camión. Antes, para sumar
+// un producto había que SUBIR hasta el botón del encabezado, tocarlo y volver a
+// BAJAR pasando por toda la tarjeta recién completada. Con 3 o 4 productos eran
+// varias pantallas de scroll de ida y vuelta por cada ítem.
+//
+// Ahora:
+//   - El botón de agregar está ABAJO de la lista, que es donde queda el pulgar
+//     al terminar de completar el último ítem.
+//   - Al agregar, las tarjetas anteriores se colapsan a una línea de resumen
+//     ("Poroto Mung · 3.5mm · Lote 4437 · 175 kg") y la nueva queda a la vista
+//     con el foco puesto en su primer campo. La lista no crece a lo largo.
+//   - Cada ítem se puede DUPLICAR: en la práctica se carga el mismo producto
+//     varias veces cambiando solo el lote, así que copia todo y deja el lote y
+//     la posición vacíos.
+//   - Tocando el encabezado de una tarjeta se abre o se cierra, para revisar
+//     lo cargado sin tener que recorrer todos los campos.
+
+// El encabezado de la app es sticky: hay que descontarlo al hacer scroll.
+const ALTO_HEADER_STICKY = 80;
+
+function scrollATarjeta(card) {
+    const y = card.getBoundingClientRect().top + window.scrollY - ALTO_HEADER_STICKY;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+}
+
+function valorDeCampo(card, campo) {
+    const el = card.querySelector(`[data-field="${campo}"]`);
+    return el ? String(el.value || '').trim() : '';
+}
+
+// Línea de resumen que se muestra cuando la tarjeta está colapsada.
+function resumenDeTarjeta(card) {
+    const esProducto = !!card.querySelector('.prod-item');
+    const lote = valorDeCampo(card, 'lote');
+    const totalKg = valorDeCampo(card, 'total_kg');
+    const cartaPorte = valorDeCampo(card, 'carta_porte');
+
+    const partes = esProducto
+        ? [valorDeCampo(card, 'producto'), valorDeCampo(card, 'calibre'),
+           lote ? 'Lote ' + lote : '', totalKg ? totalKg + ' kg' : '']
+        : [valorDeCampo(card, 'contrato_com'), cartaPorte ? 'CP ' + cartaPorte : '',
+           valorDeCampo(card, 'destino')];
+
+    return partes.filter(Boolean).join(' · ') || 'Sin completar';
+}
+
+function colapsarTarjeta(card) {
+    if (!card) return;
+    const resumen = card.querySelector('.card-resumen');
+    if (resumen) resumen.textContent = resumenDeTarjeta(card);
+    card.classList.add('colapsada');
+}
+
+function expandirTarjeta(card) {
+    if (card) card.classList.remove('colapsada');
+}
+
+function alternarTarjeta(header) {
+    const card = header.closest('.dynamic-item-card');
+    if (card.classList.contains('colapsada')) expandirTarjeta(card);
+    else colapsarTarjeta(card);
+}
+
+// Renumera los títulos (si se borra el #2, el #3 pasa a ser #2), actualiza el
+// contador del encabezado y esconde el botón de borrar cuando queda uno solo.
+function renumerarTarjetas(wrapper, etiqueta) {
+    const cards = wrapper.querySelectorAll('.dynamic-item-card');
+    cards.forEach((card, i) => {
+        const titulo = card.querySelector('.card-titulo');
+        if (titulo) titulo.textContent = `${etiqueta} #${i + 1}`;
+        card.classList.toggle('unico', cards.length === 1);
+    });
+    const contador = document.getElementById(wrapper.dataset.contador || '');
+    if (contador) contador.textContent = cards.length;
+}
+
+// Deja a la vista la tarjeta recién creada: colapsa las demás, la centra en
+// pantalla y pone el foco donde hay que escribir.
+function enfocarTarjetaNueva(wrapper, card, campoAEnfocar) {
+    wrapper.querySelectorAll('.dynamic-item-card').forEach(otra => {
+        if (otra !== card) colapsarTarjeta(otra);
+    });
+    setTimeout(() => {
+        scrollATarjeta(card);
+        const campo = (campoAEnfocar && campoAEnfocar !== true)
+            ? card.querySelector(`[data-field="${campoAEnfocar}"]`)
+            : card.querySelector('select, input:not([type="hidden"])');
+        // preventScroll: el navegador ya no pelea contra nuestro scroll suave
+        if (campo) { try { campo.focus({ preventScroll: true }); } catch (e) { campo.focus(); } }
+    }, 60);
+}
+
+function eliminarItemDinamico(boton) {
+    const card = boton.closest('.dynamic-item-card');
+    const wrapper = card.parentElement;
+    const esProducto = !!card.querySelector('.prod-item');
+    if (wrapper.querySelectorAll('.dynamic-item-card').length <= 1) {
+        alert('Tiene que quedar al menos un ítem. Si no lo necesitás, dejalo vacío.');
+        return;
+    }
+    card.remove();
+    renumerarTarjetas(wrapper, esProducto ? 'Item de Producto' : 'Contrato Comercial');
+}
+
+// Encabezado común de las tarjetas (título + resumen + acciones).
+function encabezadoTarjetaHtml(etiqueta, indice, funcionDuplicar) {
+    return `
+        <div class="dynamic-card-header" onclick="alternarTarjeta(this)">
+            <div class="card-header-texto">
+                <span class="card-titulo">${etiqueta} #${indice}</span>
+                <span class="card-resumen"></span>
+            </div>
+            <div class="card-header-acciones">
+                <button type="button" class="btn-card-accion" title="Duplicar este ítem"
+                        onclick="event.stopPropagation(); ${funcionDuplicar}(this)"><i class="fas fa-copy"></i></button>
+                <button type="button" class="btn-card-accion borrar" title="Eliminar este ítem"
+                        onclick="event.stopPropagation(); eliminarItemDinamico(this)"><i class="fas fa-trash-alt"></i></button>
+                <i class="fas fa-chevron-up card-chevron"></i>
+            </div>
+        </div>`;
+}
+
+// Copia los valores de una tarjeta en un objeto { campo: valor }.
+function valoresDeTarjeta(card, claseItem) {
+    const valores = {};
+    card.querySelectorAll('.' + claseItem).forEach(el => { valores[el.dataset.field] = el.value; });
+    return valores;
+}
+
+// Vuelca un objeto de valores en una tarjeta recién creada.
+function aplicarValoresATarjeta(card, claseItem, valores) {
+    if (!valores) return;
+    card.querySelectorAll('.' + claseItem).forEach(el => {
+        const valor = valores[el.dataset.field];
+        if (valor === undefined) return;
+        if (el.tagName === 'SELECT') poblarSelect(el, el.dataset.enum, valor);
+        else el.value = valor;
+    });
+}
+
+// opciones: { valores, enfocar }
+//   valores -> precarga los campos (lo usa "Duplicar")
+//   enfocar -> true (primer campo) o el nombre de un data-field concreto
+function agregarFilaProducto(opciones) {
+    opciones = opciones || {};
     const wrapper = document.getElementById('wrapper-productos-dinamicos');
     const index = wrapper.children.length;
 
     const card = document.createElement('div');
     card.className = 'dynamic-item-card';
     card.innerHTML = `
-        <div class="dynamic-card-header">
-            <span>Item de Producto #${index + 1}</span>
-            ${index > 0 ? `<button type="button" class="btn-eliminar-item" onclick="eliminarItemProducto(this)" title="Eliminar este ítem"><i class="fas fa-trash-alt"></i> Eliminar</button>` : ''}
-        </div>
+        ${encabezadoTarjetaHtml('Item de Producto', index + 1, 'duplicarItemProducto')}
+        <div class="dynamic-card-body">
         <div class="form-group-row">
             <div class="form-group">
                 <label>Producto</label>
@@ -436,11 +580,13 @@ function agregarFilaProducto() {
             <div class="form-group"><label>Kg Envase</label><input type="text" inputmode="decimal" class="prod-item campo-kgenvase campo-numero-ar" data-field="kg_envase" value="25"></div>
             <div class="form-group"><label>Total Kg</label><input type="text" class="prod-item campo-calculado campo-total-kg campo-numero-ar" data-field="total_kg" readonly></div>
         </div>
+        </div>
     `;
     wrapper.appendChild(card);
 
     // Poblar los selects tipo enum recién creados
     card.querySelectorAll('.enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
+    aplicarValoresATarjeta(card, 'prod-item', opciones.valores);
 
     // Cálculo automático de Total Kg = Cantidad x Kg Envase
     const inputCantidad = card.querySelector('.campo-cantidad');
@@ -454,11 +600,21 @@ function agregarFilaProducto() {
     inputCantidad.addEventListener('input', recalcularTotalProducto);
     inputKgEnvase.addEventListener('input', recalcularTotalProducto);
     recalcularTotalProducto();
+
+    renumerarTarjetas(wrapper, 'Item de Producto');
+    if (opciones.enfocar) enfocarTarjetaNueva(wrapper, card, opciones.enfocar);
+    return card;
 }
 
-// Función para eliminar un ítem de producto específico
-function eliminarItemProducto(button) {
-    button.closest('.dynamic-item-card').remove();
+// Casi siempre se carga el mismo producto varias veces cambiando solo el lote:
+// se copia todo y se dejan vacíos el lote y la posición, que son propios de
+// cada ítem, con el foco puesto directamente en el lote.
+function duplicarItemProducto(boton) {
+    const origen = boton.closest('.dynamic-item-card');
+    const valores = valoresDeTarjeta(origen, 'prod-item');
+    valores.lote = '';
+    valores.posicion = '';
+    agregarFilaProducto({ valores: valores, enfocar: 'lote' });
 }
 
 // --- GESTOR CENTRALIZADO DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) ---
@@ -666,17 +822,16 @@ async function renderizarTablaContratos() {
     });
 }
 
-function agregarFilaContrato() {
+function agregarFilaContrato(opciones) {
+    opciones = opciones || {};
     const wrapper = document.getElementById('wrapper-contratos-dinamicos');
     const index = wrapper.children.length;
 
     const card = document.createElement('div');
     card.className = 'dynamic-item-card';
     card.innerHTML = `
-        <div class="dynamic-card-header">
-            <span>Contrato Comercial #${index + 1}</span>
-            ${index > 0 ? `<button type="button" class="btn-remove-item" onclick="this.closest('.dynamic-item-card').remove()"><i class="fas fa-trash"></i></button>` : ''}
-        </div>
+        ${encabezadoTarjetaHtml('Contrato Comercial', index + 1, 'duplicarItemContrato')}
+        <div class="dynamic-card-body">
         <div class="form-group-row">
             <div class="form-group"><label>Contrato Comercial</label><input type="text" class="cont-item" data-field="contrato_com" placeholder="CN26-057 B"></div>
             <div class="form-group"><label>Contrato Cliente</label><input type="text" class="cont-item" data-field="contrato_cli" placeholder="OC19147"></div>
@@ -699,10 +854,12 @@ function agregarFilaContrato() {
             <div class="form-group"><label>Kg Descarga</label><input type="text" inputmode="decimal" class="cont-item campo-kgdescarga campo-numero-ar" data-field="kg_descarga" value="0"></div>
             <div class="form-group"><label>Diferencia de Carga</label><input type="text" class="cont-item campo-calculado campo-diferencia campo-numero-ar" data-field="diferencia_carga" readonly></div>
         </div>
+        </div>
     `;
     wrapper.appendChild(card);
 
     card.querySelectorAll('.enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
+    aplicarValoresATarjeta(card, 'cont-item', opciones.valores);
 
     // Cálculo automático de Diferencia de Carga = Kg Descarga - Kg CP
     const inputKgCP = card.querySelector('.campo-kgcp');
@@ -716,6 +873,23 @@ function agregarFilaContrato() {
     inputKgCP.addEventListener('input', recalcularDiferencia);
     inputKgDescarga.addEventListener('input', recalcularDiferencia);
     recalcularDiferencia();
+
+    renumerarTarjetas(wrapper, 'Contrato Comercial');
+    if (opciones.enfocar) enfocarTarjetaNueva(wrapper, card, opciones.enfocar);
+    return card;
+}
+
+// Varias cartas de porte del mismo contrato y destino: se copia el contrato y
+// el destino, y se deja en blanco lo que cambia en cada viaje.
+function duplicarItemContrato(boton) {
+    const origen = boton.closest('.dynamic-item-card');
+    const valores = valoresDeTarjeta(origen, 'cont-item');
+    valores.carta_porte = '';
+    valores.archivo_cp = '';
+    const card = agregarFilaContrato({ valores: valores, enfocar: 'carta_porte' });
+    // El adjunto no se hereda: es un archivo distinto por cada carta de porte.
+    const preview = card.querySelector('.archivo-preview');
+    if (preview) preview.textContent = 'Sin archivo';
 }
 
 // --- 4. AUTENTICACIÓN (LOGIN) ---
@@ -1501,6 +1675,20 @@ setTimeout(tryInitTicketera, 500);
 // =========================================================================
 
 // --- 8. PROCESADO Y GUARDADO DEL FORMULARIO (ALTA Y EDICIÓN) ---
+
+// Si un campo obligatorio quedó dentro de una tarjeta colapsada, el navegador
+// no lo puede mostrar ni enfocar: el formulario no se enviaría y el operario no
+// vería ningún mensaje. Escuchamos "invalid" en fase de captura (se dispara en
+// todos los campos inválidos ANTES de que el navegador muestre el cartel) y
+// abrimos la tarjeta que lo contiene.
+document.getElementById("form-carga").addEventListener("invalid", function(e) {
+    const card = e.target.closest && e.target.closest('.dynamic-item-card');
+    if (card && card.classList.contains('colapsada')) {
+        expandirTarjeta(card);
+        card.classList.add('con-error');
+    }
+}, true);
+
 document.getElementById("form-carga").addEventListener("submit", function(e) {
     e.preventDefault();
 
@@ -1929,6 +2117,10 @@ function cargarRegistroParaEditar(base64Data) {
             const inputCantidad = card.querySelector('.campo-cantidad');
             if (inputCantidad) inputCantidad.dispatchEvent(evt);
         });
+        // Se muestran colapsadas: la lista entera entra en pantalla y se abre
+        // solo la que haya que corregir.
+        if (productos.length > 1) wrapperProd.querySelectorAll('.dynamic-item-card').forEach(colapsarTarjeta);
+        renumerarTarjetas(wrapperProd, 'Item de Producto');
 
         // --- Contratos dinámicos ---
         let contratos = item.Contratos || [];
@@ -1960,6 +2152,8 @@ function cargarRegistroParaEditar(base64Data) {
             const inputKgCP = card.querySelector('.campo-kgcp');
             if (inputKgCP) inputKgCP.dispatchEvent(evt);
         });
+        if (contratos.length > 1) wrapperCont.querySelectorAll('.dynamic-item-card').forEach(colapsarTarjeta);
+        renumerarTarjetas(wrapperCont, 'Contrato Comercial');
 
         // --- Checklist y estatus ---
         setRadioValue('aplica_etiqueta', item.Aplica_Etiqueta);
