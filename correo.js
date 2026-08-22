@@ -1,10 +1,12 @@
 // =============================================================================
-// CORREO.JS — Envío del reporte de Control de Carga por correo electrónico
+// CORREO.JS — Envío de reportes por correo electrónico (Carga y Calidad)
 // -----------------------------------------------------------------------------
 // QUÉ HACE
-//   Manda el PDF del control de carga por mail, con el cuerpo ya armado con los
-//   datos generales de la carga, en un solo clic desde la columna "Acciones"
-//   del historial (o automáticamente al guardar, si el usuario lo activa).
+//   Manda el PDF del reporte por mail, con el cuerpo ya armado con los datos
+//   generales, en un solo clic desde la columna "Acciones" del historial.
+//   Sirve para CONTROL DE CARGA y para CONTROL DE CALIDAD: el motor de envío es
+//   el mismo y lo propio de cada módulo se describe en REPORTES_CORREO (más
+//   abajo). En Control de Carga, además, puede salir solo al guardar.
 //
 // DESDE QUÉ CUENTA SALE (importante)
 //   1) PRIMERO intenta enviarlo desde el Gmail del usuario que inició sesión en
@@ -17,8 +19,8 @@
 //      "Responder a" apuntando a su correo. Nunca se queda sin enviar.
 //
 // El PDF se genera en el navegador con la MISMA función que el botón de descarga
-// (generarPDFReporte de app.js, en modo 'blob'), así el adjunto es idéntico al
-// que ya conocen los operarios.
+// de cada módulo (generarPDFReporte de app.js / generarPDFCalidad de calidad.js,
+// en modo 'blob'), así el adjunto es idéntico al que ya conocen los operarios.
 // =============================================================================
 
 // --- CONFIGURACIÓN OAUTH DE GMAIL -------------------------------------------
@@ -100,8 +102,8 @@ function estadoCorreoDeItem(item) {
     return 'pendiente';
 }
 
-// Botón de sobre para la columna "Acciones" del historial.
-function botonCorreoHistorialHtml(item, dataString) {
+// Botón de sobre para la columna "Acciones" del historial (de cualquier módulo).
+function botonCorreoHistorialHtml(item, dataString, tipo) {
     const estado = estadoCorreoDeItem(item);
     const limpio = function (t) { return String(t || '').replace(/["<>&]/g, ' '); };
     const config = {
@@ -109,13 +111,109 @@ function botonCorreoHistorialHtml(item, dataString) {
         error:     { icono: 'fa-envelope-open-text',    color: '#c62828', titulo: limpio(item.Estado_Correo) || 'El último envío falló — tocá para reintentar' },
         pendiente: { icono: 'fa-envelope',              color: '#5f6368', titulo: 'Enviar reporte por correo' }
     }[estado];
-    return '<button class="btn-table-action btn-correo-' + estado + '" onclick="abrirModalCorreoDesdeTabla(\'' + dataString + '\')" title="' + config.titulo + '">'
+    return '<button class="btn-table-action btn-correo-' + estado + '" onclick="abrirModalCorreoDesdeTabla(\'' + dataString + '\', \'' + (tipo || 'carga') + '\')" title="' + config.titulo + '">'
          +     '<i class="fas ' + config.icono + '" style="color:' + config.color + '; font-size:1.15rem; cursor:pointer;"></i>'
          + '</button>';
 }
 
 // =============================================================================
-// 2. ARMADO DEL CORREO (asunto + cuerpo con los datos generales de la carga)
+// 2. TIPOS DE REPORTE QUE SE PUEDEN ENVIAR
+// -----------------------------------------------------------------------------
+// El motor de envío (PDF + Gmail + plan B por backend + constancia del estado)
+// es el mismo para todos. Lo único que cambia entre un Control de Carga y un
+// Control de Calidad son estos datos, así que cada módulo se describe acá y no
+// hay que duplicar nada más.
+// =============================================================================
+const REPORTES_CORREO = {
+    carga: {
+        etiqueta: 'Control de Carga',
+        campoId: 'Id_Carga',
+        accionEstado: 'actualizar_estado_correo',
+        // Genera el PDF con la MISMA función que el botón de descarga
+        generarPdf: function (dataString) { return generarPDFReporte(dataString, 'blob'); },
+        asunto: function (item) {
+            const referencia = resumenContratos(item) !== '-' ? resumenContratos(item) : resumenProductos(item);
+            return ['Control de Carga ' + (item.Tipo_Carga || ''), referencia, item.Fecha || '']
+                .map(function (p) { return String(p).trim(); }).filter(Boolean).join(' — ');
+        },
+        introMensaje: function (item) {
+            return 'Te envío el reporte de control de carga correspondiente al ' + (item.Fecha || 'día de la fecha') + '.\n'
+                 + 'El detalle completo, las verificaciones y el registro fotográfico están en el PDF adjunto.';
+        },
+        // Filas de la tabla de datos generales del cuerpo del mail
+        filas: function (item) {
+            const kg = (typeof fmtKg === 'function' ? fmtKg(item.Kg_Cargados) : (item.Kg_Cargados || '0')) + ' kg';
+            const estatus = item.ESTATUS || 'ACEPTADO';
+            const color = String(estatus).toUpperCase() === 'RECHAZADO' ? '#c62828' : '#2e7d32';
+            return [
+                ['Fecha', item.Fecha],
+                ['Tipo de carga', item.Tipo_Carga],
+                ['Producto/s', resumenProductos(item)],
+                ['Contrato/s comercial', resumenContratos(item)],
+                ['Chofer', item.Nombre_Chofer],
+                ['Patente chasis', item.Patente_Chasis],
+                ['Patente acoplado', item.Patente_Acoplado],
+                ['Total Kg cargados', kg],
+                ['Estatus', '<span style="background:' + color + ';color:#ffffff;padding:2px 10px;border-radius:10px;font-size:12px">' + estatus + '</span>'],
+                ['Elaboró', item.Elaboro],
+                ['Indicaciones de descarga', item.Indicaciones_Descarga],
+                ['N° de registro', item.Id_Carga]
+            ];
+        },
+        pieAdjunto: 'Se adjunta el reporte completo en PDF (verificaciones, firmas y el registro fotográfico del control).'
+    },
+
+    calidad: {
+        etiqueta: 'Control de Calidad',
+        campoId: 'Id_Calidad',
+        accionEstado: 'actualizar_estado_correo_calidad',
+        generarPdf: function (dataString) { return generarPDFCalidad(dataString, 'blob'); },
+        asunto: function (item) {
+            const grano = (typeof nombreGranoCalidad === 'function') ? nombreGranoCalidad(item.Grano) : (item.Grano || '');
+            const referencia = item['N° Lote'] ? 'Lote ' + item['N° Lote'] : (item['Cliente'] || '');
+            return ['Control de Calidad ' + grano, referencia, item['Fecha Analisis'] || '']
+                .map(function (p) { return String(p).trim(); }).filter(Boolean).join(' — ');
+        },
+        introMensaje: function (item) {
+            return 'Te envío el reporte de control de calidad del análisis del ' + (item['Fecha Analisis'] || 'día de la fecha') + '.\n'
+                 + 'El detalle de calibres, defectos, los gráficos y las fotos de la muestra están en el PDF adjunto.';
+        },
+        filas: function (item) {
+            const grano = (typeof nombreGranoCalidad === 'function') ? nombreGranoCalidad(item.Grano) : (item.Grano || '-');
+            const pct = function (v) {
+                if (v === undefined || v === null || v === '') return '';
+                return (typeof formatNumeroAR === 'function' ? formatNumeroAR(v, 2) : v) + ' %';
+            };
+            const lotes = [item['N° Lote'], item['N° Lote BRC'], item['N° Lote Cliente/Planta']].filter(Boolean).join(' / ');
+            return [
+                ['Fecha de análisis', item['Fecha Analisis']],
+                ['Grano', grano],
+                ['Cliente', item['Cliente']],
+                ['Variedad', item['Variedad']],
+                ['Lote', lotes],
+                ['Contrato comercial', item['Contrato Comercial']],
+                ['Muestreo en', item['Muestreo en']],
+                ['Kg', item['Kg'] ? (typeof fmtKg === 'function' ? fmtKg(item['Kg']) : item['Kg']) + ' kg' : ''],
+                ['Humedad', pct(item['Humedad'])],
+                ['Materia extraña', pct(item['Materia Extraña'])],
+                ['Total granos buenos', pct(item['Total Granos Buenos'])],
+                ['Total de daños', pct(item['Total de Daños'])],
+                ['Insectos', item['Insectos Vivos o Muertos']],
+                ['Olor', item['Olor']],
+                ['Observaciones', item['observaciones']],
+                ['N° de registro', item['Id_Calidad']]
+            ];
+        },
+        pieAdjunto: 'Se adjunta el reporte completo en PDF (calibres, defectos, gráficos y fotos de la muestra).'
+    }
+};
+
+function reporteDe(tipo) {
+    return REPORTES_CORREO[tipo] || REPORTES_CORREO.carga;
+}
+
+// =============================================================================
+// 2-B. ARMADO DEL CORREO (asunto + cuerpo con los datos generales)
 // =============================================================================
 function resumenProductos(item) {
     const productos = Array.isArray(item.Productos) ? item.Productos : [];
@@ -129,64 +227,50 @@ function resumenContratos(item) {
     return nombres.join(', ') || '-';
 }
 
-function asuntoReporte(item) {
-    const referencia = resumenContratos(item) !== '-' ? resumenContratos(item) : resumenProductos(item);
-    return ['Control de Carga ' + (item.Tipo_Carga || ''), referencia, item.Fecha || '']
-        .map(p => String(p).trim())
-        .filter(Boolean)
-        .join(' — ');
+function asuntoReporte(item, tipo) {
+    return reporteDe(tipo).asunto(item);
 }
 
 // Mensaje por defecto que el usuario puede editar antes de enviar.
-function mensajeReportePorDefecto(item) {
+function mensajeReportePorDefecto(item, tipo) {
     return 'Buen día,\n\n'
-         + 'Te envío el reporte de control de carga correspondiente al ' + (item.Fecha || 'día de la fecha') + '.\n'
-         + 'El detalle completo, las verificaciones y el registro fotográfico están en el PDF adjunto.\n\n'
+         + reporteDe(tipo).introMensaje(item) + '\n\n'
          + 'Cualquier consulta quedo a disposición.\n\n'
          + 'Saludos,\n' + (nombreUsuarioActual() || '');
 }
 
 // Cuerpo HTML institucional: el mensaje del usuario + una tabla con los datos
 // generales, para que el destinatario no dependa de abrir el PDF para lo básico.
-function cuerpoHtmlReporte(item, mensajeUsuario) {
+function cuerpoHtmlReporte(item, tipo, mensajeUsuario) {
+    const reporte = reporteDe(tipo);
+    const escapar = function (t) {
+        return String(t === undefined || t === null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    };
     const fila = function (etiqueta, valor) {
+        // Los valores que ya vienen como HTML (el badge de estatus) se dejan pasar
+        const contenido = (typeof valor === 'string' && valor.indexOf('<span') === 0) ? valor : escapar(valor);
         return '<tr><td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#777777;white-space:nowrap">' + etiqueta + '</td>'
-             + '<td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#333333"><b>' + (valor || '-') + '</b></td></tr>';
+             + '<td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#333333"><b>' + (contenido || '-') + '</b></td></tr>';
     };
 
-    const estatus = item.ESTATUS || 'ACEPTADO';
-    const colorEstatus = String(estatus).toUpperCase() === 'RECHAZADO' ? '#c62828' : '#2e7d32';
-    const kg = (typeof fmtKg === 'function' ? fmtKg(item.Kg_Cargados) : (item.Kg_Cargados || '0')) + ' kg';
-    const mensajeHtml = String(mensajeUsuario || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/\n/g, '<br>');
+    const mensajeHtml = escapar(mensajeUsuario).replace(/\n/g, '<br>');
+    // Solo se muestran las filas que tienen dato: un control de calidad sin
+    // observaciones no tiene por qué mostrar una fila vacía.
+    const filasHtml = reporte.filas(item)
+        .filter(function (f) { return f[1] !== undefined && f[1] !== null && String(f[1]).trim() !== ''; })
+        .map(function (f) { return fila(f[0], f[1]); })
+        .join('');
 
     return ''
     + '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">'
-    +   '<div style="background:#a31e1e;color:#ffffff;padding:16px 22px;font-size:18px;font-weight:bold">Braun — Control de Transporte</div>'
+    +   '<div style="background:#a31e1e;color:#ffffff;padding:16px 22px;font-size:18px;font-weight:bold">Braun — ' + reporte.etiqueta + '</div>'
     +   '<div style="padding:20px 22px;color:#333333;font-size:14px;line-height:1.5">'
     +     '<p style="margin-top:0">' + mensajeHtml + '</p>'
-    +     '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:18px">'
-    +       fila('Fecha', item.Fecha)
-    +       fila('Tipo de carga', item.Tipo_Carga)
-    +       fila('Producto/s', resumenProductos(item))
-    +       fila('Contrato/s comercial', resumenContratos(item))
-    +       fila('Chofer', item.Nombre_Chofer)
-    +       fila('Patente chasis', item.Patente_Chasis)
-    +       fila('Patente acoplado', item.Patente_Acoplado)
-    +       fila('Total Kg cargados', kg)
-    +       fila('Estatus', '<span style="background:' + colorEstatus + ';color:#ffffff;padding:2px 10px;border-radius:10px;font-size:12px">' + estatus + '</span>')
-    +       fila('Elaboró', item.Elaboro)
-    +       (item.Indicaciones_Descarga ? fila('Indicaciones de descarga', item.Indicaciones_Descarga) : '')
-    +       fila('N° de registro', item.Id_Carga)
-    +     '</table>'
-    +     '<p style="margin-top:18px;color:#555555">'
-    +       '<i>Se adjunta el reporte completo en PDF (verificaciones, firmas y el registro fotográfico del control).</i>'
-    +     '</p>'
+    +     '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:18px">' + filasHtml + '</table>'
+    +     '<p style="margin-top:18px;color:#555555"><i>' + reporte.pieAdjunto + '</i></p>'
     +   '</div>'
     +   '<div style="background:#fafafa;border-top:1px solid #eeeeee;padding:12px 22px;color:#999999;font-size:11px;text-align:center">'
-    +     'Correo generado automáticamente por la App Braun — Control de Carga'
+    +     'Correo generado automáticamente por la App Braun — ' + reporte.etiqueta
     +   '</div>'
     + '</div>';
 }
@@ -194,9 +278,9 @@ function cuerpoHtmlReporte(item, mensajeUsuario) {
 // =============================================================================
 // 3. GENERACIÓN DEL PDF ADJUNTO (reutiliza el generador del botón "Descargar")
 // =============================================================================
-async function generarAdjuntoPdf(item) {
+async function generarAdjuntoPdf(item, tipo) {
     const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(item))));
-    const resultado = await generarPDFReporte(dataString, 'blob');
+    const resultado = await reporteDe(tipo).generarPdf(dataString);
     if (!resultado || !resultado.doc) throw new Error('No se pudo generar el PDF del reporte.');
 
     const dataUri = resultado.doc.output('datauristring');
@@ -355,7 +439,11 @@ async function enviarConGmail(datos) {
 function enviarConBackend(datos) {
     return enviarAlBackend({
         _accion: 'enviar_correo_reporte',
+        // De qué módulo es el reporte: define en qué hoja se deja la constancia
+        Tipo_Reporte: datos.tipo || 'carga',
         Id_Carga: datos.idCarga,
+        Id_Calidad: datos.idCarga,
+        Grano: datos.grano || '',
         Correo: datos.para,
         Correo_Cc: datos.cc || '',
         Correo_Asunto: datos.asunto,
@@ -372,24 +460,27 @@ function enviarConBackend(datos) {
 // =============================================================================
 // 6. ORQUESTADOR: intenta Gmail y, si no puede, cae al backend
 // =============================================================================
-async function enviarReporteDeCarga(item, opciones) {
+async function enviarReportePorMail(item, tipo, opciones) {
     opciones = opciones || {};
+    const reporte = reporteDe(tipo);
     const para = String(opciones.para || item.Correo || '').trim();
     if (!para || para.indexOf('@') === -1) throw new Error('Falta un correo de destino válido.');
     if (!navigator.onLine) throw new Error('No hay conexión a internet. El reporte no se puede enviar en este momento.');
 
-    const adjunto = await generarAdjuntoPdf(item);
-    const mensaje = opciones.mensaje || mensajeReportePorDefecto(item);
+    const adjunto = await generarAdjuntoPdf(item, tipo);
+    const mensaje = opciones.mensaje || mensajeReportePorDefecto(item, tipo);
     const datos = {
-        idCarga: item.Id_Carga || '',
+        tipo: tipo || 'carga',
+        idCarga: item[reporte.campoId] || '',
+        grano: item.Grano || '',
         para: para,
         cc: String(opciones.cc || '').trim(),
-        asunto: opciones.asunto || asuntoReporte(item),
-        html: cuerpoHtmlReporte(item, mensaje),
+        asunto: opciones.asunto || asuntoReporte(item, tipo),
+        html: cuerpoHtmlReporte(item, tipo, mensaje),
         pdfBase64: adjunto.base64,
         nombreAdjunto: adjunto.nombre,
         deEmail: usuarioRegistroActual(),
-        deNombre: nombreUsuarioActual() || 'Control de Carga Braun'
+        deNombre: nombreUsuarioActual() || 'App Braun'
     };
 
     // El texto del estado se arma ANTES de enviar y viaja también al backend,
@@ -415,8 +506,13 @@ async function enviarReporteDeCarga(item, opciones) {
     }
 
     recordarDestinatario(para);
-    await registrarEstadoCorreo(item, para, estado, via);
+    await registrarEstadoCorreo(item, tipo, para, estado, via);
     return { via: via, estado: estado, megas: adjunto.megas };
+}
+
+// Compatibilidad: el envío automático de Control de Carga sigue llamando así.
+function enviarReporteDeCarga(item, opciones) {
+    return enviarReportePorMail(item, 'carga', opciones);
 }
 
 function fechaHoraCorta() {
@@ -427,7 +523,9 @@ function fechaHoraCorta() {
 
 // Deja constancia del envío: en la planilla, en la lista en memoria y en la cola
 // local (si el registro todavía no se sincronizó), y repinta el historial.
-async function registrarEstadoCorreo(item, correo, estado, via) {
+async function registrarEstadoCorreo(item, tipo, correo, estado, via) {
+    const reporte = reporteDe(tipo);
+    const id = item[reporte.campoId];
     item.Correo = correo;
     item.Estado_Correo = estado;
 
@@ -435,8 +533,10 @@ async function registrarEstadoCorreo(item, correo, estado, via) {
     if (via !== 'backend' && !item._pendienteSync) {
         try {
             await enviarAlBackend({
-                _accion: 'actualizar_estado_correo',
-                Id_Carga: item.Id_Carga,
+                _accion: reporte.accionEstado,
+                Id_Carga: id,          // Control de Carga
+                Id_Calidad: id,        // Control de Calidad
+                Grano: item.Grano || '',
                 Correo: correo,
                 Estado_Correo: estado
             });
@@ -445,24 +545,41 @@ async function registrarEstadoCorreo(item, correo, estado, via) {
         }
     }
 
-    if (Array.isArray(historialGeneral)) {
-        const enMemoria = historialGeneral.find(r => r.Id_Carga === item.Id_Carga);
+    // Lista en memoria del módulo que corresponda
+    const listaEnMemoria = (tipo === 'calidad')
+        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
+        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    if (Array.isArray(listaEnMemoria)) {
+        const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
         if (enMemoria) { enMemoria.Correo = correo; enMemoria.Estado_Correo = estado; }
     }
-    actualizarEstadoCorreoEnColaLocal(item.Id_Carga, correo, estado);
 
-    if (typeof sincronizarEstadoCorreoFormulario === 'function') sincronizarEstadoCorreoFormulario(item.Id_Carga, correo, estado);
-    if (typeof filtrarYRenderizarTabla === 'function') filtrarYRenderizarTabla();
+    actualizarEstadoCorreoEnColaLocal(tipo, id, correo, estado);
+
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+        sincronizarEstadoCorreoFormulario(id, correo, estado);
+    }
+    repintarHistorial(tipo);
 }
 
-function actualizarEstadoCorreoEnColaLocal(idCarga, correo, estado) {
-    if (!db || !idCarga) return;
+function repintarHistorial(tipo) {
+    if (tipo === 'calidad') {
+        if (typeof filtrarYRenderizarCalidad === 'function') filtrarYRenderizarCalidad();
+    } else if (typeof filtrarYRenderizarTabla === 'function') {
+        filtrarYRenderizarTabla();
+    }
+}
+
+function actualizarEstadoCorreoEnColaLocal(tipo, id, correo, estado) {
+    if (!db || !id) return;
+    const reporte = reporteDe(tipo);
+    const almacen = (tipo === 'calidad') ? 'controles_calidad' : 'controles_carga';
     try {
-        const store = db.transaction(['controles_carga'], 'readwrite').objectStore('controles_carga');
+        const store = db.transaction([almacen], 'readwrite').objectStore(almacen);
         store.openCursor().onsuccess = function (e) {
             const cursor = e.target.result;
             if (!cursor) return;
-            if (cursor.value.Id_Carga === idCarga) {
+            if (cursor.value[reporte.campoId] === id) {
                 cursor.update(Object.assign({}, cursor.value, { Correo: correo, Estado_Correo: estado }));
             }
             cursor.continue();
@@ -474,32 +591,39 @@ function actualizarEstadoCorreoEnColaLocal(idCarga, correo, estado) {
 // 7. MODAL DE ENVÍO (un clic desde el historial → revisar → enviar)
 // =============================================================================
 let registroCorreoActual = null;
+let tipoCorreoActual = 'carga';
 
-function abrirModalCorreoDesdeTabla(dataString) {
+function abrirModalCorreoDesdeTabla(dataString, tipo) {
     try {
         const item = JSON.parse(decodeURIComponent(escape(atob(dataString))));
-        abrirModalCorreo(item);
+        abrirModalCorreo(item, tipo);
     } catch (e) {
         console.error('No se pudo leer el registro para enviarlo por correo:', e);
         alert('No se pudo abrir el envío por correo de este registro.');
     }
 }
 
-function abrirModalCorreo(item) {
+function abrirModalCorreo(item, tipo) {
     if (!item) return;
     if (!usuarioRegistroActual()) { alert('Iniciá sesión para poder enviar el reporte por correo.'); return; }
 
     registroCorreoActual = item;
+    tipoCorreoActual = tipo || 'carga';
+    const reporte = reporteDe(tipoCorreoActual);
 
+    document.getElementById('correo-titulo').textContent = 'Enviar reporte de ' + reporte.etiqueta;
     document.getElementById('correo-de').textContent = nombreUsuarioActual() + ' <' + usuarioRegistroActual() + '>';
     document.getElementById('correo-para').value = item.Correo || '';
     document.getElementById('correo-cc').value = '';
     document.getElementById('correo-copia-mia').checked = false;
-    document.getElementById('correo-asunto').value = asuntoReporte(item);
-    document.getElementById('correo-mensaje').value = mensajeReportePorDefecto(item);
+    document.getElementById('correo-asunto').value = asuntoReporte(item, tipoCorreoActual);
+    document.getElementById('correo-mensaje').value = mensajeReportePorDefecto(item, tipoCorreoActual);
     document.getElementById('correo-auto').checked = correoAutoActivo();
     document.getElementById('correo-adjunto').innerHTML =
-        '<i class="fas fa-file-pdf"></i> Reporte_Carga_' + (item.Tipo_Carga || '') + '_' + (item.Id_Carga || 'Braun') + '.pdf';
+        '<i class="fas fa-file-pdf"></i> ' + nombreArchivoPdf(item, tipoCorreoActual);
+
+    // El envío automático al guardar hoy existe solo en Control de Carga
+    document.getElementById('correo-auto').closest('.correo-auto-box').classList.toggle('hidden', tipoCorreoActual === 'calidad');
     document.getElementById('correo-via').textContent = gmailConfigurado()
         ? 'El correo sale desde tu Gmail y queda en tu carpeta Enviados.'
         : 'El correo sale desde la app, con tu nombre y "Responder a" tu correo.';
@@ -534,6 +658,15 @@ function usarDestinatario(email) {
     document.getElementById('correo-para').value = email;
 }
 
+// Nombre del PDF que se muestra en el chip de "Adjunto" del modal.
+function nombreArchivoPdf(item, tipo) {
+    if (tipo === 'calidad') {
+        const grano = (typeof nombreGranoCalidad === 'function') ? nombreGranoCalidad(item.Grano) : (item.Grano || '');
+        return 'Calidad_' + String(grano).replace(/\s+/g, '_') + '_' + (item['Fecha Analisis'] || '') + '_' + (item['Id_Calidad'] || '') + '.pdf';
+    }
+    return 'Reporte_Carga_' + (item.Tipo_Carga || 'PT') + '_' + (item.Id_Carga || 'Braun') + '.pdf';
+}
+
 function cerrarModalCorreo() {
     document.getElementById('modal-envio-correo').classList.remove('active');
     registroCorreoActual = null;
@@ -560,7 +693,7 @@ async function confirmarEnvioCorreo() {
 
     const item = registroCorreoActual;
     try {
-        const resultado = await enviarReporteDeCarga(item, {
+        const resultado = await enviarReportePorMail(item, tipoCorreoActual, {
             para: para,
             cc: cc,
             asunto: document.getElementById('correo-asunto').value.trim(),
@@ -572,7 +705,7 @@ async function confirmarEnvioCorreo() {
             : 'Reporte enviado a ' + para + '.', 'ok');
     } catch (error) {
         console.error('Error al enviar el reporte por correo:', error);
-        marcarErrorCorreo(item, para, error);
+        marcarErrorCorreo(item, tipoCorreoActual, para, error);
         avisoCorreo('No se pudo enviar el reporte: ' + (error.message || 'error desconocido'), 'error');
     } finally {
         boton.disabled = false;
@@ -580,16 +713,25 @@ async function confirmarEnvioCorreo() {
     }
 }
 
-function marcarErrorCorreo(item, para, error) {
+function marcarErrorCorreo(item, tipo, para, error) {
+    const reporte = reporteDe(tipo);
+    const id = item[reporte.campoId];
     const estado = ('Error ' + fechaHoraCorta() + ': ' + ((error && error.message) || 'no se pudo enviar')).substring(0, 180);
     item.Estado_Correo = estado;
-    if (Array.isArray(historialGeneral)) {
-        const enMemoria = historialGeneral.find(r => r.Id_Carga === item.Id_Carga);
+
+    const listaEnMemoria = (tipo === 'calidad')
+        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
+        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    if (Array.isArray(listaEnMemoria)) {
+        const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
         if (enMemoria) enMemoria.Estado_Correo = estado;
     }
-    actualizarEstadoCorreoEnColaLocal(item.Id_Carga, item.Correo || para, estado);
-    if (typeof sincronizarEstadoCorreoFormulario === 'function') sincronizarEstadoCorreoFormulario(item.Id_Carga, item.Correo || para, estado);
-    if (typeof filtrarYRenderizarTabla === 'function') filtrarYRenderizarTabla();
+
+    actualizarEstadoCorreoEnColaLocal(tipo, id, item.Correo || para, estado);
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+        sincronizarEstadoCorreoFormulario(id, item.Correo || para, estado);
+    }
+    repintarHistorial(tipo);
 }
 
 // =============================================================================
@@ -613,7 +755,7 @@ function intentarEnvioAutomatico(registro) {
         })
         .catch(function (err) {
             console.error('Envío automático fallido:', err);
-            marcarErrorCorreo(registro, registro.Correo, err);
+            marcarErrorCorreo(registro, 'carga', registro.Correo, err);
             avisoCorreo('El control se guardó, pero el correo no salió: ' + (err.message || '') + ' Reintentá desde el historial.', 'error');
         });
 }

@@ -47,6 +47,12 @@ function nombreGranoActual() {
     return (CALIDAD_CONFIG[granoActual] || {}).nombre || "";
 }
 
+// Nombre legible del grano de UN registro (no del que está abierto en pantalla).
+// Lo usa correo.js para armar el asunto y el cuerpo del mail.
+function nombreGranoCalidad(granoKey) {
+    return (CALIDAD_CONFIG[granoKey] || CALIDAD_CONFIG[granoActual] || {}).nombre || String(granoKey || "");
+}
+
 // --- 3. RUTEO INTERNO (#/control-calidad/garbanzo) ---
 function actualizarHashCalidad() {
     const cfg = CALIDAD_CONFIG[granoActual];
@@ -644,6 +650,7 @@ async function filtrarYRenderizarCalidad() {
                 <button class="btn-table-action" onclick="generarPDFCalidad('${dataString}')" title="Descargar PDF">
                     <i class="fas fa-file-pdf" style="color:#b71c1c; font-size: 1.2rem; cursor:pointer;"></i>
                 </button>
+                ${typeof botonCorreoHistorialHtml === 'function' ? botonCorreoHistorialHtml(item, dataString, 'calidad') : ''}
             </td>
         `;
         tbody.appendChild(tr);
@@ -740,6 +747,15 @@ function pdfDesdeDetalleCalidad() {
     if (!calidadDetalleActual) return;
     const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(calidadDetalleActual))));
     generarPDFCalidad(dataString);
+}
+
+function enviarCorreoDesdeDetalleCalidad() {
+    if (!calidadDetalleActual) return;
+    if (typeof abrirModalCorreo !== 'function') {
+        alert("El módulo de correo no se cargó. Recargá la app (Ctrl+F5) e intentá de nuevo.");
+        return;
+    }
+    abrirModalCorreo(calidadDetalleActual, 'calidad');
 }
 
 function eliminarDesdeDetalleCalidad() {
@@ -1076,7 +1092,10 @@ function dibujarBarrasDefectos(defectos) {
     return { dataUrl: canvas.toDataURL('image/png'), ratio: H / W };
 }
 
-async function generarPDFCalidad(base64Data) {
+// modo: undefined -> descarga el archivo (comportamiento de siempre)
+//       'blob'    -> no descarga nada y devuelve { doc, nombreArchivo, item },
+//                    para que correo.js lo adjunte al mail.
+async function generarPDFCalidad(base64Data, modo) {
     document.body.style.cursor = 'wait';
     try {
         const item = JSON.parse(decodeURIComponent(escape(atob(base64Data))));
@@ -1394,9 +1413,13 @@ async function generarPDFCalidad(base64Data) {
             doc.text("Sin defectos registrados en esta muestra.", margen, yGraf + 6);
         }
 
-        doc.save(`Calidad_${cfg.nombre}_${item["Fecha Analisis"] || ''}_${item["Id_Calidad"] || ''}.pdf`);
+        const nombreArchivo = `Calidad_${String(cfg.nombre).replace(/\s+/g, '_')}_${item["Fecha Analisis"] || ''}_${item["Id_Calidad"] || ''}.pdf`;
+        if (modo === 'blob') return { doc: doc, nombreArchivo: nombreArchivo, item: item };
+        doc.save(nombreArchivo);
     } catch (error) {
         console.error("Error al generar el PDF de calidad:", error);
+        // En modo 'blob' quien llama (correo.js) muestra su propio aviso
+        if (modo === 'blob') throw error;
         alert("No se pudo generar el PDF de este control.");
     } finally {
         document.body.style.cursor = '';
@@ -1437,4 +1460,6 @@ window.abrirDetalleCalidad = abrirDetalleCalidad;
 window.cerrarDetalleCalidad = cerrarDetalleCalidad;
 window.editarDesdeDetalleCalidad = editarDesdeDetalleCalidad;
 window.pdfDesdeDetalleCalidad = pdfDesdeDetalleCalidad;
+window.enviarCorreoDesdeDetalleCalidad = enviarCorreoDesdeDetalleCalidad;
+window.nombreGranoCalidad = nombreGranoCalidad;
 window.eliminarDesdeDetalleCalidad = eliminarDesdeDetalleCalidad;

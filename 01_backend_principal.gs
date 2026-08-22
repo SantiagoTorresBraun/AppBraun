@@ -149,6 +149,7 @@ function doPost(e) {
 
     // El correo salió desde el Gmail del usuario: solo hay que anotar el estado.
     if (accion === "actualizar_estado_correo") return actualizarEstadoCorreoDeCarga(data);
+    if (accion === "actualizar_estado_correo_calidad") return actualizarEstadoCorreoDeCalidad(data);
     // ==========================================================================
 
     // accion === "guardar" (caso normal, registro nuevo de Control de Carga).
@@ -379,7 +380,13 @@ function enviarReportePorCorreo(data) {
 
     MailApp.sendEmail(data.Correo, asunto, cuerpoTexto, opciones);
 
-    marcarEstadoCorreo(data.Id_Carga, data.Correo, data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)"));
+    // La constancia va en la hoja del módulo que corresponda
+    var estado = data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)");
+    if (data.Tipo_Reporte === "calidad") {
+      marcarEstadoCorreoCalidad(data.Id_Calidad, data.Grano, data.Correo, estado);
+    } else {
+      marcarEstadoCorreo(data.Id_Carga, data.Correo, estado);
+    }
     return respuestaOk();
 
   } catch (error) {
@@ -398,6 +405,51 @@ function actualizarEstadoCorreoDeCarga(data) {
     Logger.log("No se pudo actualizar el estado del correo: " + error);
     return respuestaErrorCorreo(error.toString());
   }
+}
+
+// Igual que la anterior, pero para un control de CALIDAD.
+function actualizarEstadoCorreoDeCalidad(data) {
+  try {
+    var encontrado = marcarEstadoCorreoCalidad(data.Id_Calidad, data.Grano, data.Correo, data.Estado_Correo);
+    if (!encontrado) return respuestaErrorCorreo("No se encontró el control de calidad " + (data.Id_Calidad || ""));
+    return respuestaOk();
+  } catch (error) {
+    Logger.log("No se pudo actualizar el estado del correo de calidad: " + error);
+    return respuestaErrorCorreo(error.toString());
+  }
+}
+
+// Deja constancia del envío en la hoja de calidad del grano.
+// A diferencia de "Orden", acá las columnas se ubican POR NOMBRE (así funciona
+// todo el módulo de calidad). Si la hoja todavía no tiene "Correo" y
+// "Estado_Correo", se agregan al final: son dos columnas nuevas, no se toca
+// ninguna de las existentes.
+function marcarEstadoCorreoCalidad(idCalidad, grano, correo, estado) {
+  if (!idCalidad) return false;
+  var hoja = obtenerHojaCalidad(grano || "GARBANZO");
+  if (!hoja) return false;
+
+  var fila = buscarFilaPorIdCalidad(hoja, idCalidad);
+  if (fila === -1) return false;
+
+  var colCorreo = obtenerColumnaPorNombre(hoja, "Correo");
+  var colEstado = obtenerColumnaPorNombre(hoja, "Estado_Correo");
+
+  if (correo) hoja.getRange(fila, colCorreo).setValue(correo);
+  hoja.getRange(fila, colEstado).setValue(estado || "Enviado");
+  return true;
+}
+
+// Devuelve el número de columna cuyo encabezado coincide; si no existe, la crea
+// al final y devuelve la nueva posición.
+function obtenerColumnaPorNombre(hoja, nombre) {
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0];
+  for (var c = 0; c < encabezados.length; c++) {
+    if (String(encabezados[c]).trim() === nombre) return c + 1;
+  }
+  var nueva = hoja.getLastColumn() + 1;
+  hoja.getRange(1, nueva).setValue(nombre);
+  return nueva;
 }
 
 // Escribe Correo (columna 35) y Estado_Correo (columna 36) de la hoja "Orden".

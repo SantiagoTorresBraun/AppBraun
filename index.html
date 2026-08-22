@@ -1048,6 +1048,9 @@
                     <button class="btn-accion pdf" onclick="pdfDesdeDetalleCalidad()" title="Descargar PDF">
                         <i class="fas fa-file-pdf"></i> Descargar PDF
                     </button>
+                    <button class="btn-accion correo" onclick="enviarCorreoDesdeDetalleCalidad()" title="Enviar el reporte por correo">
+                        <i class="fas fa-paper-plane"></i> Enviar por Correo
+                    </button>
                     <button class="btn-accion eliminar" onclick="eliminarDesdeDetalleCalidad()" title="Eliminar este control">
                         <i class="fas fa-trash"></i> Eliminar
                     </button>
@@ -1440,7 +1443,7 @@
         <div class="gestor-backdrop" onclick="cerrarModalCorreo()"></div>
         <div class="gestor-content correo-content">
             <div class="gestor-header">
-                <h3><i class="fas fa-paper-plane"></i> Enviar reporte por correo</h3>
+                <h3><i class="fas fa-paper-plane"></i> <span id="correo-titulo">Enviar reporte por correo</span></h3>
                 <button type="button" class="gestor-close" onclick="cerrarModalCorreo()" title="Cerrar">&times;</button>
             </div>
             <div class="gestor-body">
