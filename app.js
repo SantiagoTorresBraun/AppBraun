@@ -2176,10 +2176,13 @@ for (const campo of camposImagen) {
         doc.setFont("helvetica", "bold");
         doc.text("Total Kg:", 150, yCurrent);
         doc.setFont("helvetica", "normal");
-        doc.text(`${item.Kg_Cargados || '0'}`, 172, yCurrent);
+        doc.text(`${fmtKg(item.Kg_Cargados)}`, 172, yCurrent);
 
         // --- Datos de la Carga (tabla de productos) ---
         yCurrent += 8;
+        // Que el título no quede solo al pie con la tabla en la hoja siguiente:
+        // se reserva lugar para el título + el encabezado + una fila.
+        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 24);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.text("Datos de la Carga:", margenX, yCurrent);
@@ -2203,23 +2206,25 @@ for (const campo of camposImagen) {
             { header: "Total Kg", width: 20 }
         ];
         const filasProductos = productos.length > 0
-            ? productos.map(p => [p.producto, p.calibre, p.tipo || item.Tipo_Carga || 'PT', p.lote, p.posicion, p.envase, p.cantidad, p.kg_envase, p.total_kg])
+            ? productos.map(p => [p.producto, p.calibre, p.tipo || item.Tipo_Carga || 'PT', p.lote, p.posicion, p.envase, p.cantidad, fmtKg(p.kg_envase), fmtKg(p.total_kg)])
             : [["Sin ítems cargados", "", "", "", "", "", "", "", ""]];
 
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasProductos, filasProductos, { fontSize: 6.8, alturaFila: 7 });
 
         // --- Nombre y Apellido del chofer / Patentes ---
         yCurrent += 6;
+        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 18);
         const columnasChofer = [
             { header: "Nombre y Apellido del chofer", width: 80 },
             { header: "Patente Chasis", width: 51 },
             { header: "Patente Acoplado", width: 51 }
         ];
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasChofer,
-            [[item.Nombre_Chofer, item.Patente_Chasis, item.Patente_Acoplado]], { fontSize: 8, alturaFila: 7 });
+            [[item.Nombre_Chofer, item.Patente_Chasis, item.Patente_Acoplado]], { fontSize: 8, alturaFila: 7, mantenerJuntas: true });
 
         // --- Contrato Comercial ---
         yCurrent += 6;
+        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 24);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.text("Contrato Comercial", margenX, yCurrent);
@@ -2233,26 +2238,43 @@ for (const campo of camposImagen) {
 
         const columnasContrato = [
             { header: "Contrato Comercial", width: 28 },
-            { header: "Contrato Cliente", width: 26 },
+            { header: "Contrato Cliente", width: 24 },
             { header: "Carta de Porte", width: 24 },
-            { header: "Archivo CP", width: 16 },
-            { header: "Destino de Mercadería", width: 32 },
+            { header: "Archivo CP", width: 20 },
+            { header: "Destino de Mercadería", width: 30 },
             { header: "Kg CP", width: 18 },
             { header: "Kg Descarga", width: 18 },
             { header: "Diferencia", width: 20 }
         ];
         const filasContrato = contratos.length > 0
-            ? contratos.map(c => [
-                c.contrato_com, c.contrato_cli, c.carta_porte,
-                c.archivo_cp ? "Sí" : "No",
-                c.destino, c.kg_cp, c.kg_descarga, c.diferencia_carga
-            ])
+            ? contratos.map(c => {
+                // "Archivo CP" deja de ser un Sí/No inútil: si el archivo está en
+                // Drive, la celda es un enlace clicable a la Carta de Porte.
+                const link = linkArchivoCpParaPdf(c.archivo_cp);
+                const celdaArchivo = link
+                    ? { texto: "Ver archivo", url: link }
+                    : (c.archivo_cp ? "Adjunto sin sincronizar" : "Sin archivo");
+
+                // La diferencia solo tiene sentido si YA se descargó: sin Kg de
+                // descarga daba "-28000.00", que parecía un faltante enorme.
+                const sinDescarga = c.kg_descarga === '' || c.kg_descarga === null || c.kg_descarga === undefined;
+
+                return [
+                    c.contrato_com, c.contrato_cli, c.carta_porte,
+                    celdaArchivo,
+                    c.destino,
+                    fmtKg(c.kg_cp),
+                    sinDescarga ? "Pendiente" : fmtKg(c.kg_descarga),
+                    sinDescarga ? "-" : fmtKg(c.diferencia_carga)
+                ];
+            })
             : [["Sin contratos asociados", "", "", "", "", "", "", ""]];
 
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasContrato, filasContrato, { fontSize: 6.8, alturaFila: 7 });
 
         // --- Checklist operativo (tabla de 2 columnas, igual al modelo) ---
         yCurrent += 6;
+        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 21);
         const columnasDoble = [
             { header: "", width: 140 },
             { header: "", width: 42 }
@@ -2266,37 +2288,66 @@ for (const campo of camposImagen) {
             ["Chasis y acoplados exentos de proliferación de hongos", item.Exentos_Hongos || 'SI'],
             ["Se instaló aislante en el piso para proteger la carga", item.Aislante_Piso || 'SI']
         ];
-        yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasDoble, filasChecklist, { fontSize: 7.8, alturaFila: 7, conHeader: false });
+        yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasDoble, filasChecklist, { fontSize: 7.8, alturaFila: 7, conHeader: false, mantenerJuntas: true });
 
         // --- Estado e Indicaciones de descarga ---
         const filasEstado = [
             ["Estado", item.ESTATUS || 'ACEPTADO'],
             ["Indicaciones para la Descarga", item.Indicaciones_Descarga || '-']
         ];
-        yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasDoble, filasEstado, { fontSize: 7.8, alturaFila: 7, conHeader: false });
+        yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasDoble, filasEstado, { fontSize: 7.8, alturaFila: 7, conHeader: false, mantenerJuntas: true });
 
-        // --- Firmas (izquierda: quien elaboró el control; derecha: chofer, igual al modelo) ---
-        yCurrent += 16;
-        if (yCurrent > 250) { doc.addPage(); yCurrent = 20; }
+        // --- Firmas (izquierda: quien elaboró el control; derecha: chofer) ---
+        // El bloque entero (título + firmas + línea + nombres) mide unos 42 mm y
+        // NO se puede partir. Antes se empujaba con un "+16" y un umbral fijo de
+        // 250, así que cuando la carga traía muchos productos las dos firmas se
+        // iban solas a una hoja nueva y quedaba una página prácticamente vacía.
+        const ALTO_BLOQUE_FIRMAS = 42;
+        yCurrent += 12;
+        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, ALTO_BLOQUE_FIRMAS);
+
+        doc.setTextColor(...grisTexto);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text("Firmas", margenX, yCurrent);
+        yCurrent += 5;
 
         const altoFirma = 20;
+        const xFirmaControl = 30;
+        const xFirmaChofer = 125;
+        const anchoFirma = 55;
+
         try {
             if (item.Firma_Control && item.Firma_Control.length > 100) {
-                doc.addImage(item.Firma_Control, "PNG", 30, yCurrent - altoFirma, 55, altoFirma);
+                doc.addImage(item.Firma_Control, "PNG", xFirmaControl, yCurrent, anchoFirma, altoFirma);
             }
         } catch (firmaErr) { console.error("Firma de control inválida:", firmaErr); }
         try {
             if (item.Firma_Chofer && item.Firma_Chofer.length > 100) {
-                doc.addImage(item.Firma_Chofer, "PNG", 125, yCurrent - altoFirma, 55, altoFirma);
+                doc.addImage(item.Firma_Chofer, "PNG", xFirmaChofer, yCurrent, anchoFirma, altoFirma);
             }
         } catch (firmaErr) { console.error("Firma del chofer inválida:", firmaErr); }
 
-        yCurrent += 6;
+        // Línea de firma + nombre + de quién es cada una
+        const yLineaFirma = yCurrent + altoFirma;
+        doc.setDrawColor(140, 140, 140);
+        doc.setLineWidth(0.3);
+        doc.line(xFirmaControl, yLineaFirma, xFirmaControl + anchoFirma, yLineaFirma);
+        doc.line(xFirmaChofer, yLineaFirma, xFirmaChofer + anchoFirma, yLineaFirma);
+
+        const centroControl = xFirmaControl + anchoFirma / 2;
+        const centroChofer = xFirmaChofer + anchoFirma / 2;
+
         doc.setTextColor(...grisTexto);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
-        doc.text(item.Elaboro || '-', 57, yCurrent, { align: "center" });
-        doc.text(item.Nombre_Chofer || '-', 152, yCurrent, { align: "center" });
+        doc.text(item.Elaboro || '-', centroControl, yLineaFirma + 5, { align: "center" });
+        doc.text(item.Nombre_Chofer || '-', centroChofer, yLineaFirma + 5, { align: "center" });
+
+        doc.setTextColor(130, 130, 130);
+        doc.setFontSize(7.5);
+        doc.text("Responsable del control", centroControl, yLineaFirma + 9.5, { align: "center" });
+        doc.text("Chofer", centroChofer, yLineaFirma + 9.5, { align: "center" });
 
         // --- Páginas de registro fotográfico (grilla 2x2, igual estética al modelo) ---
         agregarPaginaFotos(doc, "REGISTRO FOTOGRÁFICO - VEHÍCULO VACÍO", rojoBraun, item.Id_Carga, [
@@ -2340,31 +2391,77 @@ for (const campo of camposImagen) {
     }
 }
 
-// --- 10-A. HELPER: dibuja una tabla simple con bordes reales (como el modelo de referencia) ---
+// --- 10-A. LÍMITES DE PÁGINA DEL REPORTE ---------------------------------
+// Una hoja A4 mide 297 mm de alto y el pie de página (la línea roja con
+// EXPORTADORES / PRODUCTORES / PROCESADORES) arranca en 283. Todo el contenido
+// tiene que terminar antes de PDF_Y_LIMITE; si no, se abre una hoja nueva.
+const PDF_Y_LIMITE = 272;        // última altura utilizable de una página
+const PDF_Y_INICIO_PAGINA = 22;  // dónde arranca el contenido de una hoja nueva
+
+// Devuelve la Y donde seguir escribiendo: la misma si el bloque entra en lo que
+// queda de página, o el margen superior de una hoja nueva si no entra.
+function pdfNuevaPaginaSiNoEntra(doc, y, altoNecesario) {
+    if (y + altoNecesario <= PDF_Y_LIMITE) return y;
+    doc.addPage();
+    return PDF_Y_INICIO_PAGINA;
+}
+
+// Link para abrir el archivo de la Carta de Porte desde el PDF.
+// El backend guarda una URL de descarga directa de Drive
+// (uc?export=download&id=XXX); la pasamos a la de vista previa (file/d/XXX/view)
+// para que al tocarla se abra el archivo en el navegador en vez de bajarse solo.
+// Si el archivo todavía no se sincronizó (data:...) no hay link posible.
+function linkArchivoCpParaPdf(valor) {
+    if (!valor || typeof valor !== 'string') return null;
+    if (valor.indexOf('data:') === 0) return null;
+    const conId = valor.match(/[?&]id=([^&]+)/) || valor.match(/\/d\/([^/?]+)/);
+    if (conId) return 'https://drive.google.com/file/d/' + conId[1] + '/view';
+    return valor.indexOf('http') === 0 ? valor : null;
+}
+
+// --- 10-A-bis. HELPER: dibuja una tabla con bordes reales ------------------
+// Dos cosas que antes no hacía y rompían el reporte:
+//  1. La altura de fila era fija (7 mm). Un texto largo —"DEPÓSITO MOREIRO
+//     HNOS"— se partía en varias líneas y se desbordaba sobre la fila de abajo.
+//     Ahora cada fila crece según la celda que más líneas necesita.
+//  2. No cortaba de página. Con muchos productos la tabla seguía dibujándose
+//     encima del pie y hasta fuera de la hoja: esas filas no se imprimían.
+//     Ahora corta y repite el encabezado en la hoja siguiente.
+// Una celda puede ser un objeto { texto, url } y se dibuja como enlace clicable.
 function dibujarTablaConBordes(doc, x, y, anchoTotal, columnas, filas, opciones = {}) {
-    const alturaFilaDatos = opciones.alturaFila || 7;
+    const alturaMinima = opciones.alturaFila || 7;
     const fontSize = opciones.fontSize || 8;
     const colorHeaderFill = opciones.colorHeaderFill || [183, 28, 28];
     const colorHeaderTexto = opciones.colorHeaderTexto || [255, 255, 255];
     const conHeader = opciones.conHeader !== false;
+    const lineHeight = fontSize * 0.42;
 
-    doc.setDrawColor(190, 190, 190);
-    doc.setLineWidth(0.15);
+    const textoDeCelda = (valor) => {
+        if (valor && typeof valor === 'object') return valor.texto || '-';
+        return (valor === undefined || valor === null || valor === '') ? '-' : String(valor);
+    };
 
-    let yPos = y;
+    // Se mide todo ANTES de dibujar, para saber cuánto ocupa cada fila.
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(fontSize);
+    const filasMedidas = filas.map(fila => {
+        const celdas = columnas.map((col, i) => ({
+            lineas: doc.splitTextToSize(textoDeCelda(fila[i]), col.width - 3),
+            url: (fila[i] && typeof fila[i] === 'object') ? fila[i].url : null
+        }));
+        const maxLineas = Math.max(...celdas.map(c => c.lineas.length));
+        return { celdas: celdas, alto: Math.max(alturaMinima, maxLineas * lineHeight + 3) };
+    });
 
-    if (conHeader) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(fontSize);
+    // Medida del encabezado (se calcula una sola vez y se reusa en cada hoja)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(fontSize);
+    const lineasPorColumna = columnas.map(col => col.header ? doc.splitTextToSize(col.header, col.width - 3) : [""]);
+    const alturaHeader = conHeader
+        ? Math.max(alturaMinima, Math.max(...lineasPorColumna.map(l => l.length)) * lineHeight + 2.5)
+        : 0;
 
-        const lineasPorColumna = columnas.map(col => {
-            if (!col.header) return [""];
-            return doc.splitTextToSize(col.header, col.width - 3);
-        });
-        const maxLineas = Math.max(...lineasPorColumna.map(l => l.length));
-        const lineHeight = fontSize * 0.42;
-        const alturaHeader = Math.max(alturaFilaDatos, maxLineas * lineHeight + 2.5);
-
+    const dibujarEncabezado = (yPos) => {
         let colX = x;
         columnas.forEach((col, i) => {
             doc.setFillColor(...colorHeaderFill);
@@ -2379,27 +2476,68 @@ function dibujarTablaConBordes(doc, x, y, anchoTotal, columnas, filas, opciones 
             });
             colX += col.width;
         });
-        yPos += alturaHeader;
+        return alturaHeader;
+    };
+
+    doc.setDrawColor(190, 190, 190);
+    doc.setLineWidth(0.15);
+
+    let yPos = y;
+
+    // Bloques cortos que no conviene partir (el checklist, el estado, la fila
+    // del chofer): si no entran enteros en lo que queda de hoja, arrancan en la
+    // siguiente. Las tablas largas (productos, contratos) NO usan esto: tienen
+    // que poder cortar, si no volveríamos a perder filas.
+    if (opciones.mantenerJuntas) {
+        const altoTotal = filasMedidas.reduce((suma, f) => suma + f.alto, 0) + alturaHeader;
+        yPos = pdfNuevaPaginaSiNoEntra(doc, yPos, altoTotal);
     }
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(fontSize);
-    doc.setTextColor(50, 50, 50);
-    filas.forEach((fila, filaIdx) => {
-        let colX = x;
+    if (conHeader) yPos += dibujarEncabezado(yPos);
+
+    filasMedidas.forEach((fila, filaIdx) => {
+        if (yPos + fila.alto > PDF_Y_LIMITE) {
+            doc.addPage();
+            yPos = PDF_Y_INICIO_PAGINA;
+            doc.setDrawColor(190, 190, 190);
+            doc.setLineWidth(0.15);
+            if (conHeader) yPos += dibujarEncabezado(yPos);
+        }
+
         if (filaIdx % 2 === 1) {
             doc.setFillColor(248, 248, 248);
-            doc.rect(x, yPos, anchoTotal, alturaFilaDatos, "F");
+            doc.rect(x, yPos, anchoTotal, fila.alto, "F");
         }
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(fontSize);
         doc.setTextColor(50, 50, 50);
+
+        let colX = x;
         columnas.forEach((col, i) => {
-            const valorCrudo = fila[i];
-            const texto = (valorCrudo === undefined || valorCrudo === null || valorCrudo === '') ? '-' : String(valorCrudo);
-            doc.rect(colX, yPos, col.width, alturaFilaDatos);
-            doc.text(texto, colX + 1.5, yPos + alturaFilaDatos / 2 + 1.2, { maxWidth: col.width - 3 });
+            const celda = fila.celdas[i];
+            doc.rect(colX, yPos, col.width, fila.alto);
+            const offsetY = (fila.alto - (celda.lineas.length * lineHeight)) / 2 + lineHeight * 0.9;
+            celda.lineas.forEach((linea, li) => {
+                const yLinea = yPos + offsetY + (li * lineHeight);
+                if (celda.url) {
+                    doc.setTextColor(25, 103, 210);
+                    doc.textWithLink(linea, colX + 1.5, yLinea, { url: celda.url });
+                    // Subrayado, para que se note que se puede tocar
+                    const anchoTexto = doc.getTextWidth(linea);
+                    doc.setDrawColor(25, 103, 210);
+                    doc.setLineWidth(0.2);
+                    doc.line(colX + 1.5, yLinea + 0.7, colX + 1.5 + anchoTexto, yLinea + 0.7);
+                    doc.setDrawColor(190, 190, 190);
+                    doc.setLineWidth(0.15);
+                    doc.setTextColor(50, 50, 50);
+                } else {
+                    doc.text(linea, colX + 1.5, yLinea);
+                }
+            });
             colX += col.width;
         });
-        yPos += alturaFilaDatos;
+        yPos += fila.alto;
     });
 
     return yPos;
