@@ -188,11 +188,35 @@ function guardarRegistroCompleto(data) {
   // este chequeo; Control de Carga era el único que podía duplicar la carga.
   // Ojo: la acción "actualizar" borra la fila vieja ANTES de llamar acá, así que
   // este chequeo no interfiere con las ediciones.
-  if (data.Id_Carga && buscarFilaPorId(sheetOrden, data.Id_Carga) !== -1) {
-    return;
+  //
+  // EL CHEQUEO SOLO NO ALCANZA: Apps Script atiende varios POST a la vez, así que
+  // dos pedidos con el mismo Id_Carga podían leer "no existe" ANTES de que
+  // cualquiera de los dos escribiera, y terminaban insertando los dos.
+  // Así se duplicó BC-1787247191230 (3 filas en "Orden", 9 productos y 3
+  // contratos para una sola carga real). Por eso el chequeo y el appendRow van
+  // adentro de un LOCK: el segundo pedido espera, vuelve a mirar, encuentra la
+  // fila y se va sin escribir.
+  var lock = LockService.getScriptLock();
+  var conLock = false;
+  try { conLock = lock.tryLock(30000); } catch (errLock) { conLock = false; }
+
+  try {
+    if (data.Id_Carga && buscarFilaPorId(sheetOrden, data.Id_Carga) !== -1) {
+      return; // ya estaba: no se duplica (el finally libera el lock igual)
+    }
+    insertarFilaOrden(sheetOrden, data);
+    // Sin flush, la fila recién agregada puede no verla todavía el pedido que
+    // entra atrás nuestro, y volveríamos a tener dos filas.
+    SpreadsheetApp.flush();
+  } finally {
+    if (conLock) lock.releaseLock();
   }
 
-  // ---- Fila principal en "Orden" ----
+  guardarProductosYContratos(sheetProducto, sheetContrato, data);
+}
+
+// ---- Fila principal en "Orden" ----
+function insertarFilaOrden(sheetOrden, data) {
   // Mapeo EXACTO al orden real de columnas de tu hoja "Orden".
   // Archivo, PDF, CP1-CP5 y "Estado" no los envía el frontend hoy: quedan vacíos.
   // Tipo_Carga se agrega al FINAL (columna 37) — ver nota más abajo sobre agregarla en la hoja.
@@ -231,7 +255,12 @@ function guardarRegistroCompleto(data) {
     data.Estado_Correo || "",
     data.Tipo_Carga || ""            // Columna extra: agregarla al final de "Orden" (ver nota)
   ]);
+}
 
+// Filas relacionadas. Van FUERA del lock: subir los archivos de Carta de Porte a
+// Drive puede tardar varios segundos y no hay que bloquear a los demás pedidos.
+// Solo llega acá el pedido que realmente insertó la fila en "Orden".
+function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
   // ---- Productos ----
   if (data.Productos && Array.isArray(data.Productos)) {
     data.Productos.forEach(function(p) {

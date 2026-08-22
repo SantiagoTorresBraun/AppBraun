@@ -23,7 +23,7 @@
 | Archivo | Qué hace |
 |---|---|
 | **01_backend_principal.gs** | Todo el backend en un solo archivo: **copia espejo** del `Código.gs` que corre en el proyecto de Apps Script **App_BRC**, pegado adentro del Sheet `BD_BRC`. Expone `doGet` (leer historial, calidad, producción, tickets, usuarios) y `doPost` (guardar/actualizar/eliminar cargas, calidad, muestreos, tickets, usuarios; enviar correos), las funciones de subida a Drive y la configuración de carpetas por ID. **No se autoejecuta**: la fuente de verdad es el editor de Apps Script. Si se cambia acá, hay que copiarlo allá y volver a **Implementar → Nueva versión**. |
-| **99_diagnostico.gs** | Herramientas de diagnóstico que **no llama la app**: se corren a mano desde el editor. `diagnosticoCarpetasApp()` dice dónde guarda la app y si hay carpetas duplicadas; `diagnosticoArbolCarpetaMadre()` lista el árbol de `APP_Braun_2026` con los IDs de cada carpeta. |
+| **99_diagnostico.gs** | Herramientas de diagnóstico que **no llama la app**: se corren a mano desde el editor. `diagnosticoCarpetasApp()` dice dónde guarda la app y si hay carpetas duplicadas; `diagnosticoArbolCarpetaMadre()` lista el árbol de `APP_Braun_2026` con los IDs de cada carpeta; `diagnosticoDuplicadosCarga()` informa qué cargas quedaron repetidas en la hoja `Orden` (y sus productos/contratos multiplicados) y `limpiarDuplicadosCarga()` las borra; `limpiarFilasSinIdCarga()` saca las filas basura sin `Id_Carga`. |
 
 > El backend vive en **cuatro archivos más** dentro de Apps Script que **no están en este repo**:
 > las migraciones históricas `91_`, `92_`, `93_` y `94_` (ya ejecutadas, no se vuelven a correr).

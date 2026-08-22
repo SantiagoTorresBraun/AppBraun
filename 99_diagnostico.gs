@@ -230,3 +230,172 @@ function diagRutaDeCarpeta(carpeta) {
   }
   return "Mi unidad / " + partes.join(" / ");
 }
+
+
+// ========================================================
+// 4) DUPLICADOS DE CONTROL DE CARGA
+// --------------------------------------------------------
+// Antes, el chequeo de "ya existe este Id_Carga" de
+// guardarRegistroCompleto() NO era atómico: Apps Script atiende
+// varios POST a la vez, así que dos pedidos con el mismo
+// Id_Carga podían leer "no existe" antes de que cualquiera
+// escribiera, y terminaban insertando los dos. Eso dejaba la
+// misma carga repetida en "Orden" y sus productos/contratos
+// multiplicados (una carga de 3 productos aparecía con 9).
+//
+// El backend ya usa un LockService para que no vuelva a pasar.
+// Estas funciones son para LIMPIAR lo que quedó de antes:
+//
+//   diagnosticoDuplicadosCarga()  -> SOLO INFORMA, no toca nada
+//   limpiarDuplicadosCarga()      -> BORRA las filas sobrantes
+//
+// Correr SIEMPRE primero el diagnóstico y leer el informe.
+// ========================================================
+
+var DIAG_HOJA_ORDEN    = "Orden";
+var DIAG_HOJA_PRODUCTO = "Producto";
+var DIAG_HOJA_CONTRATO = "Contrato Comercial";
+
+function diagnosticoDuplicadosCarga() {
+  return diagProcesarDuplicados(false);
+}
+
+function limpiarDuplicadosCarga() {
+  return diagProcesarDuplicados(true);
+}
+
+function diagProcesarDuplicados(borrar) {
+  var out = [];
+  out.push("========================================");
+  out.push(borrar ? "  LIMPIEZA DE CARGAS DUPLICADAS" : "  DIAGNÓSTICO DE CARGAS DUPLICADAS (solo lectura)");
+  out.push("========================================");
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaOrden    = ss.getSheetByName(DIAG_HOJA_ORDEN);
+  var hojaProducto = ss.getSheetByName(DIAG_HOJA_PRODUCTO);
+  var hojaContrato = ss.getSheetByName(DIAG_HOJA_CONTRATO);
+
+  // Filas de cada hoja agrupadas por Id_Carga (guardamos el N° de fila real).
+  var filasOrden    = diagAgruparPorId(hojaOrden, 0);    // Id_Carga es la columna A
+  var filasProducto = diagAgruparPorId(hojaProducto, 1); // Id_Carga es la columna B
+  var filasContrato = diagAgruparPorId(hojaContrato, 1); // Id_Carga es la columna B
+
+  var aBorrarOrden = [], aBorrarProducto = [], aBorrarContrato = [];
+  var duplicados = 0, sinResolver = 0;
+
+  Object.keys(filasOrden).forEach(function (id) {
+    if (!id) return; // las filas sin Id_Carga se informan aparte, no se tocan acá
+    var filas = filasOrden[id];
+    var copias = filas.length;
+    if (copias < 2) return;
+
+    duplicados++;
+    out.push("");
+    out.push("Id_Carga " + id + " -> " + copias + " filas en 'Orden' (debería ser 1)");
+
+    // De "Orden" se conserva la primera fila y se descartan las demás.
+    for (var i = 1; i < copias; i++) aBorrarOrden.push(filas[i]);
+    out.push("   Orden   : se conserva la fila " + filas[0] + ", se borran " + filas.slice(1).join(", "));
+
+    // En Producto y Contrato, cada guardado repetido agregó el MISMO juego de
+    // filas. Si el total es múltiplo exacto de la cantidad de copias, se
+    // conserva un juego (total / copias) y se borra el resto. Si no es múltiplo
+    // exacto, algo no cuadra: se informa y NO se toca, para revisarlo a mano.
+    [[filasProducto, aBorrarProducto, "Producto"], [filasContrato, aBorrarContrato, "Contrato"]]
+      .forEach(function (par) {
+        var mapa = par[0], acumulador = par[1], nombre = par[2];
+        var filasRel = mapa[id] || [];
+        if (filasRel.length === 0) { out.push("   " + nombre + ": sin filas"); return; }
+
+        if (filasRel.length % copias !== 0) {
+          sinResolver++;
+          out.push("   " + nombre + ": " + filasRel.length + " filas, NO es múltiplo de " + copias +
+                   " -> NO SE TOCA, revisar a mano");
+          return;
+        }
+        var conservar = filasRel.length / copias;
+        for (var j = conservar; j < filasRel.length; j++) acumulador.push(filasRel[j]);
+        out.push("   " + nombre + ": " + filasRel.length + " filas -> se conservan " + conservar +
+                 " y se borran " + (filasRel.length - conservar));
+      });
+  });
+
+  // Filas basura sin Id_Carga (las dejó una versión vieja del backend que
+  // escribía una fila ante cualquier acción desconocida). Solo se informan.
+  var sinId = (filasOrden[""] || []).length;
+
+  out.push("");
+  out.push("----------------------------------------");
+  out.push("RESUMEN");
+  out.push("  Cargas con filas duplicadas : " + duplicados);
+  out.push("  Filas a borrar en 'Orden'   : " + aBorrarOrden.length);
+  out.push("  Filas a borrar en 'Producto': " + aBorrarProducto.length);
+  out.push("  Filas a borrar en 'Contrato': " + aBorrarContrato.length);
+  if (sinResolver > 0) out.push("  Casos que NO cuadran         : " + sinResolver + " (revisar a mano)");
+  if (sinId > 0)       out.push("  Filas sin Id_Carga (basura)  : " + sinId + " -> ver limpiarFilasSinIdCarga()");
+
+  if (!borrar) {
+    out.push("");
+    out.push(">>> Esto fue SOLO UN INFORME: no se borró nada.");
+    out.push(">>> Si el detalle de arriba es correcto, ejecutar limpiarDuplicadosCarga().");
+    Logger.log(out.join("\n"));
+    return out.join("\n");
+  }
+
+  diagBorrarFilas(hojaContrato, aBorrarContrato);
+  diagBorrarFilas(hojaProducto, aBorrarProducto);
+  diagBorrarFilas(hojaOrden, aBorrarOrden);
+  SpreadsheetApp.flush();
+
+  out.push("");
+  out.push(">>> LISTO: filas borradas.");
+  out.push(">>> Recargar la app con Ctrl+F5 para ver el historial sin duplicados.");
+  Logger.log(out.join("\n"));
+  return out.join("\n");
+}
+
+// Borra filas sueltas de una hoja. De abajo hacia arriba, si no cada borrado
+// correría los números de las filas que faltan borrar.
+function diagBorrarFilas(hoja, filas) {
+  filas.sort(function (a, b) { return b - a; });
+  filas.forEach(function (f) { hoja.deleteRow(f); });
+}
+
+// Devuelve { "<Id_Carga>": [nroFila, nroFila, ...] } respetando el orden de la hoja.
+function diagAgruparPorId(hoja, indiceColumnaId) {
+  var mapa = {};
+  if (!hoja || hoja.getLastRow() < 2) return mapa;
+  var valores = hoja.getDataRange().getDisplayValues();
+  for (var f = 1; f < valores.length; f++) { // la fila 0 es el encabezado
+    var id = String(valores[f][indiceColumnaId] || "").trim();
+    if (!mapa[id]) mapa[id] = [];
+    mapa[id].push(f + 1); // +1 porque las filas de la hoja arrancan en 1
+  }
+  return mapa;
+}
+
+// --------------------------------------------------------
+// 5) FILAS BASURA SIN Id_Carga
+//    Las dejó una versión vieja del backend que escribía una
+//    fila ante cualquier acción desconocida. No se ven en la
+//    app (se filtran por Tipo_Carga) pero ensucian la planilla.
+//    OJO: esto BORRA. Correr antes diagnosticoDuplicadosCarga()
+//    para ver cuántas son.
+// --------------------------------------------------------
+function limpiarFilasSinIdCarga() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var out = [];
+  out.push("Borrando filas sin Id_Carga...");
+
+  [DIAG_HOJA_ORDEN, DIAG_HOJA_PRODUCTO, DIAG_HOJA_CONTRATO].forEach(function (nombre, i) {
+    var hoja = ss.getSheetByName(nombre);
+    var col = (i === 0) ? 0 : 1;
+    var filas = (diagAgruparPorId(hoja, col)[""] || []);
+    diagBorrarFilas(hoja, filas);
+    out.push("  " + nombre + ": " + filas.length + " filas borradas");
+  });
+
+  SpreadsheetApp.flush();
+  Logger.log(out.join("\n"));
+  return out.join("\n");
+}
