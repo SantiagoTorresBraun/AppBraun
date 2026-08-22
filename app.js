@@ -1612,44 +1612,42 @@ function handleArchivoCP(inputEl) {
     reader.readAsDataURL(file);
 }
 
-// --- 8-C. ENVÍO DEL REPORTE POR CORREO (requiere que el Google Apps Script
-//     sepa atender la acción "enviar_correo" y mandar el mail con MailApp/GmailApp) ---
+// --- 8-C. ENVÍO DEL REPORTE POR CORREO ---------------------------------------
+// El envío en sí vive en correo.js (arma el PDF, lo adjunta y lo manda desde el
+// Gmail del usuario logueado, con el backend como plan B). Acá solo se abre la
+// ventana de revisión con los datos que están cargados en el formulario.
+//
+// Un control TODAVÍA NO GUARDADO no se puede enviar: su número de registro se
+// asigna recién al guardar, y sin él el correo quedaría sin respaldo en la
+// planilla. Para ese caso está el envío automático (se activa desde la misma
+// ventana) o el botón del sobre en el historial.
 function enviarPorCorreo() {
+    if (typeof abrirModalCorreo !== 'function') {
+        alert("El módulo de correo no se cargó. Recargá la app (Ctrl+F5) e intentá de nuevo.");
+        return;
+    }
+    if (!idRegistroEnEdicion) {
+        alert("Guardá primero el control y después enviá el reporte con el botón del sobre ✉ en el historial.\n\nSi querés que salga solo cada vez que guardás, activá \"Enviar automáticamente al guardar\" en la ventana de envío.");
+        return;
+    }
+
     const correo = document.getElementById("correo-envio").value.trim();
-    const estadoInput = document.getElementById("estado-correo");
-
-    if (!correo || !correo.includes('@')) {
-        alert("Ingresá un correo electrónico válido antes de enviar.");
-        return;
-    }
-    if (!navigator.onLine) {
-        alert("No hay conexión a internet. El correo no se puede enviar en este momento.");
-        return;
-    }
-    if (WEB_APP_URL.includes("AQUÍ_VA")) {
-        alert("Todavía no se configuró la URL del backend (Google Apps Script).");
+    if (correo && !correo.includes('@')) {
+        alert("Revisá el correo del destinatario: no parece válido.");
         return;
     }
 
-    estadoInput.value = "Iniciado";
+    abrirModalCorreo(construirRegistroDesdeFormulario(idRegistroEnEdicion));
+}
 
-    const idTemporal = idRegistroEnEdicion || ("BC-" + Date.now());
-    const registro = construirRegistroDesdeFormulario(idTemporal);
-
-    enviarAlBackend(Object.assign({ _accion: "enviar_correo" }, registro))
-    .then(resultado => {
-        // Ahora sí se puede saber si el servidor lo aceptó de verdad.
-        estadoInput.value = resultado.sinConfirmar
-            ? "Enviado (sin confirmación del servidor)"
-            : "Enviado";
-    })
-    .catch(err => {
-        console.error("Error al enviar por correo:", err);
-        estadoInput.value = err && err.rechazadoPorBackend ? "Rechazado por el servidor" : "Error de conexión";
-        if (err && err.rechazadoPorBackend) {
-            alert("⚠️ El correo NO se pudo enviar.\n\nMotivo: " + err.message);
-        }
-    });
+// Mantiene sincronizado el campo "Estado del envío" del formulario cuando el
+// correo se manda del registro que se está editando en ese momento.
+function sincronizarEstadoCorreoFormulario(idCarga, correo, estado) {
+    if (!idRegistroEnEdicion || idRegistroEnEdicion !== idCarga) return;
+    const campoEstado = document.getElementById("estado-correo");
+    const campoCorreo = document.getElementById("correo-envio");
+    if (campoEstado) campoEstado.value = estado;
+    if (campoCorreo && correo) campoCorreo.value = correo;
 }
 
 function guardarRegistroNuevo(registro) {
@@ -1660,6 +1658,10 @@ function guardarRegistroNuevo(registro) {
         finalizarGuardadoUI("¡Control de carga Braun guardado con éxito!", false);
         renderOfflineCount();
         if (navigator.onLine) { sincronizarDatosPendientes(); }
+        // Envío automático del reporte por correo (solo si el usuario lo activó
+        // y el registro trae destinatario). Nunca frena el guardado: si falla,
+        // avisa y el reporte queda para reenviar desde el historial.
+        if (typeof intentarEnvioAutomatico === 'function') intentarEnvioAutomatico(registro);
     };
 
     req.onerror = function(e) {
@@ -1868,6 +1870,7 @@ async function filtrarYRenderizarTabla() {
                 <button class="btn-table-action" onclick="generarPDFReporte('${dataString}')" title="Descargar PDF">
                     <i class="fas fa-file-pdf" style="color:#b71c1c; font-size: 1.2rem; cursor:pointer;"></i>
                 </button>
+                ${typeof botonCorreoHistorialHtml === 'function' ? botonCorreoHistorialHtml(item, dataString) : ''}
                 ${esDispositivoMovil() ? `
                 <button class="btn-table-action" onclick="generarPDFReporte('${dataString}', 'compartir')" title="Compartir PDF (WhatsApp, correo...)">
                     <i class="fas fa-share-alt" style="color:#1967d2; font-size: 1.1rem; cursor:pointer;"></i>
@@ -2315,7 +2318,12 @@ for (const campo of camposImagen) {
             agregarPiePagina(doc);
         }
  
-        const nombreArchivo = `Reporte_Carga_PT_${item.Id_Carga || 'Braun'}.pdf`;
+        const nombreArchivo = `Reporte_Carga_${item.Tipo_Carga || 'PT'}_${item.Id_Carga || 'Braun'}.pdf`;
+        // modo 'blob': no descarga nada, devuelve el documento para que otro
+        // módulo lo use (hoy: correo.js, que lo adjunta al mail del reporte).
+        if (modo === 'blob') {
+            return { doc: doc, nombreArchivo: nombreArchivo, item: item };
+        }
         if (modo === 'compartir') {
             await compartirPDF(doc, nombreArchivo, item);
         } else {
@@ -2325,6 +2333,9 @@ for (const campo of camposImagen) {
 
     } catch (error) {
         console.error("Error al construir PDF:", error);
+        // En modo 'blob' quien llama (correo.js) muestra su propio aviso: acá
+        // solo propagamos el error para no encimar dos carteles.
+        if (modo === 'blob') throw error;
         alert("Ocurrió un inconveniente al generar el PDF de este registro.");
     }
 }
@@ -2523,6 +2534,15 @@ function generarPDFDesdeDetalle() {
         const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(registroDetalleActual))));
         generarPDFReporte(dataString);
     }
+}
+
+function enviarCorreoDesdeDetalle() {
+    if (!registroDetalleActual) return;
+    if (typeof abrirModalCorreo !== 'function') {
+        alert("El módulo de correo no se cargó. Recargá la app (Ctrl+F5) e intentá de nuevo.");
+        return;
+    }
+    abrirModalCorreo(registroDetalleActual);
 }
 
 function eliminarDesdeDetalle() {

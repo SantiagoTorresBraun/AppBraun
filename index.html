@@ -818,9 +818,20 @@
                     </div>
  
                     <h3>Envío por Correo</h3>
-                    <div class="form-group"><label for="correo-envio">Correo</label><input type="email" id="correo-envio" placeholder="destinatario@ejemplo.com"></div>
-                    <div class="form-group"><label for="estado-correo">Estado_Correo</label><input type="text" id="estado-correo" readonly value="Sin enviar"></div>
-                    <button type="button" class="btn-secondary-add" style="width:100%; margin-bottom:20px;" onclick="enviarPorCorreo()"><i class="fas fa-paper-plane"></i> Enviar por Correo</button>
+                    <div class="form-group">
+                        <label for="correo-envio">Correo del destinatario</label>
+                        <input type="email" id="correo-envio" placeholder="destinatario@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="estado-correo">Estado del envío</label>
+                        <input type="text" id="estado-correo" readonly value="Sin enviar">
+                    </div>
+                    <p class="nota-correo">
+                        <i class="fas fa-circle-info"></i>
+                        Al guardar, el reporte en PDF se envía solo a este correo si tenés activado el envío automático.
+                        También podés mandarlo cuando quieras con el botón <i class="fas fa-envelope"></i> del historial.
+                    </p>
+                    <button type="button" class="btn-secondary-add" style="width:100%; margin-bottom:20px;" onclick="enviarPorCorreo()"><i class="fas fa-paper-plane"></i> Enviar reporte por correo</button>
  
                     <div id="offline-records" class="hidden">
                         <ul id="records-list"></ul>
@@ -930,6 +941,9 @@
                     </button>
                     <button class="btn-accion pdf" onclick="generarPDFDesdeDetalle()" title="Descargar PDF">
                         <i class="fas fa-file-pdf"></i> Descargar PDF
+                    </button>
+                    <button class="btn-accion correo" onclick="enviarCorreoDesdeDetalle()" title="Enviar el reporte por correo">
+                        <i class="fas fa-paper-plane"></i> Enviar por Correo
                     </button>
                     <button class="btn-accion eliminar" onclick="eliminarDesdeDetalle()" title="Eliminar este registro">
                         <i class="fas fa-trash"></i> Eliminar
@@ -1415,6 +1429,61 @@
         </div>
     </div>
 
+    <!-- MODAL DE ENVÍO DEL REPORTE POR CORREO (lo maneja correo.js) -->
+    <div id="modal-envio-correo" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarModalCorreo()"></div>
+        <div class="gestor-content correo-content">
+            <div class="gestor-header">
+                <h3><i class="fas fa-paper-plane"></i> Enviar reporte por correo</h3>
+                <button type="button" class="gestor-close" onclick="cerrarModalCorreo()" title="Cerrar">&times;</button>
+            </div>
+            <div class="gestor-body">
+                <div id="correo-ultimo-envio" class="correo-aviso hidden"></div>
+
+                <div class="correo-de-box">
+                    <span class="correo-etiqueta">De</span>
+                    <div>
+                        <div id="correo-de" class="correo-de-valor">-</div>
+                        <div id="correo-via" class="correo-via">-</div>
+                    </div>
+                </div>
+
+                <label class="correo-label" for="correo-para">Para</label>
+                <input type="email" id="correo-para" placeholder="destinatario@ejemplo.com" autocomplete="off">
+                <div id="correo-chips" class="correo-chips"></div>
+
+                <label class="correo-label" for="correo-cc">CC (opcional)</label>
+                <input type="text" id="correo-cc" placeholder="otro@ejemplo.com, otro2@ejemplo.com" autocomplete="off">
+                <label class="correo-check">
+                    <input type="checkbox" id="correo-copia-mia"> Enviarme una copia
+                </label>
+
+                <label class="correo-label" for="correo-asunto">Asunto</label>
+                <input type="text" id="correo-asunto">
+
+                <label class="correo-label" for="correo-mensaje">Mensaje</label>
+                <textarea id="correo-mensaje" rows="6"></textarea>
+                <p class="correo-nota">Debajo del mensaje se agregan automáticamente los datos generales de la carga (fecha, producto, contrato, chofer, patentes, kilos y estatus).</p>
+
+                <div class="correo-adjunto-box">
+                    <span class="correo-etiqueta">Adjunto</span>
+                    <span id="correo-adjunto" class="correo-adjunto">-</span>
+                </div>
+
+                <label class="correo-check correo-auto-box">
+                    <input type="checkbox" id="correo-auto">
+                    <span><b>Enviar automáticamente al guardar</b><br>
+                    <small>Cada control nuevo que guardes con un correo cargado se manda solo, sin abrir esta ventana.</small></span>
+                </label>
+
+                <button type="button" id="btn-confirmar-correo" class="btn-primary" style="width:100%; margin-top:6px;" onclick="confirmarEnvioCorreo()">
+                    <i class="fas fa-paper-plane"></i> Enviar reporte
+                </button>
+                <button type="button" class="btn-secondary-add" style="width:100%; margin-top:10px;" onclick="cerrarModalCorreo()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL GESTOR DE USUARIOS DE LA EMPRESA (login + ticketera) -->
     <div id="modal-gestor-usuarios" class="gestor-modal">
         <div class="gestor-backdrop" onclick="cerrarGestorUsuarios()"></div>
@@ -1438,8 +1507,13 @@
         </div>
     </div>
 
+    <!-- Google Identity Services: permiso para enviar el reporte desde el Gmail
+         del usuario que inició sesión (ver correo.js). Si no carga, la app manda
+         los correos por el backend igual. -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="auth.js"></script>
     <script src="app.js"></script>
+    <script src="correo.js"></script>
     <script src="calidad.js"></script>
     <script src="produccion.js"></script>
     <!-- Placeholder del futuro Agente de IA (todavía no funcional): avatar animado, sin acción real -->

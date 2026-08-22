@@ -141,6 +141,16 @@ function doPost(e) {
       return respuestaOk();
     }
 
+    // ==================== ENVÍO DEL REPORTE CON PDF ADJUNTO ====================
+    // Lo usa correo.js como plan B cuando no puede mandar el mail desde el Gmail
+    // del usuario. NO vuelve a guardar el registro: solo manda el correo (con el
+    // PDF que arma el navegador) y deja constancia en la columna Estado_Correo.
+    if (accion === "enviar_correo_reporte") return enviarReportePorCorreo(data);
+
+    // El correo salió desde el Gmail del usuario: solo hay que anotar el estado.
+    if (accion === "actualizar_estado_correo") return actualizarEstadoCorreoDeCarga(data);
+    // ==========================================================================
+
     // accion === "guardar" (caso normal, registro nuevo de Control de Carga).
     // IMPORTANTE: solo si la acción es exactamente "guardar" — antes cualquier
     // acción desconocida caía acá y escribía filas vacías en la hoja "Orden".
@@ -297,6 +307,88 @@ function enviarCorreoReporte(data) {
                "Kg Cargados: " + (data.Kg_Cargados || "0") + "\n" +
                "Estatus: " + (data.ESTATUS || "-");
   MailApp.sendEmail(data.Correo, asunto, cuerpo);
+}
+
+// ============================================================================
+// ENVÍO DEL REPORTE DE CARGA CON EL PDF ADJUNTO
+// ----------------------------------------------------------------------------
+// El PDF NO se arma acá: lo genera el navegador con jsPDF (la misma función del
+// botón "Descargar PDF") y llega en data.Pdf_Base64. Así el adjunto es
+// exactamente el reporte que ya conocen los operarios, sin duplicar el diseño.
+//
+// Este envío sale desde la cuenta que autorizó el script, así que se completan
+// dos cosas para que el destinatario sepa quién lo mandó de verdad:
+//   - name    : el nombre del usuario logueado en la app
+//   - replyTo : su correo, para que "Responder" le llegue a él y no al script
+// (El envío desde el Gmail propio del usuario lo hace correo.js en el frontend;
+//  esta función es el plan B para cuando eso no se puede.)
+// ============================================================================
+function enviarReportePorCorreo(data) {
+  try {
+    if (!data.Correo) return respuestaErrorCorreo("Falta el correo del destinatario");
+
+    var asunto = data.Correo_Asunto || ("Control de Carga - " + (data.Id_Carga || ""));
+    var html = data.Correo_Cuerpo_Html || "";
+    var opciones = { name: data.Correo_Nombre_Remitente || "Control de Carga Braun" };
+
+    if (html) {
+      opciones.htmlBody = html;
+    }
+    if (data.Correo_Reply_To) opciones.replyTo = data.Correo_Reply_To;
+    if (data.Correo_Cc) opciones.cc = data.Correo_Cc;
+
+    if (data.Pdf_Base64) {
+      var b64 = String(data.Pdf_Base64);
+      if (b64.indexOf("data:") === 0) b64 = b64.substring(b64.indexOf(",") + 1);
+      var nombrePdf = data.Pdf_Nombre || ("Reporte_Carga_" + (data.Id_Carga || "Braun") + ".pdf");
+      opciones.attachments = [Utilities.newBlob(Utilities.base64Decode(b64), "application/pdf", nombrePdf)];
+    }
+
+    var cuerpoTexto = html
+      ? "Abrí este correo con un cliente que soporte HTML. El reporte completo va en el PDF adjunto."
+      : ("Reporte de control de carga " + (data.Id_Carga || "") + ". El detalle completo va en el PDF adjunto.");
+
+    MailApp.sendEmail(data.Correo, asunto, cuerpoTexto, opciones);
+
+    marcarEstadoCorreo(data.Id_Carga, data.Correo, data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)"));
+    return respuestaOk();
+
+  } catch (error) {
+    Logger.log("No se pudo enviar el reporte por correo: " + error);
+    return respuestaErrorCorreo(error.toString());
+  }
+}
+
+// El correo ya salió desde el Gmail del usuario: solo se deja constancia.
+function actualizarEstadoCorreoDeCarga(data) {
+  try {
+    var encontrado = marcarEstadoCorreo(data.Id_Carga, data.Correo, data.Estado_Correo);
+    if (!encontrado) return respuestaErrorCorreo("No se encontró el registro " + (data.Id_Carga || ""));
+    return respuestaOk();
+  } catch (error) {
+    Logger.log("No se pudo actualizar el estado del correo: " + error);
+    return respuestaErrorCorreo(error.toString());
+  }
+}
+
+// Escribe Correo (columna 35) y Estado_Correo (columna 36) de la hoja "Orden".
+function marcarEstadoCorreo(idCarga, correo, estado) {
+  if (!idCarga) return false;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_ORDEN);
+  var fila = buscarFilaPorId(sheet, idCarga);
+  if (fila === -1) return false;
+  if (correo) sheet.getRange(fila, 35).setValue(correo);
+  sheet.getRange(fila, 36).setValue(estado || "Enviado");
+  return true;
+}
+
+function fechaHoraCorreo() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+}
+
+function respuestaErrorCorreo(mensaje) {
+  return ContentService.createTextOutput(JSON.stringify({ status: "error", message: mensaje }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ========================================================

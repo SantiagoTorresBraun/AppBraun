@@ -1506,6 +1506,17 @@ h3 {
     box-shadow: 0 4px 12px rgba(25, 103, 210, 0.3);
 }
 
+.btn-accion.correo {
+    background: #2e7d32;
+    color: white;
+}
+
+.btn-accion.correo:hover {
+    background: #1b5e20;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+}
+
 .btn-accion.eliminar {
     background: #c62828;
     color: white;
@@ -2302,6 +2313,11 @@ h3 {
     align-items: center;
     gap: 8px;
     margin: 0;
+    /* La regla global de h3 pinta el texto de rojo y le agrega una línea abajo:
+       sobre la barra roja del modal el título quedaba invisible. */
+    color: #ffffff;
+    border-bottom: none;
+    padding-bottom: 0;
 }
 .gestor-close {
     width: 32px;
@@ -2503,7 +2519,10 @@ h3 {
     /* Acciones: iconos agrupados, centrados y con área táctil de 44x44 */
     #tabla-historial-body td.td-acciones {
         justify-content: center;
-        gap: 20px;
+        /* Con 5 acciones (editar, borrar, PDF, correo y compartir) el gap de 20px
+           no entraba en pantallas de 360px: se achica y se permite que envuelva. */
+        gap: 12px;
+        flex-wrap: wrap;
         padding: 10px 0 4px;
         margin-top: 8px;
         border-top: 1px solid var(--color-border);
@@ -3000,4 +3019,182 @@ h3 {
 
 @media (max-width: 640px) {
     .muestreo-acciones .btn-primary, .btn-whatsapp, .btn-eliminar-muestreo { flex: 1 1 100%; }
+}
+
+/* ============================================================================= */
+/* ENVÍO DEL REPORTE POR CORREO (modal + avisos) — ver correo.js                */
+/* ============================================================================= */
+.correo-content { max-width: 560px; }
+
+.correo-content .gestor-body { gap: 8px; }
+
+.correo-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 6px;
+}
+
+.correo-content input[type="email"],
+.correo-content input[type="text"],
+.correo-content textarea {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: var(--color-text-dark);
+    background: #fff;
+}
+.correo-content input:focus,
+.correo-content textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(183, 28, 28, 0.12);
+}
+.correo-content textarea { resize: vertical; line-height: 1.45; }
+
+/* Remitente real del correo */
+.correo-de-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--color-bg-light);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+.correo-etiqueta {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-top: 2px;
+    min-width: 52px;
+}
+.correo-de-valor { font-size: 0.9rem; font-weight: 600; color: var(--color-text-dark); word-break: break-all; }
+.correo-via { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 2px; }
+
+/* Destinatarios usados recientemente */
+.correo-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.correo-chips:empty { display: none; }
+.correo-chip {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.correo-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+.correo-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    line-height: 1.35;
+}
+.correo-check input { width: 17px; height: 17px; accent-color: var(--color-primary); flex-shrink: 0; margin-top: 1px; }
+.correo-auto-box {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 8px;
+    padding: 11px 12px;
+    margin-top: 10px;
+    color: var(--color-text-dark);
+}
+.correo-auto-box small { color: var(--color-text-muted); font-size: 0.76rem; }
+
+.correo-nota { font-size: 0.75rem; color: var(--color-text-muted); line-height: 1.4; }
+
+.correo-adjunto-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--color-bg-light);
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 6px;
+}
+.correo-adjunto {
+    font-size: 0.85rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    word-break: break-all;
+}
+.correo-adjunto i { margin-right: 5px; }
+
+/* Aviso del último envío de este registro */
+.correo-aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.82rem;
+    border-radius: 8px;
+    padding: 10px 12px;
+    line-height: 1.35;
+}
+.correo-aviso.enviado { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+.correo-aviso.error   { background: #ffebee; color: #b71c1c; border: 1px solid #ffcdd2; }
+
+/* Nota informativa dentro del formulario de carga */
+.nota-correo {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    background: var(--color-bg-light);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 4px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    line-height: 1.45;
+}
+
+/* AVISOS FLOTANTES (toast) DEL ENVÍO DE CORREO */
+#toast-correo-cont {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: min(380px, calc(100vw - 32px));
+}
+.toast-correo {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #323232;
+    color: #fff;
+    padding: 13px 16px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+    animation: toastEntra 0.28s ease-out;
+}
+.toast-correo.ok    { background: #2e7d32; }
+.toast-correo.error { background: #c62828; }
+.toast-correo i { margin-top: 2px; flex-shrink: 0; }
+.toast-correo.saliendo { opacity: 0; transform: translateY(10px); transition: all 0.35s ease-in; }
+@keyframes toastEntra {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+    #toast-correo-cont { right: 10px; left: 10px; bottom: 74px; max-width: none; }
+    .correo-content { width: 96vw; max-height: 92vh; }
 }

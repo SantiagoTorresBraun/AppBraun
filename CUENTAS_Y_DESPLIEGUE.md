@@ -140,7 +140,48 @@ definitivamente.
 
 ---
 
-## 7. Datos de referencia
+## 7. Que el reporte salga desde el Gmail de cada usuario (ID de cliente OAuth)
+
+El envío del reporte de Control de Carga ([correo.js](correo.js)) intenta mandar el mail **desde la
+cuenta del usuario que inició sesión en la app**: queda en *su* carpeta Enviados y las respuestas
+del cliente le llegan a *él*, no a la cuenta del script.
+
+Para eso hace falta **un ID de cliente OAuth**, que se crea una sola vez. **Mientras no esté
+configurado la app funciona igual**: manda todo por el backend, desde
+`santiago.torres@braunrelacionescomerciales.com.ar`, con el nombre del usuario y "Responder a"
+su correo.
+
+### Pasos (una sola vez, con la cuenta dueña del proyecto)
+
+1. Entrar a <https://console.cloud.google.com> con la cuenta Workspace y seleccionar el proyecto
+   de Cloud asociado al Apps Script `App_BRC`
+   (en Apps Script: **Configuración del proyecto → Proyecto de Google Cloud Platform**).
+2. **APIs y servicios → Biblioteca** → buscar **Gmail API** → **Habilitar**.
+3. **Pantalla de consentimiento de OAuth** → tipo de usuario: **Interno**.
+   Es clave: siendo *Interno* Google **no exige verificación** del permiso `gmail.send`,
+   que en apps externas sí la exige y tarda semanas.
+4. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web**:
+   - **Orígenes autorizados de JavaScript**: `https://santiagotorresbraun.github.io`
+     (agregar también `http://localhost:5500` si se prueba en local).
+   - No hace falta URI de redirección: se usa el flujo de token del navegador.
+5. Copiar el ID generado (termina en `.apps.googleusercontent.com`) y pegarlo en la primera
+   constante de [correo.js](correo.js):
+   ```js
+   const GMAIL_CLIENT_ID = "232148254903-qfa138v49uqnjuu32g9kkejmdjnu2ft2.apps.googleusercontent.com";
+   ```
+6. `git commit` + `git push` (punto 4). Listo.
+
+La primera vez que cada persona toque "Enviar reporte" va a ver **una ventana de Google pidiendo
+permiso para enviar correos en su nombre**. Después se renueva sola mientras tenga sesión de
+Google abierta en ese navegador.
+
+> **Si el permiso falla o el usuario lo cancela, el correo se manda igual por el backend.**
+> El único cambio es de quién figura como remitente. En la ventana de envío se aclara cuál de
+> los dos caminos se va a usar.
+
+---
+
+## 8. Datos de referencia
 
 | Qué | Valor |
 |---|---|
@@ -154,7 +195,7 @@ archivos `.gs` en [INVENTARIO_APPS_SCRIPT.md](INVENTARIO_APPS_SCRIPT.md).
 
 ---
 
-## 8. Errores que ya pasaron (para no repetirlos)
+## 9. Errores que ya pasaron (para no repetirlos)
 
 | Error | Qué provocó | Cómo se evita |
 |---|---|---|

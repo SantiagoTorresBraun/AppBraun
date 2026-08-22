@@ -1,0 +1,619 @@
+// =============================================================================
+// CORREO.JS — Envío del reporte de Control de Carga por correo electrónico
+// -----------------------------------------------------------------------------
+// QUÉ HACE
+//   Manda el PDF del control de carga por mail, con el cuerpo ya armado con los
+//   datos generales de la carga, en un solo clic desde la columna "Acciones"
+//   del historial (o automáticamente al guardar, si el usuario lo activa).
+//
+// DESDE QUÉ CUENTA SALE (importante)
+//   1) PRIMERO intenta enviarlo desde el Gmail del usuario que inició sesión en
+//      la app (API de Gmail, con permiso otorgado por el propio usuario). El mail
+//      queda en la carpeta "Enviados" de esa persona y las respuestas le llegan
+//      a ella. Para que esto funcione hay que completar GMAIL_CLIENT_ID (abajo).
+//   2) SI ESO NO SE PUEDE (sin ID configurado, sin permiso, sin sesión de Google
+//      o error de la API) lo manda igual por el backend de Apps Script, que sale
+//      desde la cuenta dueña del script pero con el NOMBRE del usuario y con
+//      "Responder a" apuntando a su correo. Nunca se queda sin enviar.
+//
+// El PDF se genera en el navegador con la MISMA función que el botón de descarga
+// (generarPDFReporte de app.js, en modo 'blob'), así el adjunto es idéntico al
+// que ya conocen los operarios.
+// =============================================================================
+
+// --- CONFIGURACIÓN OAUTH DE GMAIL -------------------------------------------
+// Pegar acá el "ID de cliente de OAuth 2.0" (tipo Aplicación web) del proyecto
+// de Google Cloud. Pasos en CUENTAS_Y_DESPLIEGUE.md, punto 7.
+// Mientras esté vacío, la app envía todo por el backend (opción 2 de arriba).
+const GMAIL_CLIENT_ID = "232148254903-qfa138v49uqnjuu32g9kkejmdjnu2ft2.apps.googleusercontent.com";
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+const GMAIL_DOMINIO = "braunrelacionescomerciales.com.ar";
+
+// Tope de tamaño del adjunto. Gmail rebota los mails de más de 25 MB.
+const CORREO_MAX_MB = 22;
+
+// --- PREFERENCIAS GUARDADAS EN EL DISPOSITIVO --------------------------------
+const CORREO_AUTO_KEY      = 'braun_correo_auto_v1';      // { "email@usuario": true }
+const CORREO_RECIENTES_KEY = 'braun_correo_recientes_v1'; // ["destinatario@...", ...]
+
+function correoAutoActivo() {
+    try {
+        const mapa = JSON.parse(localStorage.getItem(CORREO_AUTO_KEY) || '{}');
+        return mapa[usuarioRegistroActual()] === true;
+    } catch (e) { return false; }
+}
+
+function setCorreoAuto(valor) {
+    try {
+        const mapa = JSON.parse(localStorage.getItem(CORREO_AUTO_KEY) || '{}');
+        mapa[usuarioRegistroActual()] = !!valor;
+        localStorage.setItem(CORREO_AUTO_KEY, JSON.stringify(mapa));
+    } catch (e) { /* localStorage lleno o bloqueado: no es crítico */ }
+}
+
+function destinatariosRecientes() {
+    try {
+        const lista = JSON.parse(localStorage.getItem(CORREO_RECIENTES_KEY) || '[]');
+        return Array.isArray(lista) ? lista.slice(0, 6) : [];
+    } catch (e) { return []; }
+}
+
+function recordarDestinatario(email) {
+    if (!email) return;
+    const limpio = String(email).trim().toLowerCase();
+    const lista = destinatariosRecientes().filter(e => e !== limpio);
+    lista.unshift(limpio);
+    try { localStorage.setItem(CORREO_RECIENTES_KEY, JSON.stringify(lista.slice(0, 6))); } catch (e) {}
+}
+
+// --- AVISOS NO BLOQUEANTES (toast) -------------------------------------------
+// El resto de la app usa alert(), pero para el envío automático un cartel modal
+// obligaría al operario a tocar "Aceptar" en medio de la carga del camión.
+function avisoCorreo(texto, tipo) {
+    let cont = document.getElementById('toast-correo-cont');
+    if (!cont) {
+        cont = document.createElement('div');
+        cont.id = 'toast-correo-cont';
+        document.body.appendChild(cont);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast-correo ' + (tipo || 'info');
+    const icono = tipo === 'error' ? 'fa-triangle-exclamation'
+                : tipo === 'ok'    ? 'fa-circle-check'
+                : 'fa-paper-plane';
+    toast.innerHTML = '<i class="fas ' + icono + '"></i><span></span>';
+    toast.querySelector('span').textContent = texto; // el texto puede traer el error crudo de Gmail
+    cont.appendChild(toast);
+    setTimeout(function () {
+        toast.classList.add('saliendo');
+        setTimeout(function () { toast.remove(); }, 400);
+    }, tipo === 'error' ? 7000 : 4500);
+}
+
+// =============================================================================
+// 1. ESTADO DEL ENVÍO DE CADA REGISTRO (lo que pinta el ícono del historial)
+// =============================================================================
+function estadoCorreoDeItem(item) {
+    const estado = String((item && item.Estado_Correo) || '').toLowerCase();
+    if (estado.indexOf('enviado') === 0) return 'enviado';
+    if (estado.indexOf('error') !== -1 || estado.indexOf('rechaz') !== -1) return 'error';
+    return 'pendiente';
+}
+
+// Botón de sobre para la columna "Acciones" del historial.
+function botonCorreoHistorialHtml(item, dataString) {
+    const estado = estadoCorreoDeItem(item);
+    const limpio = function (t) { return String(t || '').replace(/["<>&]/g, ' '); };
+    const config = {
+        enviado:   { icono: 'fa-envelope-circle-check', color: '#2e7d32', titulo: limpio(item.Estado_Correo) || 'Reporte enviado' },
+        error:     { icono: 'fa-envelope-open-text',    color: '#c62828', titulo: limpio(item.Estado_Correo) || 'El último envío falló — tocá para reintentar' },
+        pendiente: { icono: 'fa-envelope',              color: '#5f6368', titulo: 'Enviar reporte por correo' }
+    }[estado];
+    return '<button class="btn-table-action btn-correo-' + estado + '" onclick="abrirModalCorreoDesdeTabla(\'' + dataString + '\')" title="' + config.titulo + '">'
+         +     '<i class="fas ' + config.icono + '" style="color:' + config.color + '; font-size:1.15rem; cursor:pointer;"></i>'
+         + '</button>';
+}
+
+// =============================================================================
+// 2. ARMADO DEL CORREO (asunto + cuerpo con los datos generales de la carga)
+// =============================================================================
+function resumenProductos(item) {
+    const productos = Array.isArray(item.Productos) ? item.Productos : [];
+    const nombres = [...new Set(productos.map(p => p.producto).filter(Boolean))];
+    return nombres.join(', ') || '-';
+}
+
+function resumenContratos(item) {
+    const contratos = Array.isArray(item.Contratos) ? item.Contratos : [];
+    const nombres = [...new Set(contratos.map(c => c.contrato_com).filter(Boolean))];
+    return nombres.join(', ') || '-';
+}
+
+function asuntoReporte(item) {
+    const referencia = resumenContratos(item) !== '-' ? resumenContratos(item) : resumenProductos(item);
+    return ['Control de Carga ' + (item.Tipo_Carga || ''), referencia, item.Fecha || '']
+        .map(p => String(p).trim())
+        .filter(Boolean)
+        .join(' — ');
+}
+
+// Mensaje por defecto que el usuario puede editar antes de enviar.
+function mensajeReportePorDefecto(item) {
+    return 'Buen día,\n\n'
+         + 'Te envío el reporte de control de carga correspondiente al ' + (item.Fecha || 'día de la fecha') + '.\n'
+         + 'El detalle completo, las verificaciones y el registro fotográfico están en el PDF adjunto.\n\n'
+         + 'Cualquier consulta quedo a disposición.\n\n'
+         + 'Saludos,\n' + (nombreUsuarioActual() || '');
+}
+
+// Cuerpo HTML institucional: el mensaje del usuario + una tabla con los datos
+// generales, para que el destinatario no dependa de abrir el PDF para lo básico.
+function cuerpoHtmlReporte(item, mensajeUsuario) {
+    const fila = function (etiqueta, valor) {
+        return '<tr><td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#777777;white-space:nowrap">' + etiqueta + '</td>'
+             + '<td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#333333"><b>' + (valor || '-') + '</b></td></tr>';
+    };
+
+    const estatus = item.ESTATUS || 'ACEPTADO';
+    const colorEstatus = String(estatus).toUpperCase() === 'RECHAZADO' ? '#c62828' : '#2e7d32';
+    const kg = (typeof fmtKg === 'function' ? fmtKg(item.Kg_Cargados) : (item.Kg_Cargados || '0')) + ' kg';
+    const mensajeHtml = String(mensajeUsuario || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/\n/g, '<br>');
+
+    return ''
+    + '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">'
+    +   '<div style="background:#a31e1e;color:#ffffff;padding:16px 22px;font-size:18px;font-weight:bold">Braun — Control de Transporte</div>'
+    +   '<div style="padding:20px 22px;color:#333333;font-size:14px;line-height:1.5">'
+    +     '<p style="margin-top:0">' + mensajeHtml + '</p>'
+    +     '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:18px">'
+    +       fila('Fecha', item.Fecha)
+    +       fila('Tipo de carga', item.Tipo_Carga)
+    +       fila('Producto/s', resumenProductos(item))
+    +       fila('Contrato/s comercial', resumenContratos(item))
+    +       fila('Chofer', item.Nombre_Chofer)
+    +       fila('Patente chasis', item.Patente_Chasis)
+    +       fila('Patente acoplado', item.Patente_Acoplado)
+    +       fila('Total Kg cargados', kg)
+    +       fila('Estatus', '<span style="background:' + colorEstatus + ';color:#ffffff;padding:2px 10px;border-radius:10px;font-size:12px">' + estatus + '</span>')
+    +       fila('Elaboró', item.Elaboro)
+    +       (item.Indicaciones_Descarga ? fila('Indicaciones de descarga', item.Indicaciones_Descarga) : '')
+    +       fila('N° de registro', item.Id_Carga)
+    +     '</table>'
+    +     '<p style="margin-top:18px;color:#555555">'
+    +       '<i>Se adjunta el reporte completo en PDF (verificaciones, firmas y el registro fotográfico del control).</i>'
+    +     '</p>'
+    +   '</div>'
+    +   '<div style="background:#fafafa;border-top:1px solid #eeeeee;padding:12px 22px;color:#999999;font-size:11px;text-align:center">'
+    +     'Correo generado automáticamente por la App Braun — Control de Carga'
+    +   '</div>'
+    + '</div>';
+}
+
+// =============================================================================
+// 3. GENERACIÓN DEL PDF ADJUNTO (reutiliza el generador del botón "Descargar")
+// =============================================================================
+async function generarAdjuntoPdf(item) {
+    const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(item))));
+    const resultado = await generarPDFReporte(dataString, 'blob');
+    if (!resultado || !resultado.doc) throw new Error('No se pudo generar el PDF del reporte.');
+
+    const dataUri = resultado.doc.output('datauristring');
+    const base64 = dataUri.substring(dataUri.indexOf(',') + 1);
+    const megas = (base64.length * 0.75) / (1024 * 1024);
+    if (megas > CORREO_MAX_MB) {
+        throw new Error('El PDF pesa ' + megas.toFixed(1) + ' MB y supera el límite de ' + CORREO_MAX_MB + ' MB que acepta Gmail. Descargalo y compartilo por otro medio.');
+    }
+    return { base64: base64, nombre: resultado.nombreArchivo, megas: megas };
+}
+
+// =============================================================================
+// 4. ENVÍO POR LA API DE GMAIL (sale desde la cuenta del usuario logueado)
+// =============================================================================
+let gmailToken = null;       // { valor, vence } — solo en memoria, nunca se persiste
+let gmailTokenClient = null;
+
+function gmailConfigurado() {
+    return !!GMAIL_CLIENT_ID
+        && typeof google !== 'undefined'
+        && !!google.accounts
+        && !!google.accounts.oauth2;
+}
+
+// Pide (o renueva) el permiso de envío. Con interactivo=false intenta en
+// silencio: si el usuario ya tiene sesión de Google y dio permiso antes, no ve
+// ninguna ventana.
+function obtenerTokenGmail(interactivo) {
+    return new Promise(function (resolve, reject) {
+        if (!gmailConfigurado()) return reject(new Error('Gmail no configurado en este dispositivo'));
+        if (gmailToken && gmailToken.vence > Date.now() + 60000) return resolve(gmailToken.valor);
+
+        if (!gmailTokenClient) {
+            gmailTokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GMAIL_CLIENT_ID,
+                scope: GMAIL_SCOPE,
+                hd: GMAIL_DOMINIO,
+                callback: function () {} // se reemplaza en cada pedido
+            });
+        }
+
+        gmailTokenClient.callback = function (respuesta) {
+            if (!respuesta || respuesta.error || !respuesta.access_token) {
+                return reject(new Error(respuesta && respuesta.error ? respuesta.error : 'Permiso de Gmail no otorgado'));
+            }
+            gmailToken = {
+                valor: respuesta.access_token,
+                vence: Date.now() + ((respuesta.expires_in || 3600) * 1000)
+            };
+            resolve(gmailToken.valor);
+        };
+        gmailTokenClient.error_callback = function (err) {
+            reject(new Error((err && err.type) || 'No se pudo abrir el permiso de Gmail'));
+        };
+
+        gmailTokenClient.requestAccessToken({
+            prompt: interactivo ? 'consent' : '',
+            login_hint: usuarioRegistroActual() || ''
+        });
+    });
+}
+
+// Base64 de un texto UTF-8 (mismo truco que usa el resto de la app).
+function b64Utf8(texto) {
+    return btoa(unescape(encodeURIComponent(texto)));
+}
+
+// Los encabezados MIME solo aceptan ASCII: los acentos van codificados
+// (RFC 2047). Cada "palabra codificada" no puede pasar de 75 caracteres, así que
+// el asunto se parte en varios trozos —cuidando de no cortar un carácter UTF-8
+// por la mitad— y se pliega con un salto de línea + espacio.
+function encabezadoMime(texto) {
+    const original = String(texto || '');
+    if (!/[^\x00-\x7F]/.test(original)) return original;
+
+    const bytes = unescape(encodeURIComponent(original)); // 1 caracter = 1 byte
+    const MAX_BYTES = 45; // 45 bytes -> 60 caracteres de base64 + 12 de envoltura
+    const partes = [];
+    let i = 0;
+    while (i < bytes.length) {
+        let fin = Math.min(i + MAX_BYTES, bytes.length);
+        // No cortar en medio de una secuencia UTF-8 (los bytes 0x80-0xBF son continuación)
+        while (fin > i && fin < bytes.length && bytes.charCodeAt(fin) >= 0x80 && bytes.charCodeAt(fin) < 0xC0) fin--;
+        partes.push('=?UTF-8?B?' + btoa(bytes.substring(i, fin)) + '?=');
+        i = fin;
+    }
+    return partes.join('\r\n ');
+}
+
+// Base64 cortado en líneas de 76 caracteres, como pide el estándar MIME.
+function base64EnLineas(base64) {
+    return (base64.match(/.{1,76}/g) || []).join('\r\n');
+}
+
+function armarMensajeMime(datos) {
+    const limite = '----braun_' + String(datos.idCarga || 'reporte').replace(/[^A-Za-z0-9]/g, '');
+    // Sin encabezado "From": lo completa Gmail con la cuenta que autorizó el
+    // envío. Ponerlo a mano es riesgoso — si el usuario elige en la ventana de
+    // Google una cuenta distinta a la de la app, Gmail rechaza el mensaje.
+    const lineas = [
+        'To: ' + datos.para
+    ];
+    if (datos.cc) lineas.push('Cc: ' + datos.cc);
+    lineas.push(
+        'Subject: ' + encabezadoMime(datos.asunto),
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/mixed; boundary="' + limite + '"',
+        '',
+        '--' + limite,
+        'Content-Type: text/html; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        base64EnLineas(b64Utf8(datos.html)),
+        '--' + limite,
+        'Content-Type: application/pdf; name="' + datos.nombreAdjunto + '"',
+        'Content-Disposition: attachment; filename="' + datos.nombreAdjunto + '"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        base64EnLineas(datos.pdfBase64),
+        '--' + limite + '--',
+        ''
+    );
+    return lineas.join('\r\n');
+}
+
+async function enviarConGmail(datos) {
+    // Primero en silencio; si Google pide interacción, se abre la ventana de permiso.
+    let token;
+    try {
+        token = await obtenerTokenGmail(false);
+    } catch (e) {
+        token = await obtenerTokenGmail(true);
+    }
+
+    const mime = armarMensajeMime(datos);
+    // Endpoint de subida (uploadType=media): admite hasta 35 MB de mensaje;
+    // el endpoint común se queda corto apenas el PDF trae las fotos.
+    const respuesta = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
+        body: mime
+    });
+
+    if (!respuesta.ok) {
+        let detalle = '';
+        try { const j = await respuesta.json(); detalle = (j.error && j.error.message) || ''; } catch (e) {}
+        if (respuesta.status === 401 || respuesta.status === 403) gmailToken = null; // token vencido o revocado
+        throw new Error(('Gmail rechazó el envío (' + respuesta.status + ') ' + detalle).trim());
+    }
+    return true;
+}
+
+// =============================================================================
+// 5. ENVÍO POR EL BACKEND (plan B: sale desde la cuenta del script)
+// =============================================================================
+function enviarConBackend(datos) {
+    return enviarAlBackend({
+        _accion: 'enviar_correo_reporte',
+        Id_Carga: datos.idCarga,
+        Correo: datos.para,
+        Correo_Cc: datos.cc || '',
+        Correo_Asunto: datos.asunto,
+        Correo_Cuerpo_Html: datos.html,
+        Correo_Nombre_Remitente: datos.deNombre + ' (App Braun)',
+        Correo_Reply_To: datos.deEmail,
+        Pdf_Base64: datos.pdfBase64,
+        Pdf_Nombre: datos.nombreAdjunto,
+        Estado_Correo: datos.estado,
+        usuario_registro: datos.deEmail
+    });
+}
+
+// =============================================================================
+// 6. ORQUESTADOR: intenta Gmail y, si no puede, cae al backend
+// =============================================================================
+async function enviarReporteDeCarga(item, opciones) {
+    opciones = opciones || {};
+    const para = String(opciones.para || item.Correo || '').trim();
+    if (!para || para.indexOf('@') === -1) throw new Error('Falta un correo de destino válido.');
+    if (!navigator.onLine) throw new Error('No hay conexión a internet. El reporte no se puede enviar en este momento.');
+
+    const adjunto = await generarAdjuntoPdf(item);
+    const mensaje = opciones.mensaje || mensajeReportePorDefecto(item);
+    const datos = {
+        idCarga: item.Id_Carga || '',
+        para: para,
+        cc: String(opciones.cc || '').trim(),
+        asunto: opciones.asunto || asuntoReporte(item),
+        html: cuerpoHtmlReporte(item, mensaje),
+        pdfBase64: adjunto.base64,
+        nombreAdjunto: adjunto.nombre,
+        deEmail: usuarioRegistroActual(),
+        deNombre: nombreUsuarioActual() || 'Control de Carga Braun'
+    };
+
+    // El texto del estado se arma ANTES de enviar y viaja también al backend,
+    // para que la planilla y la pantalla digan exactamente lo mismo.
+    let via = 'gmail';
+    let estado = 'Enviado ' + fechaHoraCorta() + ' a ' + para;
+    datos.estado = estado + ' (vía app)';
+
+    if (gmailConfigurado()) {
+        try {
+            await enviarConGmail(datos);
+        } catch (errorGmail) {
+            console.warn('No se pudo enviar desde el Gmail del usuario, se usa el backend:', errorGmail);
+            via = 'backend';
+        }
+    } else {
+        via = 'backend';
+    }
+
+    if (via === 'backend') {
+        const respuesta = await enviarConBackend(datos);
+        estado = datos.estado + (respuesta && respuesta.sinConfirmar ? ' (sin confirmar)' : '');
+    }
+
+    recordarDestinatario(para);
+    await registrarEstadoCorreo(item, para, estado, via);
+    return { via: via, estado: estado, megas: adjunto.megas };
+}
+
+function fechaHoraCorta() {
+    const d = new Date();
+    const dos = function (n) { return String(n).padStart(2, '0'); };
+    return dos(d.getDate()) + '/' + dos(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + dos(d.getHours()) + ':' + dos(d.getMinutes());
+}
+
+// Deja constancia del envío: en la planilla, en la lista en memoria y en la cola
+// local (si el registro todavía no se sincronizó), y repinta el historial.
+async function registrarEstadoCorreo(item, correo, estado, via) {
+    item.Correo = correo;
+    item.Estado_Correo = estado;
+
+    // El envío por backend ya actualiza la planilla del lado del servidor.
+    if (via !== 'backend' && !item._pendienteSync) {
+        try {
+            await enviarAlBackend({
+                _accion: 'actualizar_estado_correo',
+                Id_Carga: item.Id_Carga,
+                Correo: correo,
+                Estado_Correo: estado
+            });
+        } catch (e) {
+            console.warn('El correo salió, pero no se pudo dejar constancia en la planilla:', e);
+        }
+    }
+
+    if (Array.isArray(historialGeneral)) {
+        const enMemoria = historialGeneral.find(r => r.Id_Carga === item.Id_Carga);
+        if (enMemoria) { enMemoria.Correo = correo; enMemoria.Estado_Correo = estado; }
+    }
+    actualizarEstadoCorreoEnColaLocal(item.Id_Carga, correo, estado);
+
+    if (typeof sincronizarEstadoCorreoFormulario === 'function') sincronizarEstadoCorreoFormulario(item.Id_Carga, correo, estado);
+    if (typeof filtrarYRenderizarTabla === 'function') filtrarYRenderizarTabla();
+}
+
+function actualizarEstadoCorreoEnColaLocal(idCarga, correo, estado) {
+    if (!db || !idCarga) return;
+    try {
+        const store = db.transaction(['controles_carga'], 'readwrite').objectStore('controles_carga');
+        store.openCursor().onsuccess = function (e) {
+            const cursor = e.target.result;
+            if (!cursor) return;
+            if (cursor.value.Id_Carga === idCarga) {
+                cursor.update(Object.assign({}, cursor.value, { Correo: correo, Estado_Correo: estado }));
+            }
+            cursor.continue();
+        };
+    } catch (e) { console.warn('No se pudo actualizar el estado del correo en la cola local:', e); }
+}
+
+// =============================================================================
+// 7. MODAL DE ENVÍO (un clic desde el historial → revisar → enviar)
+// =============================================================================
+let registroCorreoActual = null;
+
+function abrirModalCorreoDesdeTabla(dataString) {
+    try {
+        const item = JSON.parse(decodeURIComponent(escape(atob(dataString))));
+        abrirModalCorreo(item);
+    } catch (e) {
+        console.error('No se pudo leer el registro para enviarlo por correo:', e);
+        alert('No se pudo abrir el envío por correo de este registro.');
+    }
+}
+
+function abrirModalCorreo(item) {
+    if (!item) return;
+    if (!usuarioRegistroActual()) { alert('Iniciá sesión para poder enviar el reporte por correo.'); return; }
+
+    registroCorreoActual = item;
+
+    document.getElementById('correo-de').textContent = nombreUsuarioActual() + ' <' + usuarioRegistroActual() + '>';
+    document.getElementById('correo-para').value = item.Correo || '';
+    document.getElementById('correo-cc').value = '';
+    document.getElementById('correo-copia-mia').checked = false;
+    document.getElementById('correo-asunto').value = asuntoReporte(item);
+    document.getElementById('correo-mensaje').value = mensajeReportePorDefecto(item);
+    document.getElementById('correo-auto').checked = correoAutoActivo();
+    document.getElementById('correo-adjunto').innerHTML =
+        '<i class="fas fa-file-pdf"></i> Reporte_Carga_' + (item.Tipo_Carga || '') + '_' + (item.Id_Carga || 'Braun') + '.pdf';
+    document.getElementById('correo-via').textContent = gmailConfigurado()
+        ? 'El correo sale desde tu Gmail y queda en tu carpeta Enviados.'
+        : 'El correo sale desde la app, con tu nombre y "Responder a" tu correo.';
+
+    // Estado del último envío de este registro
+    const aviso = document.getElementById('correo-ultimo-envio');
+    const estado = estadoCorreoDeItem(item);
+    const detalle = String(item.Estado_Correo || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (estado === 'enviado') {
+        aviso.className = 'correo-aviso enviado';
+        aviso.innerHTML = '<i class="fas fa-circle-check"></i> Este reporte ya se envió: ' + detalle;
+    } else if (estado === 'error') {
+        aviso.className = 'correo-aviso error';
+        aviso.innerHTML = '<i class="fas fa-triangle-exclamation"></i> El último intento falló: ' + detalle;
+    } else {
+        aviso.className = 'correo-aviso hidden';
+    }
+
+    // Accesos rápidos a los últimos destinatarios usados
+    const chips = document.getElementById('correo-chips');
+    const recientes = destinatariosRecientes();
+    chips.innerHTML = recientes.length
+        ? recientes.map(function (e) {
+            return '<button type="button" class="correo-chip" onclick="usarDestinatario(\'' + e + '\')">' + e + '</button>';
+          }).join('')
+        : '';
+
+    document.getElementById('modal-envio-correo').classList.add('active');
+}
+
+function usarDestinatario(email) {
+    document.getElementById('correo-para').value = email;
+}
+
+function cerrarModalCorreo() {
+    document.getElementById('modal-envio-correo').classList.remove('active');
+    registroCorreoActual = null;
+}
+
+async function confirmarEnvioCorreo() {
+    if (!registroCorreoActual) return;
+
+    const para = document.getElementById('correo-para').value.trim();
+    if (!para || para.indexOf('@') === -1) { alert('Ingresá un correo de destino válido.'); return; }
+
+    let cc = document.getElementById('correo-cc').value.trim();
+    if (document.getElementById('correo-copia-mia').checked) {
+        const yo = usuarioRegistroActual();
+        cc = cc ? cc + ', ' + yo : yo;
+    }
+
+    setCorreoAuto(document.getElementById('correo-auto').checked);
+
+    const boton = document.getElementById('btn-confirmar-correo');
+    const textoOriginal = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando PDF y enviando...';
+
+    const item = registroCorreoActual;
+    try {
+        const resultado = await enviarReporteDeCarga(item, {
+            para: para,
+            cc: cc,
+            asunto: document.getElementById('correo-asunto').value.trim(),
+            mensaje: document.getElementById('correo-mensaje').value
+        });
+        cerrarModalCorreo();
+        avisoCorreo(resultado.via === 'gmail'
+            ? 'Reporte enviado a ' + para + ' desde tu Gmail.'
+            : 'Reporte enviado a ' + para + '.', 'ok');
+    } catch (error) {
+        console.error('Error al enviar el reporte por correo:', error);
+        marcarErrorCorreo(item, para, error);
+        avisoCorreo('No se pudo enviar el reporte: ' + (error.message || 'error desconocido'), 'error');
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = textoOriginal;
+    }
+}
+
+function marcarErrorCorreo(item, para, error) {
+    const estado = ('Error ' + fechaHoraCorta() + ': ' + ((error && error.message) || 'no se pudo enviar')).substring(0, 180);
+    item.Estado_Correo = estado;
+    if (Array.isArray(historialGeneral)) {
+        const enMemoria = historialGeneral.find(r => r.Id_Carga === item.Id_Carga);
+        if (enMemoria) enMemoria.Estado_Correo = estado;
+    }
+    actualizarEstadoCorreoEnColaLocal(item.Id_Carga, item.Correo || para, estado);
+    if (typeof sincronizarEstadoCorreoFormulario === 'function') sincronizarEstadoCorreoFormulario(item.Id_Carga, item.Correo || para, estado);
+    if (typeof filtrarYRenderizarTabla === 'function') filtrarYRenderizarTabla();
+}
+
+// =============================================================================
+// 8. ENVÍO AUTOMÁTICO AL GUARDAR (opcional, lo activa cada usuario)
+// =============================================================================
+// Se dispara solo con registros NUEVOS que ya traen destinatario cargado.
+// Nunca reenvía un reporte que ya salió.
+function intentarEnvioAutomatico(registro) {
+    if (!correoAutoActivo()) return;
+    if (!registro || !registro.Correo || registro.Correo.indexOf('@') === -1) return;
+    if (estadoCorreoDeItem(registro) === 'enviado') return;
+    if (!navigator.onLine) {
+        avisoCorreo('Sin conexión: el reporte no se envió por correo. Mandalo desde el historial cuando vuelva la señal.', 'error');
+        return;
+    }
+
+    avisoCorreo('Enviando el reporte a ' + registro.Correo + '...', 'info');
+    enviarReporteDeCarga(registro, {})
+        .then(function (res) {
+            avisoCorreo('Reporte enviado a ' + registro.Correo + (res.via === 'gmail' ? ' desde tu Gmail' : '') + '.', 'ok');
+        })
+        .catch(function (err) {
+            console.error('Envío automático fallido:', err);
+            marcarErrorCorreo(registro, registro.Correo, err);
+            avisoCorreo('El control se guardó, pero el correo no salió: ' + (err.message || '') + ' Reintentá desde el historial.', 'error');
+        });
+}
