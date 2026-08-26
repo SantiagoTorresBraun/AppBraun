@@ -88,6 +88,9 @@ del Drive y la cuenta que autorizó el Apps Script.
 | **Tickets** | Ticketera compartida (creación, reasignación, respuestas, cierre) | `crearTicket()` | `HOJA_TICKETS` |
 | **Usuarios** | Usuarios "extra" agregados desde la app | `agregarUsuario()` | `HOJA_USUARIOS` |
 
+> **El detalle campo por campo de cada hoja está en [ESTRUCTURA_SHEET.md](ESTRUCTURA_SHEET.md)**:
+> qué es cada encabezado, cómo se llama ese dato dentro de la app y cómo se cruzan las hojas.
+
 Las hojas **Tickets** y **Usuarios** se **crean solas** si no existen (`ss.insertSheet(...)`).
 Las demás **deben existir con ese nombre exacto**, si no el guardado falla.
 

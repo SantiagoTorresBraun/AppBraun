@@ -66,16 +66,37 @@ let agenteOcupado = false;
 //    ve el usuario en las pantallas.
 // =========================================================================
 
-function agenteArray(nombreVariable) {
+// Devuelve el historial que ya tiene cargado cada módulo.
+//
+// OJO CON ESTO: los historiales se declaran con `let` (app.js, calidad.js,
+// produccion.js). Las variables `let`/`const` del nivel superior de un script
+// NO se cuelgan de `window` — solo lo hacen `var` y las funciones. Leerlas como
+// window["historialGeneral"] devolvía undefined SIEMPRE, así que el agente veía
+// cero filas en todos los datasets y contestaba "0 de 0 registros" o "no tengo
+// columna de fecha".
+//
+// Hay que nombrarlas directo: los scripts clásicos comparten el mismo ámbito
+// léxico global, así que agente.js (que carga último) las ve sin problema.
+// El typeof + try/catch cubre que un módulo no esté cargado todavía.
+function agenteHistorial(cual) {
     try {
-        const v = window[nombreVariable];
+        let v;
+        switch (cual) {
+            case "cargas":    v = (typeof historialGeneral   !== "undefined") ? historialGeneral   : null; break;
+            case "calidad":   v = (typeof historialCalidad   !== "undefined") ? historialCalidad   : null; break;
+            case "tickets":   v = (typeof historialTickets   !== "undefined") ? historialTickets   : null; break;
+            case "muestreos": v = (typeof historialMuestreos !== "undefined") ? historialMuestreos : null; break;
+            default: v = null;
+        }
         return Array.isArray(v) ? v : [];
-    } catch (e) { return []; }
+    } catch (e) {
+        return []; // el módulo todavía no se ejecutó (zona muerta temporal)
+    }
 }
 
 // --- Controles de carga: una fila por camión, con los totales ya calculados ---
 function agenteFilasCargas() {
-    return agenteArray("historialGeneral").map(function (r) {
+    return agenteHistorial("cargas").map(function (r) {
         const productos = Array.isArray(r.Productos) ? r.Productos : [];
         const contratos = Array.isArray(r.Contratos) ? r.Contratos : [];
         const sum = function (lista, campo) {
@@ -127,7 +148,7 @@ function agenteFilasCargas() {
 // --- Productos: una fila por producto cargado (hoja "Producto" desanidada) ---
 function agenteFilasProductos() {
     const salida = [];
-    agenteArray("historialGeneral").forEach(function (r) {
+    agenteHistorial("cargas").forEach(function (r) {
         (Array.isArray(r.Productos) ? r.Productos : []).forEach(function (p) {
             salida.push({
                 Id_Carga: r.Id_Carga,
@@ -153,7 +174,7 @@ function agenteFilasProductos() {
 // --- Contratos: una fila por contrato / carta de porte ---
 function agenteFilasContratos() {
     const salida = [];
-    agenteArray("historialGeneral").forEach(function (r) {
+    agenteHistorial("cargas").forEach(function (r) {
         (Array.isArray(r.Contratos) ? r.Contratos : []).forEach(function (c) {
             const kgCp = agenteANumero(c.kg_cp) || 0;
             const kgDesc = agenteANumero(c.kg_descarga) || 0;
@@ -177,7 +198,7 @@ function agenteFilasContratos() {
 
 // --- Control de Calidad: las columnas salen tal cual del Sheet ---
 function agenteFilasCalidad() {
-    return agenteArray("historialCalidad").map(function (r) {
+    return agenteHistorial("calidad").map(function (r) {
         const o = {};
         Object.keys(r).forEach(function (k) {
             if (agenteColumnaVisible(k)) o[k] = r[k];
@@ -188,7 +209,7 @@ function agenteFilasCalidad() {
 
 // --- Ticketera ---
 function agenteFilasTickets() {
-    return agenteArray("historialTickets").map(function (r) {
+    return agenteHistorial("tickets").map(function (r) {
         const o = {};
         Object.keys(r).forEach(function (k) {
             if (agenteColumnaVisible(k)) o[k] = r[k];
@@ -199,7 +220,7 @@ function agenteFilasTickets() {
 
 // --- Producción / muestreos a campo (cabecera) ---
 function agenteFilasMuestreos() {
-    return agenteArray("historialMuestreos").map(function (r) {
+    return agenteHistorial("muestreos").map(function (r) {
         const puntos = Array.isArray(r.Puntos) ? r.Puntos : [];
         return {
             Id_Muestreo: r.Id_Muestreo,
@@ -222,7 +243,7 @@ function agenteFilasMuestreos() {
 // --- Producción / puntos de muestreo (desanidado) ---
 function agenteFilasPuntosMuestreo() {
     const salida = [];
-    agenteArray("historialMuestreos").forEach(function (r) {
+    agenteHistorial("muestreos").forEach(function (r) {
         (Array.isArray(r.Puntos) ? r.Puntos : []).forEach(function (p) {
             salida.push({
                 Id_Punto: p.Id_Punto,
@@ -251,7 +272,7 @@ function agenteFilasPuntosMuestreo() {
 
 const AGENTE_DATASETS = {
     cargas: {
-        detalle: 'Controles de carga de camiones (hoja "Orden"). Una fila por camión controlado: chofer, patentes, checklist de higiene, ESTATUS (ACEPTADO / OBSERVADO / RECHAZADO), kilos y totales de sus productos y contratos.',
+        detalle: 'Controles de carga de camiones. Una fila por camión controlado: fecha, chofer, patentes, checklist de higiene, ESTATUS (ACEPTADO / OBSERVADO / RECHAZADO), kilos y totales de sus productos y contratos.',
         // Columnas que concatenan los valores de las filas hijas ("Garbanzo | Lenteja").
         // Sirven para BUSCAR con "contiene", pero agrupar por ellas da categorías
         // combinadas sin sentido: preguntando "kilos por producto" el planificador
@@ -267,27 +288,27 @@ const AGENTE_DATASETS = {
         filas: agenteFilasCargas
     },
     productos: {
-        detalle: 'Productos cargados (hoja "Producto"). Una fila por producto dentro de una carga: producto, calibre, lote, envase, cantidad y kilos. Se une con "cargas" por Id_Carga.',
+        detalle: 'Productos cargados. Una fila por producto dentro de una carga: producto, calibre, lote, envase, cantidad y kilos. YA INCLUYE la Fecha, el ESTATUS y el chofer de la carga a la que pertenece, así que para "cuántos kg de tal producto en tal mes" se resuelve todo acá, sin cruzar con otro dataset.',
         filas: agenteFilasProductos
     },
     contratos: {
-        detalle: 'Contratos y cartas de porte (hoja "Contrato Comercial"). Una fila por contrato dentro de una carga: contrato comercial, contrato cliente, carta de porte, destino, kilos de CP y de descarga, y la diferencia. Se une con "cargas" por Id_Carga.',
+        detalle: 'Contratos y cartas de porte. Una fila por contrato dentro de una carga: contrato comercial, contrato cliente, carta de porte, destino, kilos de carta de porte y de descarga, y la diferencia. YA INCLUYE la Fecha y el ESTATUS de la carga a la que pertenece, así que se puede filtrar por fecha directamente acá.',
         filas: agenteFilasContratos
     },
     calidad: {
-        detalle: 'Controles de calidad de granos (hojas "Control Calidad Garbanzo" y "Control de Calidad Mung"). Una fila por análisis, con calibres, defectos, humedad y totales en porcentaje. La columna "Grano" indica GARBANZO o POROTO_MUNG.',
+        detalle: 'Controles de calidad de granos. Una fila por análisis, con calibres, defectos, humedad y totales en porcentaje. La columna "Grano" indica GARBANZO o POROTO_MUNG. Es independiente de las cargas: no se cruza con ellas.',
         filas: agenteFilasCalidad
     },
     tickets: {
-        detalle: 'Ticketera de soporte interno (hoja "Tickets"): solicitante, responsable asignado, prioridad, estado del ticket, detalle y respuesta.',
+        detalle: 'Ticketera de soporte interno: solicitante, responsable asignado, prioridad, estado del ticket, detalle y respuesta.',
         filas: agenteFilasTickets
     },
     muestreos: {
-        detalle: 'Muestreos a campo (hoja "Muestreo"). Una fila por muestreo: establecimiento, lote, campaña, cultivo, variedad y responsable.',
+        detalle: 'Muestreos a campo. Una fila por muestreo: establecimiento, lote, campaña, cultivo, variedad y responsable.',
         filas: agenteFilasMuestreos
     },
     puntos_muestreo: {
-        detalle: 'Puntos relevados dentro de cada muestreo (hoja "Muestreo_Puntos"): coordenadas, estado fenológico, tipo de observación, objetivo, severidad, incidencia y conteos. Se une con "muestreos" por Id_Muestreo.',
+        detalle: 'Puntos relevados dentro de cada muestreo: coordenadas, estado fenológico, tipo de observación, objetivo, severidad, incidencia y conteos. YA INCLUYE la fecha, el establecimiento y el lote del muestreo al que pertenece.',
         filas: agenteFilasPuntosMuestreo
     }
 };
@@ -301,6 +322,25 @@ const AGENTE_DATASETS = {
 function agenteTexto(v) {
     if (v === null || v === undefined) return "";
     return String(v).trim();
+}
+
+// Marcas de acento que deja NFD al separarlas de su letra. Se arma con new RegExp
+// y escapes \u para que el archivo no dependa de cómo se guarde el encoding.
+const SIN_ACENTOS = new RegExp("[\\u0300-\\u036f]", "g");
+
+// Clave para comparar y agrupar textos que son EL MISMO valor escrito distinto.
+// En el Sheet conviven "8 mm" y "8mm", "3,5mm" y "3.5mm", "PLANTA" y "Planta".
+// Sin esto, preguntar por "garbanzo 7mm" no encontraba las filas cargadas como
+// "7 mm", y un total por calibre salía partido en dos renglones.
+//
+// Solo normaliza espacios, mayúsculas, acentos y la coma decimal: NO intenta
+// adivinar que "Taborda Lucas" y "Lucas Taborda" son la misma persona.
+function agenteClaveTexto(v) {
+    return agenteTexto(v)
+        .toLowerCase()
+        .normalize("NFD").replace(SIN_ACENTOS, "") // MONZON con y sin tilde son lo mismo
+        .replace(/,/g, ".")
+        .replace(/\s+/g, "");
 }
 
 function agenteANumero(v) {
@@ -479,8 +519,10 @@ function agenteComparar(celda, valorFiltro, op) {
     const textoCelda = agenteTexto(celda).toLowerCase();
     const textoFiltro = agenteTexto(valorFiltro).toLowerCase();
     switch (op) {
-        case "=":  return textoCelda === textoFiltro;
-        case "!=": return textoCelda !== textoFiltro;
+        // La igualdad usa la clave normalizada: preguntar por "7mm" tiene que
+        // encontrar también las filas cargadas como "7 mm".
+        case "=":  return agenteClaveTexto(celda) === agenteClaveTexto(valorFiltro);
+        case "!=": return agenteClaveTexto(celda) !== agenteClaveTexto(valorFiltro);
         case ">":  return textoCelda > textoFiltro;
         case "<":  return textoCelda < textoFiltro;
         case ">=": return textoCelda >= textoFiltro;
@@ -599,9 +641,26 @@ function agenteEjecutarPlan(plan) {
         if (grupos.length) {
             filas.forEach(function (fila) {
                 const valores = grupos.map(function (g) { return agenteTexto(fila[g]) || "(sin dato)"; });
-                const clave = JSON.stringify(valores);
-                if (!mapa.has(clave)) mapa.set(clave, { valores: valores, filas: [] });
-                mapa.get(clave).filas.push(fila);
+                // Se agrupa por la clave normalizada, así "8 mm" y "8mm" caen en
+                // el mismo renglón en vez de partir el total en dos.
+                const clave = JSON.stringify(valores.map(agenteClaveTexto));
+                if (!mapa.has(clave)) mapa.set(clave, { valores: valores, filas: [], escrituras: {} });
+                const g = mapa.get(clave);
+                g.filas.push(fila);
+                // Se cuenta cada forma de escribirlo para mostrar despues la mas
+                // usada. Va como JSON y no como join de un separador porque los
+                // valores tienen espacios ("8 mm", "Nahuel Castellano") y cualquier
+                // separador de texto podria aparecer dentro del propio valor.
+                const etiqueta = JSON.stringify(valores);
+                g.escrituras[etiqueta] = (g.escrituras[etiqueta] || 0) + 1;
+            });
+            // El renglón se rotula con la escritura más frecuente del grupo.
+            mapa.forEach(function (g) {
+                let mejor = null, max = -1;
+                Object.keys(g.escrituras).forEach(function (e) {
+                    if (g.escrituras[e] > max) { max = g.escrituras[e]; mejor = e; }
+                });
+                if (mejor !== null) { try { g.valores = JSON.parse(mejor); } catch (e) { } }
             });
         } else {
             mapa.set("__total__", { valores: [], filas: filas });
@@ -741,7 +800,7 @@ function agentePromptPlanificador(esquema) {
 function agentePromptRedactor() {
     return [
         "Asistente de App Braun. Te paso la pregunta del usuario y el RESULTADO REAL de",
-        "consultar el Google Sheet de la empresa.",
+        "consultar los registros cargados en la app.",
         "",
         "- Contestá en castellano rioplatense, claro y directo, en pocas frases.",
         "- Usá SOLO los números del resultado. Prohibido inventar o estimar.",
@@ -749,6 +808,9 @@ function agentePromptRedactor() {
         "- Si vino vacío, decilo y sugerí cómo reformular.",
         "- Si está recortado, aclará que se muestran los primeros.",
         "- No repitas la tabla: la app ya la muestra abajo.",
+        "- Nunca menciones Google Sheet, hojas, datasets ni nombres tecnicos de",
+        "  columnas: para el usuario son los registros de la app. Hablá de cargas,",
+        "  productos, contratos, controles de calidad, muestreos y tickets.",
         "- Texto plano: nada de markdown, asteriscos, tablas ni bloques de código.",
         "  Si enumerás, usá guiones al principio de la línea.",
         "- Números en formato argentino: coma decimal y punto de miles (12,5 / 28.500)."
@@ -805,7 +867,7 @@ function agenteResponder(pregunta) {
             { role: "user", content:
                 "PREGUNTA DEL USUARIO:\n" + pregunta +
                 "\n\nQUÉ SE CONSULTÓ:\n" + (plan.explicacion || plan.dataset) +
-                "\n\nRESULTADO (JSON real del Sheet):\n" + resumen
+                "\n\nRESULTADO (datos reales de la app):\n" + resumen
             }
         ];
 
@@ -830,7 +892,7 @@ function abrirAgenteIA() {
         if (cuerpo && !cuerpo.children.length) {
             agentePintarMensaje("assistant",
                 "¡Hola! Soy el asistente de App Braun.\n\n" +
-                "Puedo responderte sobre todo lo que hay en el Google Sheet: controles de carga, " +
+                "Puedo responderte sobre todo lo que se cargo en la app: controles de carga, " +
                 "productos, contratos, control de calidad, muestreos a campo y tickets.\n\n" +
                 "Probá con alguna de estas:");
             agentePintarSugerencias([
@@ -981,7 +1043,7 @@ function agenteEnviar() {
     const boton = document.getElementById("agente-enviar");
     if (boton) boton.disabled = true;
 
-    const pensando = agentePintarMensaje("assistant", "Consultando el Sheet…", "agente-pensando");
+    const pensando = agentePintarMensaje("assistant", "Buscando en los registros…", "agente-pensando");
 
     agenteResponder(pregunta)
         .then(function (r) {
