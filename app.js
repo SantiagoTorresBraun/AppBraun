@@ -929,11 +929,11 @@ function cerrarSesion() {
     cambiarVista('view-login');
 }
 
-// Botón flotante con el avatar del futuro Agente de IA: todavía no hace nada,
-// solo avisa que está en camino (reemplaza el acceso directo a la Ticketera,
-// que ya tiene su propia tarjeta en el menú y su botón en el header).
+// El botón flotante del Agente de IA ahora abre el chat real (agente.js).
+// Se conserva este nombre por compatibilidad con versiones cacheadas del HTML.
 function mostrarProximamenteAgenteIA() {
-    alert("🤖 Muy pronto vas a poder charlar acá con tu Agente de IA.\n\n¡Ya estamos trabajando en eso!");
+    if (typeof abrirAgenteIA === "function") { abrirAgenteIA(); return; }
+    alert("🤖 El Agente de IA todavía no está disponible en esta versión.");
 }
 
 // --- 5. CONTROL DE CONEXIÓN ---

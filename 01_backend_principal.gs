@@ -118,6 +118,9 @@ function doPost(e) {
     // ==================== NUEVO: USUARIOS ======================
     if (accion === "agregar_usuario")  return agregarUsuario(data);
     if (accion === "eliminar_usuario") return eliminarUsuario(data);
+    // ==================== NUEVO: AGENTE DE IA ====================
+    // El puente hacia Groq vive en 02_agente_ia.gs (ahí está la clave).
+    if (accion === "agente_consulta") return consultarAgenteIA(data);
     // ==================== NUEVO: PRODUCCIÓN (muestreo a campo) ====================
     if (accion === "guardar_muestreo")    return guardarMuestreo(data);
     if (accion === "actualizar_muestreo") return actualizarMuestreo(data);

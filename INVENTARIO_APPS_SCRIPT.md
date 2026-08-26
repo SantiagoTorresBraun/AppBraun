@@ -24,12 +24,23 @@ después de la limpieza.
 {
   "timeZone": "America/Argentina/Buenos_Aires",
   "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/script.send_mail",
+    "https://www.googleapis.com/auth/script.external_request"
+  ],
   "webapp": {
     "executeAs": "USER_DEPLOYING",
     "access": "ANYONE_ANONYMOUS"
   }
 }
 ```
+
+- `oauthScopes` está declarado **a mano**, así que Google usa esa lista exacta y no deduce nada
+  del código. **Cada capacidad nueva del backend necesita su scope acá o falla.**
+  `script.external_request` se sumó el 26/08/2026 para que el Agente de IA pueda llamar a Groq.
+  Detalle en el punto 6 de [CUENTAS_Y_DESPLIEGUE.md](CUENTAS_Y_DESPLIEGUE.md).
 
 - `executeAs: USER_DEPLOYING` → el script corre **con la identidad de Santiago Torres**. Por eso
   no hace falta compartir las carpetas de Drive con nadie.
@@ -46,6 +57,7 @@ Leyenda: 🟢 en uso · 🟡 mantenimiento (se corre a mano) · ⚪ histórico (
 | # | Archivo actual | Estado | Nombre propuesto | Qué es |
 |---|---|---|---|---|
 | 1 | `Código.gs` | 🟢 **En uso** | `01_backend_principal.gs` | Todo el backend: `doPost`, `doGet`, Control de Carga, Calidad, Producción, Ticketera, Usuarios y las funciones de Drive. **Es el que atiende a la app.** ✅ Copiado al repo el 14/08/2026 (45 funciones, sintaxis verificada). |
+| 1b | `02_agente_ia.gs` | 🟢 **En uso** | `02_agente_ia.gs` | Puente hacia **Groq** para el Agente de IA. `01_backend_principal.gs` lo llama desde `doPost` con la acción `agente_consulta`. Necesita el scope `script.external_request` y la propiedad de script `GROQ_API_KEY` (**la clave nunca va en el código**: el repo es público). Agregado el 26/08/2026. Ver [DOCUMENTACION_AGENTE_IA.md](DOCUMENTACION_AGENTE_IA.md). |
 | 2 | `Sin titulo.gs` | ⚪ Histórico | `91_migracion_appsheet_orden.gs` | Migración única de rutas AppSheet → links de Drive en la hoja `Orden` (fotos y firmas). **Ya ejecutada.** |
 | 3 | `Sin titulo 2.gs` | ⚪ Histórico | `93_migracion_links_lh3_orden.gs` | **Parte 2 de la #2**: convierte los links `uc?export=view&id=…` de la hoja `Orden` al formato `lh3.googleusercontent.com/d/…`. Función `convertirLinksAFormatoEstable()`. **Verificado: no duplica nada** (ojo, existe `convertirArchivosCPAFormatoEstable()` en el backend, pero es otra función, para la columna CP). |
 | 4 | `Sin titulo 3.gs` | ⚪ Histórico | `94_migracion_appsheet_calidad_garbanzo.gs` | Gemela de la #6, pero para **Control Calidad Garbanzo**. Función `reemplazarRutasPorLinksCalidad()`. Aporta el ID de `Control de Calidad_Images`: `1H7tnYi-9J4R-XpwHCTzUHN3Iq5mMJqVV`. **Verificado: no duplica nada.** |

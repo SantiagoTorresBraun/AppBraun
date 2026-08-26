@@ -1525,8 +1525,42 @@
     <script src="correo.js"></script>
     <script src="calidad.js"></script>
     <script src="produccion.js"></script>
-    <!-- Placeholder del futuro Agente de IA (todavía no funcional): avatar animado, sin acción real -->
-    <button id="fab-agente-ia" class="fab-agente-ia" title="Agente de IA — Próximamente" onclick="mostrarProximamenteAgenteIA()">
+    <script src="agente.js"></script>
+
+    <!-- ================= AGENTE DE IA: panel de chat ================= -->
+    <div id="agente-overlay" class="agente-overlay" onclick="cerrarAgenteIA()"></div>
+    <section id="agente-panel" class="agente-panel" role="dialog" aria-label="Agente de IA">
+        <header class="agente-header">
+            <div class="agente-header-info">
+                <span class="agente-header-avatar">🤖</span>
+                <div>
+                    <strong>Asistente Braun</strong>
+                    <small>Consultá cualquier dato del sistema</small>
+                </div>
+            </div>
+            <div class="agente-header-acciones">
+                <button type="button" class="agente-btn-icono" title="Nueva conversación" onclick="agenteLimpiarChat()">
+                    <i class="fas fa-rotate-right"></i>
+                </button>
+                <button type="button" class="agente-btn-icono" title="Cerrar" onclick="cerrarAgenteIA()">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+        </header>
+
+        <div id="agente-mensajes" class="agente-mensajes"></div>
+
+        <footer class="agente-footer">
+            <textarea id="agente-input" class="agente-input" rows="1"
+                      placeholder="Preguntá algo… (Enter para enviar)"></textarea>
+            <button type="button" id="agente-enviar" class="agente-enviar" title="Enviar" onclick="agenteEnviar()">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </footer>
+    </section>
+
+    <!-- Botón flotante que abre el Agente de IA -->
+    <button id="fab-agente-ia" class="fab-agente-ia" title="Agente de IA" onclick="abrirAgenteIA()">
         <svg class="avatar-ia-svg" viewBox="0 0 64 64" aria-hidden="true">
             <circle cx="32" cy="32" r="32" fill="#f4e9d8"/>
             <path d="M16 34 Q15 47 20 55 L25 55 Q22 45 22 33 Z" fill="#6b4226"/>

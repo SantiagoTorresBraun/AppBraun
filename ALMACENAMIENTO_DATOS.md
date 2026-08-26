@@ -44,6 +44,12 @@ del Drive y la cuenta que autorizó el Apps Script.
 | **Google Sheet** | Todos los registros (tablas) | Definitiva — es la fuente de verdad |
 | **Google Drive** | Fotos de calidad y producción, archivos de Carta de Porte | Definitiva |
 | **IndexedDB / localStorage** (en el dispositivo) | Cola offline + sesión + listas desplegables | Temporal — se borra al limpiar datos del navegador |
+| **Propiedades del Script** (Apps Script) | Secretos del backend: hoy solo `GROQ_API_KEY` | Definitiva — no viaja al navegador ni está en el repo |
+
+> **Ningún secreto va en un archivo del repo.** El repositorio es público (es lo que publica
+> GitHub Pages), así que una clave escrita en un `.gs` o un `.js` quedaría a la vista de todos
+> apenas se haga push. Van en *Apps Script ▸ ⚙ Configuración del proyecto ▸ Propiedades del
+> script*. Ver [DOCUMENTACION_AGENTE_IA.md](DOCUMENTACION_AGENTE_IA.md).
 
 ---
 
@@ -51,8 +57,9 @@ del Drive y la cuenta que autorizó el Apps Script.
 
 - **URL del Web App** (constante `WEB_APP_URL` en [app.js:39](app.js#L39)):
   `https://script.google.com/macros/s/AKfycbxER7E6CJhddVOrP7gaTDSM1albRvEAGUHnWcdBM7SoXzDJeklCvZDY_Aj0Cd1Xv6znyA/exec`
-- **Código fuente**: [01_backend_principal.gs](01_backend_principal.gs) — este archivo del repo
-  **no se ejecuta solo**. Es una copia para pegar en el editor de Apps Script.
+- **Código fuente**: [01_backend_principal.gs](01_backend_principal.gs) (y
+  [02_agente_ia.gs](02_agente_ia.gs) para el Agente de IA) — estos archivos del repo
+  **no se ejecutan solos**. Son copias para pegar en el editor de Apps Script.
 - **Dónde vive realmente**: adentro del Google Sheet → *Extensiones → Apps Script*.
 - El script usa `SpreadsheetApp.getActiveSpreadsheet()`, o sea escribe **en el Sheet que lo contiene**.
   No hay un ID de Sheet escrito en el `.gs`: el vínculo es "el script está pegado adentro de ese Sheet".

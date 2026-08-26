@@ -89,16 +89,22 @@ Esperar 1–2 minutos y recargar <https://santiagotorresbraun.github.io/AppBraun
 
 ## 6. Permisos de Google (OAuth) — leer esto si "no se guardan las fotos"
 
-El backend necesita **tres permisos** de la cuenta de Google. Están declarados a mano en
+El backend necesita **cuatro permisos** de la cuenta de Google. Están declarados a mano en
 `appsscript.json`, y esa declaración **no es opcional**: sin ella Google los deduce del código, y
 si la autorización se otorgó antes de que el código creara archivos, queda congelada con un
 permiso insuficiente.
+
+⚠️ **Y al revés también corta**: como la lista está declarada a mano, Google usa **exactamente
+esa** y no deduce nada. Si el código empieza a hacer algo nuevo y su permiso no está en la lista,
+falla — por más que el código sea correcto. Es lo que pasó al agregar el Agente de IA:
+`script.external_request` no estaba y `UrlFetchApp` no podía salir a internet.
 
 ```json
 "oauthScopes": [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/script.send_mail"
+  "https://www.googleapis.com/auth/script.send_mail",
+  "https://www.googleapis.com/auth/script.external_request"
 ]
 ```
 
@@ -107,6 +113,7 @@ permiso insuficiente.
 | `spreadsheets` | Leer y escribir el Sheet | No se guarda **nada** |
 | `drive` | Crear las fotos y los archivos en Drive | Las fotos **no se guardan** y la celda queda vacía |
 | `script.send_mail` | Correos de la Ticketera | No salen las notificaciones |
+| `script.external_request` | Que `UrlFetchApp` pueda llamar a la API de Groq (Agente de IA) | El agente contesta *"You do not have permission to call UrlFetchApp.fetch"* |
 
 ### El caso real (14/08/2026)
 
