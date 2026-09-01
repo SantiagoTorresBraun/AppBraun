@@ -406,29 +406,62 @@ function armarMensajeMime(datos) {
     return lineas.join('\r\n');
 }
 
+// Error de Gmail, marcado con si el mensaje PUDO haber salido igual.
+//
+// Toda la diferencia está acá: solo se puede reintentar por el backend cuando
+// estamos SEGUROS de que Gmail no mandó nada. Si no lo sabemos y mandamos por
+// las dudas, al destinatario le llega el reporte dos veces.
+function errorDeGmail(mensaje, enviadoIncierto) {
+    const err = new Error(mensaje);
+    err.enviadoIncierto = !!enviadoIncierto;
+    return err;
+}
+
 async function enviarConGmail(datos) {
     // Primero en silencio; si Google pide interacción, se abre la ventana de permiso.
+    // Sin token el mensaje NO salió: es seguro caer al backend.
     let token;
     try {
         token = await obtenerTokenGmail(false);
     } catch (e) {
-        token = await obtenerTokenGmail(true);
+        try {
+            token = await obtenerTokenGmail(true);
+        } catch (e2) {
+            throw errorDeGmail('No se pudo obtener permiso de Gmail: ' + (e2.message || e2), false);
+        }
     }
 
     const mime = armarMensajeMime(datos);
     // Endpoint de subida (uploadType=media): admite hasta 35 MB de mensaje;
     // el endpoint común se queda corto apenas el PDF trae las fotos.
-    const respuesta = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
-        body: mime
-    });
+    let respuesta;
+    try {
+        respuesta = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
+            body: mime
+        });
+    } catch (errorRed) {
+        // ACÁ NACÍAN LOS CORREOS DUPLICADOS.
+        // El fetch se rompió sin respuesta: puede que no haya salido, o que Google
+        // ya lo haya aceptado y la conexión se haya cortado al volver. Con un PDF
+        // de varios MB es justo donde pasa. Antes esto contaba como "Gmail falló"
+        // y se mandaba por el backend: si Gmail sí lo había mandado, al
+        // destinatario le llegaban DOS, uno desde el Gmail del usuario y otro
+        // desde la cuenta del script. No hay forma de saberlo, así que no se
+        // reintenta solo.
+        throw errorDeGmail('Se cortó la conexión con Gmail y no se pudo confirmar el envío: ' +
+            (errorRed.message || errorRed), true);
+    }
 
     if (!respuesta.ok) {
         let detalle = '';
         try { const j = await respuesta.json(); detalle = (j.error && j.error.message) || ''; } catch (e) {}
         if (respuesta.status === 401 || respuesta.status === 403) gmailToken = null; // token vencido o revocado
-        throw new Error(('Gmail rechazó el envío (' + respuesta.status + ') ' + detalle).trim());
+        // 4xx: Google lo rechazó, seguro no salió → se puede usar el backend.
+        // 5xx: se cayó del lado de Google, pudo haberlo tomado igual → no se reintenta.
+        throw errorDeGmail(('Gmail rechazó el envío (' + respuesta.status + ') ' + detalle).trim(),
+            respuesta.status >= 500);
     }
     return true;
 }
@@ -471,6 +504,46 @@ function enviarConBackend(datos) {
 // primero todavía no escribió "Enviado" en ningún lado.
 const enviosEnCurso = new Set();
 
+// --- REGISTRO DE LO QUE YA SE MANDÓ (en el dispositivo) ----------------------
+// El Set de arriba solo cubre dos envíos que se pisan EN EL MISMO INSTANTE.
+// No cubre el caso real: el automático al guardar termina y, un minuto después,
+// alguien manda lo mismo desde el modal. Tampoco sobrevive a un F5.
+//
+// Y sobre todo: la guarda del backend NO PUEDE VER un correo que salió por el
+// Gmail del usuario, porque ese envío nunca pasa por el servidor. Esta capa es
+// la única que cubre los dos caminos, porque vive del lado del navegador.
+const CORREO_ENVIADOS_KEY = 'braun_correo_enviados_v1';
+const VENTANA_REENVIO_MIN = 10;
+
+function claveReporte(tipo, id, correo) {
+    return (tipo || 'carga') + '|' + (id || '') + '|' + String(correo || '').trim().toLowerCase();
+}
+
+function enviosRegistrados() {
+    try { return JSON.parse(localStorage.getItem(CORREO_ENVIADOS_KEY)) || {}; }
+    catch (e) { return {}; }
+}
+
+// Minutos desde que se mandó este mismo reporte al mismo destinatario, o null
+// si no se mandó o si ya pasó la ventana.
+function minutosDesdeEnvio(clave) {
+    const marca = enviosRegistrados()[clave];
+    if (!marca) return null;
+    const minutos = (Date.now() - marca) / 60000;
+    return (minutos >= 0 && minutos < VENTANA_REENVIO_MIN) ? minutos : null;
+}
+
+function registrarEnvioHecho(clave) {
+    const previos = enviosRegistrados();
+    const vigentes = {};
+    // Se aprovecha para tirar lo viejo y que no crezca para siempre.
+    Object.keys(previos).forEach(function (k) {
+        if ((Date.now() - previos[k]) / 60000 < VENTANA_REENVIO_MIN) vigentes[k] = previos[k];
+    });
+    vigentes[clave] = Date.now();
+    try { localStorage.setItem(CORREO_ENVIADOS_KEY, JSON.stringify(vigentes)); } catch (e) { }
+}
+
 async function enviarReportePorMail(item, tipo, opciones) {
     opciones = opciones || {};
     const reporte = reporteDe(tipo);
@@ -478,19 +551,33 @@ async function enviarReportePorMail(item, tipo, opciones) {
     if (!para || para.indexOf('@') === -1) throw new Error('Falta un correo de destino válido.');
     if (!navigator.onLine) throw new Error('No hay conexión a internet. El reporte no se puede enviar en este momento.');
 
-    const claveEnvio = (tipo || 'carga') + ':' + (item[reporte.campoId] || para);
+    const claveEnvio = claveReporte(tipo, item[reporte.campoId], para);
+
     if (enviosEnCurso.has(claveEnvio)) {
         throw new Error('Ese reporte ya se está enviando en este momento. Esperá a que termine.');
     }
+
+    // Ya salió hace poco por cualquiera de los dos caminos: no se repite solo.
+    // El modal ofrece mandarlo igual (opciones.forzar); el envío automático no.
+    const minutos = minutosDesdeEnvio(claveEnvio);
+    if (minutos !== null && !opciones.forzar) {
+        const err = new Error('Este reporte ya se envió a ' + para + ' hace ' +
+            (minutos < 1 ? 'menos de un minuto' : Math.round(minutos) + ' minuto(s)') + '.');
+        err.yaEnviado = true;
+        err.minutos = minutos;
+        err.para = para;
+        throw err;
+    }
+
     enviosEnCurso.add(claveEnvio);
     try {
-        return await enviarReportePorMailInterno(item, tipo, opciones, reporte, para);
+        return await enviarReportePorMailInterno(item, tipo, opciones, reporte, para, claveEnvio);
     } finally {
         enviosEnCurso.delete(claveEnvio);
     }
 }
 
-async function enviarReportePorMailInterno(item, tipo, opciones, reporte, para) {
+async function enviarReportePorMailInterno(item, tipo, opciones, reporte, para, claveEnvio) {
     const adjunto = await generarAdjuntoPdf(item, tipo);
     const mensaje = opciones.mensaje || mensajeReportePorDefecto(item, tipo);
     const datos = {
@@ -516,8 +603,18 @@ async function enviarReportePorMailInterno(item, tipo, opciones, reporte, para) 
     if (gmailConfigurado()) {
         try {
             await enviarConGmail(datos);
-        } catch (errorGmail) {
-            console.warn('No se pudo enviar desde el Gmail del usuario, se usa el backend:', errorGmail);
+        } catch (err) {
+            if (err.enviadoIncierto) {
+                // Mandar por el backend "por las dudas" es exactamente lo que le
+                // hacía llegar el reporte dos veces al cliente. Ante la duda no se
+                // manda: se avisa y que la persona decida mirando sus Enviados.
+                const aviso = new Error((err.message || 'No se pudo confirmar el envío') +
+                    '. Fijate en tu carpeta Enviados de Gmail: si el correo está, ya salió y no hay nada que hacer. ' +
+                    'Si no está, volvé a tocar Enviar.');
+                aviso.envioIncierto = true;
+                throw aviso;
+            }
+            console.warn('No se pudo enviar desde el Gmail del usuario, se usa el backend:', err);
             via = 'backend';
         }
     } else {
@@ -532,6 +629,11 @@ async function enviarReportePorMailInterno(item, tipo, opciones, reporte, para) 
         duplicado = !!(respuesta && respuesta.respuesta && respuesta.respuesta.duplicado);
         estado = datos.estado + (respuesta && respuesta.sinConfirmar ? ' (sin confirmar)' : '');
     }
+
+    // Llegar acá significa que el correo SALIÓ (por Gmail o por el backend).
+    // Se anota antes que nada: si algo falla más abajo (la constancia en la
+    // planilla, por ejemplo) y alguien reintenta, no se manda un segundo correo.
+    registrarEnvioHecho(claveEnvio);
 
     recordarDestinatario(para);
     await registrarEstadoCorreo(item, tipo, para, estado, via);
@@ -738,13 +840,30 @@ async function confirmarEnvioCorreo() {
     boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando PDF y enviando...';
 
     const item = registroCorreoActual;
+    const opcionesEnvio = {
+        para: para,
+        cc: cc,
+        asunto: document.getElementById('correo-asunto').value.trim(),
+        mensaje: document.getElementById('correo-mensaje').value
+    };
     try {
-        const resultado = await enviarReportePorMail(item, tipoCorreoActual, {
-            para: para,
-            cc: cc,
-            asunto: document.getElementById('correo-asunto').value.trim(),
-            mensaje: document.getElementById('correo-mensaje').value
-        });
+        let resultado;
+        try {
+            resultado = await enviarReportePorMail(item, tipoCorreoActual, opcionesEnvio);
+        } catch (err) {
+            // Ya se mandó hace poco. No se decide por el usuario: se le pregunta,
+            // porque puede querer reenviarlo a propósito (corrigió el mensaje,
+            // el destinatario no lo recibió, etc.).
+            if (!err.yaEnviado) throw err;
+            const seguir = confirm(err.message + '\n\n¿Querés mandarlo igual?');
+            if (!seguir) {
+                cerrarModalCorreo();
+                avisoCorreo('No se envió: el reporte ya había salido a ' + para + '.', 'info');
+                return;
+            }
+            opcionesEnvio.forzar = true;
+            resultado = await enviarReportePorMail(item, tipoCorreoActual, opcionesEnvio);
+        }
         cerrarModalCorreo();
         if (resultado.duplicado) {
             avisoCorreo('Ese reporte ya se había enviado a ' + para + ' hace instantes: no se mandó de nuevo.', 'info');
@@ -804,6 +923,13 @@ function intentarEnvioAutomatico(registro) {
             avisoCorreo('Reporte enviado a ' + registro.Correo + (res.via === 'gmail' ? ' desde tu Gmail' : '') + '.', 'ok');
         })
         .catch(function (err) {
+            // Que la guarda antiduplicado lo frene NO es un error: el reporte ya
+            // salió. Marcarlo como fallido dejaría "Error" en la planilla de un
+            // correo que el cliente sí recibió, que es peor que no decir nada.
+            if (err.yaEnviado) {
+                console.info('Envío automático omitido: el reporte ya había salido.', err.message);
+                return;
+            }
             console.error('Envío automático fallido:', err);
             marcarErrorCorreo(registro, 'carga', registro.Correo, err);
             avisoCorreo('El control se guardó, pero el correo no salió: ' + (err.message || '') + ' Reintentá desde el historial.', 'error');
