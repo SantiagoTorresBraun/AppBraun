@@ -252,3 +252,71 @@ afectan cualquier informe**, lo haga la IA o una tabla dinámica a mano.
 Se movió a su propio archivo: **[DOCUMENTACION_CORREO.md](DOCUMENTACION_CORREO.md)**.
 Ahí están los dos caminos de envío, las tres causas por las que llegaban dos veces
 y qué cubre cada capa de protección.
+
+---
+
+## 10. Control de Carga MP (Materia Prima) — activado el 28/08/2026
+
+Hasta ahora la tarjeta de Materia Prima del menú decía "Próximamente". Ya está
+habilitada y **comparte las mismas hojas que PT**: se distinguen por la columna
+`Tipo_Carga` de la hoja `Orden` (`MP` o `PT`), y el historial filtra por ahí.
+
+### Qué cambia respecto de PT
+
+La MP entra **a granel**, así que buena parte del control de PT no aplica:
+
+| | PT | MP |
+|---|---|---|
+| Chofer y patentes | ✅ | ❌ |
+| Lista de Verificación (7 puntos de higiene) | ✅ | ❌ |
+| ESTATUS (Aceptado / Observado / Rechazado) | ✅ | ❌ |
+| Firmas (chofer y control) | ✅ | ❌ |
+| Registro fotográfico (8 fotos) | ✅ | ❌ |
+| Cant. de Envases y Kg del Envase | ✅ | ❌ (se escribe el Total Kg a mano) |
+| `Posición en Planta` | ✅ | Se llama **Lote Cliente** |
+| Kg Descarga y Diferencia | En pantalla, no en el PDF | ❌ |
+| **Observaciones CP** | Se carga y se guarda | ✅ **y sale en el PDF** |
+| Indicaciones para la Descarga | ✅ | ✅ |
+
+**Es la misma columna del Sheet.** `Lote Cliente` se guarda en `Posición en Planta`:
+cambia la etiqueta según el tipo de carga, no la estructura de la hoja.
+
+### Cómo está implementado
+
+Un solo formulario y un solo generador de PDF, que se ramifican:
+
+- **HTML**: los bloques que no van en MP llevan la clase `solo-pt` (15 en total,
+  todos dentro de `#form-carga`).
+- **CSS**: `body.carga-mp .solo-pt { display: none }`.
+- **`aplicarModoCarga(tipo)`** en [app.js](app.js) prende o apaga la clase.
+- **`generarPDFReporte`** usa la bandera `esMP` para elegir columnas y saltear bloques.
+
+> ⚠️ **Esconder con CSS no alcanza.** Un `<input required>` **escondido** bloquea el
+> submit y **no muestra ningún mensaje**: el navegador intenta enfocarlo, no puede,
+> y el formulario simplemente no se envía. Por eso `aplicarModoCarga()` además les
+> saca el atributo `required`, recordando cuáles lo tenían para devolvérselo al
+> volver a PT. Si agregás un campo obligatorio dentro de un bloque `solo-pt`, esto
+> ya lo cubre; si lo agregás por fuera, tenelo presente.
+
+### Muchas cartas de porte
+
+Una carga de MP suele traer **15 o más CP**. La tabla de contratos ya paginaba
+sola (`dibujarTablaConBordes` mide cada fila y corta de página cuando no entra);
+se verificó con 15 CP y entran todas, en una sola hoja.
+
+### `Observaciones CP`
+
+La columna **ya existía** en la hoja `Contrato Comercial` (posición 8) desde la
+época de AppSheet, pero el backend **ni la escribía ni la leía**: quedaba siempre
+vacía. Ahora se guarda y se lee en los dos tipos de carga. En el PDF aparece
+**solo en MP**.
+
+> Esto requiere **republicar el Apps Script**: son cambios en
+> `guardarProductosYContratos()` y en `doGet()`.
+
+### Un efecto colateral, a propósito
+
+El historial mostraba `ACEPTADO` cuando `ESTATUS` venía vacío. Para MP eso sería
+mentir —una carga MP no tiene veredicto—, así que ahora muestra `—` en gris.
+De paso deja de inventar un estado para las **7 cargas PT sin ESTATUS** que ya
+existían (ver sección 8).

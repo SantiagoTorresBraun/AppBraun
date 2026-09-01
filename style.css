@@ -3583,3 +3583,19 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
 /* Con el chat abierto, el FAB se esconde para no tapar el panel */
 body.agente-abierto .fab-agente-ia { opacity: 0; pointer-events: none; }
 .fab-agente-ia { transition: opacity 0.2s ease; }
+
+/* =====================================================================
+   CONTROL DE CARGA — MATERIA PRIMA (MP)
+   Las cargas de MP son a granel: no llevan chofer/patentes, ni checklist
+   de higiene, ni ESTATUS, ni firmas, ni fotos. Todo eso se marca en el
+   HTML con la clase .solo-pt y se esconde cuando el módulo abre en MP.
+   Ojo: esconderlo NO alcanza — un campo required escondido bloquea el
+   submit sin mostrar ningún mensaje. De sacarles el required se encarga
+   aplicarModoCarga() en app.js.
+   ===================================================================== */
+body.carga-mp .solo-pt { display: none !important; }
+
+/* Estado vacío: las cargas MP no llevan ESTATUS, y en PT hay registros viejos
+   sin completar. Antes se mostraban como "ACEPTADO", que era inventar un
+   veredicto que nadie dio. */
+.badge.sin-dato { background: #eceff1; color: #78909c; }

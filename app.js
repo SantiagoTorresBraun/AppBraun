@@ -363,9 +363,82 @@ function switchTab(tabName) {
     }
 }
 
+// ¿La carga abierta es de Materia Prima? Lo consultan el formulario, el
+// armado del registro y el PDF para saber qué corresponde y qué no.
+function esCargaMP() {
+    return tipoCargaActual === 'MP';
+}
+
+// Prende o apaga todo lo que es exclusivo de Producto Terminado.
+//
+// Esconder con CSS no alcanza: un input con `required` ESCONDIDO bloquea el
+// submit y encima no muestra ningún mensaje —el navegador intenta enfocarlo,
+// no puede, y el formulario simplemente no se envía—. Por eso acá se les saca
+// el atributo, recordando cuáles lo tenían para devolvérselo al volver a PT.
+function aplicarModoCarga(tipo) {
+    const esMP = tipo === 'MP';
+    document.body.classList.toggle('carga-mp', esMP);
+
+    document.querySelectorAll('#form-carga .solo-pt').forEach(function (bloque) {
+        const campos = bloque.matches('input, select, textarea')
+            ? [bloque]
+            : Array.from(bloque.querySelectorAll('input, select, textarea'));
+        campos.forEach(function (campo) {
+            if (esMP) {
+                if (campo.required) { campo.dataset.eraRequerido = '1'; campo.required = false; }
+            } else if (campo.dataset.eraRequerido === '1') {
+                campo.required = true;
+                delete campo.dataset.eraRequerido;
+            }
+        });
+    });
+
+    // Las tarjetas de producto y contrato ya creadas también cambian de forma
+    // (Lote Cliente en vez de Posición Planta, sin envases, con Observaciones CP).
+    document.querySelectorAll('#wrapper-productos-dinamicos .dynamic-item-card').forEach(aplicarModoTarjetaProducto);
+    document.querySelectorAll('#wrapper-contratos-dinamicos .dynamic-item-card').forEach(aplicarModoTarjetaContrato);
+}
+
+// --- Tarjeta de PRODUCTO según el tipo de carga ---
+// En MP la mercadería viene a granel: no hay envases que contar, así que
+// "Cant. Envases" y "Kg Envase" desaparecen y los kilos se escriben a mano en
+// "Total Kg" (en PT ese campo es calculado y de solo lectura).
+// Y lo que en PT es la posición dentro de la planta, en MP es el lote del cliente.
+function aplicarModoTarjetaProducto(card) {
+    const esMP = esCargaMP();
+    const etiqueta = card.querySelector('.lbl-posicion');
+    const posicion = card.querySelector('[data-field="posicion"]');
+    if (etiqueta) etiqueta.textContent = esMP ? 'Lote Cliente' : 'Posición Planta';
+    if (posicion) posicion.placeholder = esMP ? 'Lote del cliente' : 'LT-3';
+
+    const grupoCantidad = card.querySelector('.grupo-cantidad');
+    const grupoKgEnvase = card.querySelector('.grupo-kgenvase');
+    if (grupoCantidad) grupoCantidad.classList.toggle('hidden', esMP);
+    if (grupoKgEnvase) grupoKgEnvase.classList.toggle('hidden', esMP);
+
+    const total = card.querySelector('.campo-total-kg');
+    if (total) {
+        total.readOnly = !esMP;
+        total.classList.toggle('campo-calculado', !esMP);
+        if (esMP && !total.value) total.value = '0';
+    }
+}
+
+// --- Tarjeta de CONTRATO según el tipo de carga ---
+// El control de MP se hace al recibir, así que los kilos de descarga y la
+// diferencia no aplican; en su lugar se anota una observación sobre la CP.
+function aplicarModoTarjetaContrato(card) {
+    const esMP = esCargaMP();
+    const grupoDescarga = card.querySelector('.grupo-kgdescarga');
+    const grupoDiferencia = card.querySelector('.grupo-diferencia');
+    if (grupoDescarga) grupoDescarga.classList.toggle('hidden', esMP);
+    if (grupoDiferencia) grupoDiferencia.classList.toggle('hidden', esMP);
+}
+
 function abrirModuloCarga(tipo) {
     tipoCargaActual = tipo;
     document.getElementById('lbl-tipo-carga-actual').textContent = tipo;
+    aplicarModoCarga(tipo);
 
     // Reset TOTAL del formulario para que el operario arranque limpio (punto 1 del pedido)
     document.getElementById('form-carga').reset();
@@ -569,15 +642,15 @@ function agregarFilaProducto(opciones) {
             <div class="form-group"><label>N° Lote</label><input type="text" class="prod-item" data-field="lote" placeholder="4639" required></div>
         </div>
         <div class="form-group-row">
-            <div class="form-group"><label>Posición Planta</label><input type="text" class="prod-item" data-field="posicion" placeholder="LT-3"></div>
+            <div class="form-group"><label class="lbl-posicion">Posición Planta</label><input type="text" class="prod-item" data-field="posicion" placeholder="LT-3"></div>
             <div class="form-group">
                 <label>Tipo Envase</label>
                 <select class="prod-item enum-select" data-field="envase" data-enum="envase"></select>
             </div>
         </div>
         <div class="form-group-row">
-            <div class="form-group"><label>Cant. Envases</label><input type="text" inputmode="decimal" class="prod-item campo-cantidad campo-numero-ar" data-field="cantidad" value="1"></div>
-            <div class="form-group"><label>Kg Envase</label><input type="text" inputmode="decimal" class="prod-item campo-kgenvase campo-numero-ar" data-field="kg_envase" value="25"></div>
+            <div class="form-group grupo-cantidad"><label>Cant. Envases</label><input type="text" inputmode="decimal" class="prod-item campo-cantidad campo-numero-ar" data-field="cantidad" value="1"></div>
+            <div class="form-group grupo-kgenvase"><label>Kg Envase</label><input type="text" inputmode="decimal" class="prod-item campo-kgenvase campo-numero-ar" data-field="kg_envase" value="25"></div>
             <div class="form-group"><label>Total Kg</label><input type="text" class="prod-item campo-calculado campo-total-kg campo-numero-ar" data-field="total_kg" readonly></div>
         </div>
         </div>
@@ -587,6 +660,7 @@ function agregarFilaProducto(opciones) {
     // Poblar los selects tipo enum recién creados
     card.querySelectorAll('.enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
     aplicarValoresATarjeta(card, 'prod-item', opciones.valores);
+    aplicarModoTarjetaProducto(card);
 
     // Cálculo automático de Total Kg = Cantidad x Kg Envase
     const inputCantidad = card.querySelector('.campo-cantidad');
@@ -851,8 +925,12 @@ function agregarFilaContrato(opciones) {
         </div>
         <div class="form-group-row">
             <div class="form-group"><label>Kg CP</label><input type="text" inputmode="decimal" class="cont-item campo-kgcp campo-numero-ar" data-field="kg_cp" value="0"></div>
-            <div class="form-group"><label>Kg Descarga</label><input type="text" inputmode="decimal" class="cont-item campo-kgdescarga campo-numero-ar" data-field="kg_descarga" value="0"></div>
-            <div class="form-group"><label>Diferencia de Carga</label><input type="text" class="cont-item campo-calculado campo-diferencia campo-numero-ar" data-field="diferencia_carga" readonly></div>
+            <div class="form-group grupo-kgdescarga"><label>Kg Descarga</label><input type="text" inputmode="decimal" class="cont-item campo-kgdescarga campo-numero-ar" data-field="kg_descarga" value="0"></div>
+            <div class="form-group grupo-diferencia"><label>Diferencia de Carga</label><input type="text" class="cont-item campo-calculado campo-diferencia campo-numero-ar" data-field="diferencia_carga" readonly></div>
+        </div>
+        <div class="form-group grupo-observaciones-cp">
+            <label>Observaciones CP</label>
+            <input type="text" class="cont-item" data-field="observaciones_cp" placeholder="Ej: carga parcial, rotura de precinto">
         </div>
         </div>
     `;
@@ -860,6 +938,7 @@ function agregarFilaContrato(opciones) {
 
     card.querySelectorAll('.enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
     aplicarValoresATarjeta(card, 'cont-item', opciones.valores);
+    aplicarModoTarjetaContrato(card);
 
     // Cálculo automático de Diferencia de Carga = Kg Descarga - Kg CP
     const inputKgCP = card.querySelector('.campo-kgcp');
@@ -1735,22 +1814,26 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
         usuario_registro: usuarioRegistroActual(),
         Fecha: document.getElementById("fecha").value,
         Tipo_Carga: tipoCargaActual,
-        Nombre_Chofer: document.getElementById("chofer").value,
-        Patente_Chasis: document.getElementById("patente-chasis").value,
-        Patente_Acoplado: document.getElementById("patente-acoplado").value,
+        // En MP estos campos ni se muestran, así que van vacíos a la planilla.
+        // Se leen con soloPT() en vez de directo: los radios del checklist tienen
+        // un valor por defecto marcado, pero si mañana alguien saca ese "checked"
+        // el querySelector(':checked') devuelve null y esto reventaba entero.
+        Nombre_Chofer: soloPT("chofer"),
+        Patente_Chasis: soloPT("patente-chasis"),
+        Patente_Acoplado: soloPT("patente-acoplado"),
 
         Productos: listaProductos,
         Contratos: listaContratos,
 
-        Aplica_Etiqueta: document.querySelector('input[name="aplica_etiqueta"]:checked').value,
-        Lona_Protege: document.querySelector('input[name="lona_protege"]:checked').value,
-        Piso_Libre_Suciedad: document.querySelector('input[name="piso_suciedad"]:checked').value,
-        Libre_Oxido: document.querySelector('input[name="libre_oxido"]:checked').value,
-        Chasis_Secos_Insectos: document.querySelector('input[name="secos_insectos"]:checked').value,
-        Exentos_Hongos: document.querySelector('input[name="exentos_hongos"]:checked').value,
-        Aislante_Piso: document.querySelector('input[name="aislante_piso"]:checked').value,
+        Aplica_Etiqueta: soloPTRadio("aplica_etiqueta"),
+        Lona_Protege: soloPTRadio("lona_protege"),
+        Piso_Libre_Suciedad: soloPTRadio("piso_suciedad"),
+        Libre_Oxido: soloPTRadio("libre_oxido"),
+        Chasis_Secos_Insectos: soloPTRadio("secos_insectos"),
+        Exentos_Hongos: soloPTRadio("exentos_hongos"),
+        Aislante_Piso: soloPTRadio("aislante_piso"),
 
-        ESTATUS: document.querySelector('input[name="estatus"]:checked').value,
+        ESTATUS: soloPTRadio("estatus"),
         Elaboro: document.getElementById("elaboro").value,
         Indicaciones_Descarga: document.getElementById("indicaciones").value,
         Kg_Cargados: parseNumeroAR(document.getElementById("kg-cargados").value),
@@ -1758,18 +1841,43 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
         Correo: document.getElementById("correo-envio").value,
         Estado_Correo: document.getElementById("estado-correo").value,
 
-        Firma_Chofer: document.getElementById("canvas-firma-chofer").toDataURL(),
-        Firma_Control: document.getElementById("canvas-firma-control").toDataURL(),
+        Firma_Chofer: soloPTFirma("canvas-firma-chofer"),
+        Firma_Control: soloPTFirma("canvas-firma-control"),
 
-        Foto_Frente: fotosBase64["Foto_Frente"] || "",
-        Foto_Culo: fotosBase64["Foto_Culo"] || "",
-        Foto_Interior_Chasis: fotosBase64["Foto_Interior_Chasis"] || "",
-        Foto_Interior_Acoplado: fotosBase64["Foto_Interior_Acoplado"] || "",
-        Foto_Proceso_Carga: fotosBase64["Foto_Proceso_Carga"] || "",
-        Foto_Etiqueta_Bolsa: fotosBase64["Foto_Etiqueta_Bolsa"] || "",
-        Foto_Camion_Cargado: fotosBase64["Foto_Camion_Cargado"] || "",
-        Foto_Ticket_Balanza: fotosBase64["Foto_Ticket_Balanza"] || ""
+        // Las cargas de MP son a granel: no se saca ninguna foto.
+        Foto_Frente: soloPTFoto("Foto_Frente"),
+        Foto_Culo: soloPTFoto("Foto_Culo"),
+        Foto_Interior_Chasis: soloPTFoto("Foto_Interior_Chasis"),
+        Foto_Interior_Acoplado: soloPTFoto("Foto_Interior_Acoplado"),
+        Foto_Proceso_Carga: soloPTFoto("Foto_Proceso_Carga"),
+        Foto_Etiqueta_Bolsa: soloPTFoto("Foto_Etiqueta_Bolsa"),
+        Foto_Camion_Cargado: soloPTFoto("Foto_Camion_Cargado"),
+        Foto_Ticket_Balanza: soloPTFoto("Foto_Ticket_Balanza")
     };
+}
+
+// --- Lectores de los campos que existen solo en Producto Terminado ---
+// Devuelven "" cuando la carga es de Materia Prima o cuando el campo no está.
+function soloPT(id) {
+    if (esCargaMP()) return "";
+    const campo = document.getElementById(id);
+    return campo ? campo.value : "";
+}
+
+function soloPTRadio(nombre) {
+    if (esCargaMP()) return "";
+    const elegido = document.querySelector('input[name="' + nombre + '"]:checked');
+    return elegido ? elegido.value : "";
+}
+
+function soloPTFirma(id) {
+    if (esCargaMP()) return "";
+    const canvas = document.getElementById(id);
+    return canvas ? canvas.toDataURL() : "";
+}
+
+function soloPTFoto(clave) {
+    return esCargaMP() ? "" : (fotosBase64[clave] || "");
 }
 
 // Genera el link "Ver / descargar" para un archivo de Carta de Porte ya guardado
@@ -2046,7 +2154,7 @@ async function filtrarYRenderizarTabla() {
             <td data-label="Fecha" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-fecha">${item.Fecha || '-'}${numRegistroMovil}</td>
             <td data-label="Producto" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
             <td data-label="Contrato" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
-            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'aceptado'}">${item.ESTATUS || 'ACEPTADO'}</span></td>
+            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'sin-dato'}">${item.ESTATUS || '—'}</span></td>
             <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${fmtKg(item.Kg_Cargados)} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro">
@@ -2078,6 +2186,9 @@ function cargarRegistroParaEditar(base64Data) {
         // Nos aseguramos de estar parados en el módulo/tipo correcto y con el form limpio
         tipoCargaActual = item.Tipo_Carga || tipoCargaActual;
         document.getElementById('lbl-tipo-carga-actual').textContent = tipoCargaActual;
+        // Sin esto, abrir una carga MP desde el historial mostraba el formulario
+        // en modo PT: pedía chofer, checklist y fotos que esa carga no tiene.
+        aplicarModoCarga(tipoCargaActual);
         switchTab('nuevo');
         cambiarVista('view-modulo-carga');
 
@@ -2372,6 +2483,11 @@ for (const campo of camposImagen) {
         doc.setFont("helvetica", "normal");
         doc.text(`${fmtKg(item.Kg_Cargados)}`, 172, yCurrent);
 
+        // Una carga de Materia Prima entra a granel: no lleva chofer ni patentes,
+        // ni checklist de higiene, ni ESTATUS, ni firmas, ni fotos. Todo lo que
+        // sigue se ramifica con esta bandera.
+        const esMP = (item.Tipo_Carga || 'PT') === 'MP';
+
         // --- Datos de la Carga (tabla de productos) ---
         yCurrent += 8;
         // Que el título no quede solo al pie con la tabla en la hoja siguiente:
@@ -2388,33 +2504,51 @@ for (const campo of camposImagen) {
         }
         if (!Array.isArray(productos)) productos = [];
 
-        const columnasProductos = [
-            { header: "Producto", width: 28 },
-            { header: "Calibre", width: 16 },
-            { header: "Tipo", width: 12 },
-            { header: "N° de Lote", width: 20 },
-            { header: "Posición en Planta", width: 24 },
-            { header: "Tipo de envases", width: 22 },
-            { header: "Cant. de Envases", width: 20 },
-            { header: "Kg del Envase", width: 20 },
-            { header: "Total Kg", width: 20 }
-        ];
+        // Los anchos tienen que sumar anchoContenido (182). En MP se sacan
+        // "Cant. de Envases" y "Kg del Envase" —la mercadería viene a granel— y
+        // esos 40 mm se reparten entre las columnas que quedan.
+        const columnasProductos = esMP
+            ? [
+                { header: "Producto", width: 34 },
+                { header: "Calibre", width: 20 },
+                { header: "Tipo", width: 14 },
+                { header: "N° de Lote", width: 26 },
+                { header: "Lote Cliente", width: 32 },
+                { header: "Tipo de envases", width: 28 },
+                { header: "Total Kg", width: 28 }
+            ]
+            : [
+                { header: "Producto", width: 28 },
+                { header: "Calibre", width: 16 },
+                { header: "Tipo", width: 12 },
+                { header: "N° de Lote", width: 20 },
+                { header: "Posición en Planta", width: 24 },
+                { header: "Tipo de envases", width: 22 },
+                { header: "Cant. de Envases", width: 20 },
+                { header: "Kg del Envase", width: 20 },
+                { header: "Total Kg", width: 20 }
+            ];
+        const filaProducto = p => esMP
+            ? [p.producto, p.calibre, p.tipo || 'MP', p.lote, p.posicion, p.envase, fmtKg(p.total_kg)]
+            : [p.producto, p.calibre, p.tipo || item.Tipo_Carga || 'PT', p.lote, p.posicion, p.envase, p.cantidad, fmtKg(p.kg_envase), fmtKg(p.total_kg)];
         const filasProductos = productos.length > 0
-            ? productos.map(p => [p.producto, p.calibre, p.tipo || item.Tipo_Carga || 'PT', p.lote, p.posicion, p.envase, p.cantidad, fmtKg(p.kg_envase), fmtKg(p.total_kg)])
-            : [["Sin ítems cargados", "", "", "", "", "", "", "", ""]];
+            ? productos.map(filaProducto)
+            : [["Sin ítems cargados"].concat(new Array(columnasProductos.length - 1).fill(""))];
 
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasProductos, filasProductos, { fontSize: 6.8, alturaFila: 7 });
 
-        // --- Nombre y Apellido del chofer / Patentes ---
-        yCurrent += 6;
-        yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 18);
-        const columnasChofer = [
-            { header: "Nombre y Apellido del chofer", width: 80 },
-            { header: "Patente Chasis", width: 51 },
-            { header: "Patente Acoplado", width: 51 }
-        ];
-        yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasChofer,
-            [[item.Nombre_Chofer, item.Patente_Chasis, item.Patente_Acoplado]], { fontSize: 8, alturaFila: 7, mantenerJuntas: true });
+        // --- Nombre y Apellido del chofer / Patentes (solo PT) ---
+        if (!esMP) {
+            yCurrent += 6;
+            yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 18);
+            const columnasChofer = [
+                { header: "Nombre y Apellido del chofer", width: 80 },
+                { header: "Patente Chasis", width: 51 },
+                { header: "Patente Acoplado", width: 51 }
+            ];
+            yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasChofer,
+                [[item.Nombre_Chofer, item.Patente_Chasis, item.Patente_Acoplado]], { fontSize: 8, alturaFila: 7, mantenerJuntas: true });
+        }
 
         // --- Contrato Comercial ---
         yCurrent += 6;
@@ -2441,14 +2575,26 @@ for (const campo of camposImagen) {
         // liberaron esas dos columnas se reparten entre las que quedan, y la
         // mayor parte va a "Destino de Mercadería", que es la que más se cortaba
         // (nombres como "DEP. MOREIRO HNOS S.R.L").
-        const columnasContrato = [
-            { header: "Contrato Comercial", width: 32 },
-            { header: "Contrato Cliente", width: 26 },
-            { header: "Carta de Porte", width: 30 },
-            { header: "Archivo CP", width: 24 },
-            { header: "Destino de Mercadería", width: 48 },
-            { header: "Kg CP", width: 22 }
-        ];
+        // En MP se suma "Observaciones CP": es donde se anota lo que pasó con
+        // esa carta de porte puntual (carga parcial, precinto roto, etc.).
+        const columnasContrato = esMP
+            ? [
+                { header: "Contrato Comercial", width: 26 },
+                { header: "Contrato Cliente", width: 22 },
+                { header: "Carta de Porte", width: 26 },
+                { header: "Archivo CP", width: 20 },
+                { header: "Destino de Mercadería", width: 34 },
+                { header: "Kg CP", width: 18 },
+                { header: "Observaciones CP", width: 36 }
+            ]
+            : [
+                { header: "Contrato Comercial", width: 32 },
+                { header: "Contrato Cliente", width: 26 },
+                { header: "Carta de Porte", width: 30 },
+                { header: "Archivo CP", width: 24 },
+                { header: "Destino de Mercadería", width: 48 },
+                { header: "Kg CP", width: 22 }
+            ];
         const filasContrato = contratos.length > 0
             ? contratos.map(c => {
                 // "Archivo CP" deja de ser un Sí/No inútil: si el archivo está en
@@ -2458,18 +2604,29 @@ for (const campo of camposImagen) {
                     ? { texto: "Ver archivo", url: link }
                     : (c.archivo_cp ? "Adjunto sin sincronizar" : "Sin archivo");
 
-                return [
+                const fila = [
                     c.contrato_com, c.contrato_cli, c.carta_porte,
                     celdaArchivo,
                     c.destino,
                     fmtKg(c.kg_cp)
                 ];
+                if (esMP) fila.push(c.observaciones_cp || "");
+                return fila;
             })
-            : [["Sin contratos asociados", "", "", "", "", ""]];
+            : [["Sin contratos asociados"].concat(new Array(columnasContrato.length - 1).fill(""))];
 
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasContrato, filasContrato, { fontSize: 6.8, alturaFila: 7 });
 
         // --- Checklist operativo (tabla de 2 columnas, igual al modelo) ---
+        // En MP no hay checklist de higiene ni ESTATUS, pero SÍ se conservan las
+        // indicaciones para la descarga, que es lo que necesita quien recibe.
+        if (esMP) {
+            yCurrent += 6;
+            yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido,
+                [{ header: "", width: 140 }, { header: "", width: 42 }],
+                [["Indicaciones para la Descarga", item.Indicaciones_Descarga || '-']],
+                { fontSize: 7.8, alturaFila: 7, conHeader: false, mantenerJuntas: true });
+        } else {
         yCurrent += 6;
         yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, 21);
         const columnasDoble = [
@@ -2493,6 +2650,7 @@ for (const campo of camposImagen) {
             ["Indicaciones para la Descarga", item.Indicaciones_Descarga || '-']
         ];
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasDoble, filasEstado, { fontSize: 7.8, alturaFila: 7, conHeader: false, mantenerJuntas: true });
+        }
 
         // --- Firmas (izquierda: quien elaboró el control; derecha: chofer) ---
         // El bloque entero (título + firmas + línea + nombres) mide unos 42 mm y
@@ -2500,6 +2658,7 @@ for (const campo of camposImagen) {
         // 250, así que cuando la carga traía muchos productos las dos firmas se
         // iban solas a una hoja nueva y quedaba una página prácticamente vacía.
         const ALTO_BLOQUE_FIRMAS = 42;
+        if (!esMP) {
         yCurrent += 12;
         yCurrent = pdfNuevaPaginaSiNoEntra(doc, yCurrent, ALTO_BLOQUE_FIRMAS);
 
@@ -2546,7 +2705,11 @@ for (const campo of camposImagen) {
         doc.text("Responsable del control", centroControl, yLineaFirma + 9.5, { align: "center" });
         doc.text("Chofer", centroChofer, yLineaFirma + 9.5, { align: "center" });
 
+        }
+
         // --- Páginas de registro fotográfico (grilla 2x2, igual estética al modelo) ---
+        // En MP no se saca ninguna foto: la carga es a granel.
+        if (!esMP) {
         agregarPaginaFotos(doc, "REGISTRO FOTOGRÁFICO - VEHÍCULO VACÍO", rojoBraun, item.Id_Carga, [
             { titulo: "Frente del Camión", img: item.Foto_Frente },
             { titulo: "Culo del camión", img: item.Foto_Culo },
@@ -2560,6 +2723,8 @@ for (const campo of camposImagen) {
             { titulo: "Camión Cargado", img: item.Foto_Camion_Cargado },
             { titulo: "Ticket Balanza", img: item.Foto_Ticket_Balanza }
         ]);
+        }
+
         const totalPaginas = doc.internal.getNumberOfPages();
         for (let p = 1; p <= totalPaginas; p++) {
             doc.setPage(p);
@@ -2767,7 +2932,7 @@ function abrirDetalleCarga(registro) {
     // Llenar información general
     document.getElementById('det-fecha').textContent = registro.Fecha || '-';
     document.getElementById('det-tipo').textContent = registro.Tipo_Carga || '-';
-    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? registro.ESTATUS.toLowerCase() : 'aceptado'}">${registro.ESTATUS || 'ACEPTADO'}</span>`;
+    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? registro.ESTATUS.toLowerCase() : 'sin-dato'}">${registro.ESTATUS || '—'}</span>`;
     document.getElementById('det-kg').textContent = fmtKg(registro.Kg_Cargados) + ' kg';
     
     // Llenar productos

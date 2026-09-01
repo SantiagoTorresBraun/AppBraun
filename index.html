@@ -293,10 +293,7 @@
                 </div>
 
                 <!-- Materia Prima (MP) -->
-                <div class="menu-card disabled-card">
-                    <div class="disabled-overlay">
-                        <span class="coming-soon-badge">Próximamente</span>
-                    </div>
+                <div class="menu-card active" onclick="abrirModuloCarga('MP')">
                     <div class="card-header">
                         <div class="card-icon cargo-icon">
                             <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -713,13 +710,13 @@
                         <i class="fas fa-plus"></i> Añadir otro producto
                     </button>
 
-                    <div class="form-group"><label for="chofer">Nombre y Apellido del chofer</label><input type="text" id="chofer" required></div>
-                    <div class="form-group-row">
+                    <div class="form-group solo-pt"><label for="chofer">Nombre y Apellido del chofer</label><input type="text" id="chofer" required></div>
+                    <div class="form-group-row solo-pt">
                         <div class="form-group"><label for="patente-chasis">Patente Chasis</label><input type="text" id="patente-chasis" required></div>
                         <div class="form-group"><label for="patente-acoplado">Patente Acoplado</label><input type="text" id="patente-acoplado"></div>
                     </div>
  
-                    <div class="form-group">
+                    <div class="form-group solo-pt">
                         <label>Firma Chofer</label>
                         <canvas id="canvas-firma-chofer" class="signature-pad"></canvas>
                         <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-chofer')">Limpiar Firma</button>
@@ -738,44 +735,44 @@
                         <i class="fas fa-plus"></i> Añadir otro contrato
                     </button>
 
-                    <h3>Lista de Verificación</h3>
-                    <div class="checklist-item"><p>¿Aplica etiqueta?</p>
+                    <h3 class="solo-pt">Lista de Verificación</h3>
+                    <div class="checklist-item solo-pt"><p>¿Aplica etiqueta?</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="etiqueta-si" name="aplica_etiqueta" value="SI" checked><label for="etiqueta-si">SI</label>
                             <input type="radio" id="etiqueta-no" name="aplica_etiqueta" value="NO"><label for="etiqueta-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Lona cubre y protege la carga</p>
+                    <div class="checklist-item solo-pt"><p>Lona cubre y protege la carga</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="lona-si" name="lona_protege" value="SI" checked><label for="lona-si">SI</label>
                             <input type="radio" id="lona-no" name="lona_protege" value="NO"><label for="lona-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Piso chasis/acoplado libre de suciedad y otros granos</p>
+                    <div class="checklist-item solo-pt"><p>Piso chasis/acoplado libre de suciedad y otros granos</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="piso-si" name="piso_suciedad" value="SI" checked><label for="piso-si">SI</label>
                             <input type="radio" id="piso-no" name="piso_suciedad" value="NO"><label for="piso-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Piso y paredes chasis / acoplado libre de óxido</p>
+                    <div class="checklist-item solo-pt"><p>Piso y paredes chasis / acoplado libre de óxido</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="oxido-si" name="libre_oxido" value="SI" checked><label for="oxido-si">SI</label>
                             <input type="radio" id="oxido-no" name="libre_oxido" value="NO"><label for="oxido-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Chasis y acoplados secos y exentos de insectos</p>
+                    <div class="checklist-item solo-pt"><p>Chasis y acoplados secos y exentos de insectos</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="secos-si" name="secos_insectos" value="SI" checked><label for="secos-si">SI</label>
                             <input type="radio" id="secos-no" name="secos_insectos" value="NO"><label for="secos-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Chasis y acoplados exentos de proliferación de hongos</p>
+                    <div class="checklist-item solo-pt"><p>Chasis y acoplados exentos de proliferación de hongos</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="hongos-si" name="exentos_hongos" value="SI" checked><label for="hongos-si">SI</label>
                             <input type="radio" id="hongos-no" name="exentos_hongos" value="NO"><label for="hongos-no">NO</label>
                         </div>
                     </div>
-                    <div class="checklist-item"><p>Se instaló aislante en el piso para proteger la carga</p>
+                    <div class="checklist-item solo-pt"><p>Se instaló aislante en el piso para proteger la carga</p>
                         <div class="si-no-toggle">
                             <input type="radio" id="aislante-si" name="aislante_piso" value="SI" checked><label for="aislante-si">SI</label>
                             <input type="radio" id="aislante-no" name="aislante_piso" value="NO"><label for="aislante-no">NO</label>
@@ -783,7 +780,7 @@
                     </div>
  
                     <h3>Control Operativo</h3>
-                    <div class="form-group">
+                    <div class="form-group solo-pt">
                         <label>ESTATUS</label>
                         <div class="status-selector">
                             <input type="radio" id="st-aceptado" name="estatus" value="ACEPTADO" checked><label for="st-aceptado">ACEPTADO</label>
@@ -792,7 +789,7 @@
                         </div>
                     </div>
  
-                    <div class="form-group">
+                    <div class="form-group solo-pt">
                         <label>Firma Control</label>
                         <canvas id="canvas-firma-control" class="signature-pad"></canvas>
                         <button type="button" class="btn-clear" onclick="limpiarFirma('canvas-firma-control')">Limpiar Firma</button>
@@ -811,8 +808,8 @@
                     <div class="form-group"><label for="indicaciones">Indicaciones para la Descarga</label><input type="text" id="indicaciones"></div>
                     <div class="form-group"><label for="kg-cargados">Total Kg Cargados</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="kg-cargados" value="0"></div>
  
-                    <h3>Registro Fotográfico (Obligatorio 8 fotos)</h3>
-                    <div class="photo-grid">
+                    <h3 class="solo-pt">Registro Fotográfico (Obligatorio 8 fotos)</h3>
+                    <div class="photo-grid solo-pt">
                         <div class="photo-box"><label for="f-frente">1. Frente</label><input type="file" id="f-frente" accept="image/*"><div class="preview" id="p-frente">📸 Sin foto</div></div>
                         <div class="photo-box"><label for="f-culo">2. Culo</label><input type="file" id="f-culo" accept="image/*"><div class="preview" id="p-culo">📸 Sin foto</div></div>
                         <div class="photo-box"><label for="f-int-chasis">3. Int. Chasis</label><input type="file" id="f-int-chasis" accept="image/*"><div class="preview" id="p-int-chasis">📸 Sin foto</div></div>

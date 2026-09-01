@@ -303,7 +303,7 @@ function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
         c.carta_porte || "",
         c.destino || "",
         c.kg_cp || "",
-        "",                       // Observaciones CP (no la envía el front hoy)
+        c.observaciones_cp || "", // Observaciones CP — se usa sobre todo en cargas MP
         c.kg_descarga || "",
         archivoCp                 // Columna "CP" real = archivo adjunto Carta de Porte (NO diferencia_carga)
       ]);
@@ -622,6 +622,9 @@ function doGet(e) {
             carta_porte: rowsContrato[c][4],
             destino: rowsContrato[c][5],
             kg_cp: rowsContrato[c][6],
+            // Columna 7 = "Observaciones CP". Existía en la hoja desde siempre
+            // pero no se leía: quedaba escrita y la app nunca la volvía a ver.
+            observaciones_cp: rowsContrato[c][7],
             kg_descarga: rowsContrato[c][8],
             // La diferencia NO se guarda en el Sheet, se calcula acá.
             // (La columna 9, "CP", es el archivo adjunto de la Carta de Porte, no una diferencia)
