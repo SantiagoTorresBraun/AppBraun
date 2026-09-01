@@ -2430,15 +2430,24 @@ for (const campo of camposImagen) {
         }
         if (!Array.isArray(contratos)) contratos = [];
 
+        // "Kg Descarga" y "Diferencia" NO van en el reporte: el control de carga
+        // se emite cuando el camión sale, y la descarga se pesa en destino días
+        // después. En el PDF salían siempre "Pendiente" y "-", o peor, una
+        // diferencia de -90.000 que se leía como un faltante. Los datos siguen
+        // cargándose y viéndose en la pantalla de Contratos; lo único que cambia
+        // es que no se imprimen acá.
+        //
+        // Los anchos tienen que sumar anchoContenido (182): los 38 mm que
+        // liberaron esas dos columnas se reparten entre las que quedan, y la
+        // mayor parte va a "Destino de Mercadería", que es la que más se cortaba
+        // (nombres como "DEP. MOREIRO HNOS S.R.L").
         const columnasContrato = [
-            { header: "Contrato Comercial", width: 28 },
-            { header: "Contrato Cliente", width: 24 },
-            { header: "Carta de Porte", width: 24 },
-            { header: "Archivo CP", width: 20 },
-            { header: "Destino de Mercadería", width: 30 },
-            { header: "Kg CP", width: 18 },
-            { header: "Kg Descarga", width: 18 },
-            { header: "Diferencia", width: 20 }
+            { header: "Contrato Comercial", width: 32 },
+            { header: "Contrato Cliente", width: 26 },
+            { header: "Carta de Porte", width: 30 },
+            { header: "Archivo CP", width: 24 },
+            { header: "Destino de Mercadería", width: 48 },
+            { header: "Kg CP", width: 22 }
         ];
         const filasContrato = contratos.length > 0
             ? contratos.map(c => {
@@ -2449,20 +2458,14 @@ for (const campo of camposImagen) {
                     ? { texto: "Ver archivo", url: link }
                     : (c.archivo_cp ? "Adjunto sin sincronizar" : "Sin archivo");
 
-                // La diferencia solo tiene sentido si YA se descargó: sin Kg de
-                // descarga daba "-28000.00", que parecía un faltante enorme.
-                const sinDescarga = c.kg_descarga === '' || c.kg_descarga === null || c.kg_descarga === undefined;
-
                 return [
                     c.contrato_com, c.contrato_cli, c.carta_porte,
                     celdaArchivo,
                     c.destino,
-                    fmtKg(c.kg_cp),
-                    sinDescarga ? "Pendiente" : fmtKg(c.kg_descarga),
-                    sinDescarga ? "-" : fmtKg(c.diferencia_carga)
+                    fmtKg(c.kg_cp)
                 ];
             })
-            : [["Sin contratos asociados", "", "", "", "", "", "", ""]];
+            : [["Sin contratos asociados", "", "", "", "", ""]];
 
         yCurrent = dibujarTablaConBordes(doc, margenX, yCurrent, anchoContenido, columnasContrato, filasContrato, { fontSize: 6.8, alturaFila: 7 });
 
