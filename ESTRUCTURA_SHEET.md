@@ -244,3 +244,47 @@ afectan cualquier informe**, lo haga la IA o una tabla dinámica a mano.
 | **Cargas sin `ESTATUS`** | 7 de 251 aparecen como `(sin dato)` | 🔴 Sin resolver — hay que completarlas. |
 | **`Calibre` mezcla calibres con procesos** | `PRELIMPIEZA`, `DESCARTES`, `Split`, `Mix`, `NATURAL` conviven con `8 mm` | 🟡 A decidir: si son categorías válidas, conviene una columna aparte. |
 | **`Tipo_Carga` siempre vale `PT`** | Ninguna carga registrada como `MP` | 🟡 A verificar: ¿no se usa, o no se está guardando? |
+
+---
+
+## 9. Correos duplicados — corregido el 28/08/2026
+
+Se estaban enviando **dos correos por cada reporte**, con distinto remitente: uno como
+*"Lucas Ramis (App Braun)"* y otro desde la cuenta del usuario.
+
+**Por qué.** `enviarReportePorCorreo()` era la **única acción de escritura del backend sin
+guarda de idempotencia**. Todas las demás ya tenían la suya (`guardarRegistroCompleto` por
+`Id_Carga` + lock, `guardarCalidad` por `Id_Calidad`, `crearTicket` por `id_ticket`,
+`guardarMuestreo` por `Id_Muestreo`). Mandar un mail no es idempotente: si el pedido llega
+dos veces, salen dos mails. Y llegaba dos veces por tres caminos distintos:
+
+1. **El reintento a ciegas de `enviarAlBackend()`** ([app.js:86](app.js#L86)). Cuando no puede
+   leer la respuesta del servidor, vuelve a hacer el POST completo. Se diseñó para *guardar*,
+   que es idempotente; el envío de correo se sumó después al mismo helper y heredó el
+   reintento. Si el primer POST llegó bien pero la respuesta se perdió, sale un segundo mail.
+2. **El envío automático al guardar pisándose con el botón del modal.** El automático corre en
+   segundo plano y tarda (arma el PDF, pide token de Gmail). Si mientras tanto el usuario abre
+   el modal y toca *Enviar*, salen los dos. Y como cada uno puede resolver por un camino
+   distinto —uno cae al backend porque el popup de Gmail quedó bloqueado, el otro sale por
+   Gmail— **llegan con distinto remitente**, que es exactamente lo que se vio.
+3. Dos POST simultáneos: Apps Script atiende varios pedidos a la vez.
+
+**Cómo quedó.**
+
+| Capa | Qué hace |
+|---|---|
+| Backend | Recuerda por **5 minutos** qué se mandó (reporte + destinatario + asunto, hasheado). Un pedido repetido dentro de esa ventana devuelve `duplicado: true` y **no manda nada**. El chequeo y la marca van adentro de un `LockService`, así dos pedidos simultáneos no pasan los dos. |
+| Frontend | `enviosEnCurso` bloquea que el mismo reporte se mande dos veces a la vez (el automático y el botón ya no se pisan). |
+| Aviso | Si el backend frena un duplicado, la app lo dice: *"ya se había enviado hace instantes: no se mandó de nuevo"*. |
+
+**Un reenvío deliberado más tarde sigue funcionando**: pasada la ventana, la marca expiró.
+
+### El detalle que casi se escapa
+
+La primera versión del arreglo borraba la marca ante cualquier error, para permitir
+reintentar. Pero `marcarEstadoCorreo()` corre **después** de que el mail ya salió: si fallaba
+al escribir la constancia en la planilla, se borraba la marca y **el reintento mandaba un
+segundo correo al cliente**. Lo detectó una prueba automática, no la lectura del código.
+
+Ahora la constancia va en su propio `try`: perder la anotación es molesto, mandar el reporte
+dos veces al cliente es peor. La marca solo se borra cuando el fallo fue **antes** de enviar.

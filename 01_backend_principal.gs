@@ -356,10 +356,78 @@ function enviarCorreoReporte(data) {
 // (El envío desde el Gmail propio del usuario lo hace correo.js en el frontend;
 //  esta función es el plan B para cuando eso no se puede.)
 // ============================================================================
-function enviarReportePorCorreo(data) {
-  try {
-    if (!data.Correo) return respuestaErrorCorreo("Falta el correo del destinatario");
+// ----------------------------------------------------------------------------
+// ANTIDUPLICADO DE CORREOS
+// ----------------------------------------------------------------------------
+// Mandar un mail NO es idempotente: si el mismo pedido llega dos veces, salen
+// dos mails. Y llega dos veces más seguido de lo que parece:
+//   - enviarAlBackend() de app.js reintenta a ciegas cuando no puede leer la
+//     respuesta (pensado para guardar, que sí es idempotente);
+//   - el envío automático al guardar y el botón del modal pueden pisarse;
+//   - Apps Script atiende varios POST a la vez.
+// Todas las demás acciones de escritura de este backend ya tenían su guarda
+// (Id_Carga, Id_Calidad, id_ticket, Id_Muestreo); esta era la única sin nada.
+//
+// Se recuerda por unos minutos qué se mandó (registro + destinatario + asunto).
+// Un reenvío deliberado más tarde sigue funcionando: la marca ya expiró.
+var VENTANA_ANTIDUPLICADO_CORREO_SEG = 300;
 
+function claveEnvioCorreo(data) {
+  var partes = [
+    data.Tipo_Reporte || "carga",
+    data.Id_Carga || data.Id_Calidad || "",
+    String(data.Correo || "").trim().toLowerCase(),
+    String(data.Correo_Asunto || "")
+  ].join("|");
+  // La clave del caché no admite cualquier largo: se resume a un hash corto.
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, partes);
+  var hash = bytes.reduce(function (t, b) { return t + ("0" + (b & 0xFF).toString(16)).slice(-2); }, "");
+  return "mail_" + hash;
+}
+
+function enviarReportePorCorreo(data) {
+  // Se valida ANTES de tocar el antiduplicado: si falta el destinatario no hubo
+  // envío, y no hay que dejar una marca que después bloquee el reintento bueno.
+  if (!data.Correo) return respuestaErrorCorreo("Falta el correo del destinatario");
+
+  var cache = CacheService.getScriptCache();
+  var clave = claveEnvioCorreo(data);
+
+  // El chequeo y la marca van adentro de un lock: sin él, dos pedidos
+  // simultáneos leen "no se mandó" antes de que cualquiera marque, y salen los dos.
+  var lock = LockService.getScriptLock();
+  var conLock = false;
+  try { conLock = lock.tryLock(20000); } catch (errLock) { conLock = false; }
+
+  try {
+    if (cache.get(clave)) {
+      Logger.log("Correo duplicado descartado: " + clave);
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success", duplicado: true,
+        message: "Ese reporte ya se envió hace instantes; no se mandó de nuevo."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    // Se marca ANTES de mandar para que un pedido gemelo que entre ahora lo vea.
+    // Si el envío falla, la marca se borra abajo y se puede reintentar.
+    cache.put(clave, "1", VENTANA_ANTIDUPLICADO_CORREO_SEG);
+  } finally {
+    if (conLock) lock.releaseLock();
+  }
+
+  try {
+    return enviarReportePorCorreoInterno(data);
+  } catch (error) {
+    try { cache.remove(clave); } catch (e) { }
+    Logger.log("No se pudo enviar el reporte por correo: " + error);
+    return respuestaErrorCorreo(error.toString());
+  }
+}
+
+// Hace el envío de verdad. NO atrapa los errores a propósito: los deja subir a
+// enviarReportePorCorreo(), que es quien tiene que borrar la marca del
+// antiduplicado para que un reintento posterior pueda salir.
+function enviarReportePorCorreoInterno(data) {
+  {
     var asunto = data.Correo_Asunto || ("Control de Carga - " + (data.Id_Carga || ""));
     var html = data.Correo_Cuerpo_Html || "";
     var opciones = { name: data.Correo_Nombre_Remitente || "Control de Carga Braun" };
@@ -383,18 +451,24 @@ function enviarReportePorCorreo(data) {
 
     MailApp.sendEmail(data.Correo, asunto, cuerpoTexto, opciones);
 
-    // La constancia va en la hoja del módulo que corresponda
-    var estado = data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)");
-    if (data.Tipo_Reporte === "calidad") {
-      marcarEstadoCorreoCalidad(data.Id_Calidad, data.Grano, data.Correo, estado);
-    } else {
-      marcarEstadoCorreo(data.Id_Carga, data.Correo, estado);
+    // A PARTIR DE ACÁ EL CORREO YA SALIÓ Y NO SE PUEDE DESHACER.
+    // Por eso dejar la constancia en la planilla va en su propio try: si falla
+    // (la hoja no está, se cortó la red con el Sheet), NO puede propagarse el
+    // error, porque el que llama borraría la marca del antiduplicado y el
+    // reintento mandaría un SEGUNDO correo al destinatario. Perder la constancia
+    // es molesto; mandar el reporte dos veces al cliente es peor.
+    try {
+      var estado = data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)");
+      if (data.Tipo_Reporte === "calidad") {
+        marcarEstadoCorreoCalidad(data.Id_Calidad, data.Grano, data.Correo, estado);
+      } else {
+        marcarEstadoCorreo(data.Id_Carga, data.Correo, estado);
+      }
+    } catch (errEstado) {
+      Logger.log("El correo salió pero no se pudo dejar constancia en la planilla: " + errEstado);
     }
-    return respuestaOk();
 
-  } catch (error) {
-    Logger.log("No se pudo enviar el reporte por correo: " + error);
-    return respuestaErrorCorreo(error.toString());
+    return respuestaOk();
   }
 }
 

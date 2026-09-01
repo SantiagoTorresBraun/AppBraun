@@ -460,6 +460,17 @@ function enviarConBackend(datos) {
 // =============================================================================
 // 6. ORQUESTADOR: intenta Gmail y, si no puede, cae al backend
 // =============================================================================
+// Reportes que se están mandando AHORA MISMO, por clave "tipo:id".
+//
+// Sin esto se pueden solapar dos envíos del mismo reporte: el automático al
+// guardar arranca en segundo plano (tarda: arma el PDF, pide token de Gmail) y,
+// mientras tanto, el usuario abre el modal y toca "Enviar reporte". Los dos
+// terminan mandando, y como cada uno puede resolver por un camino distinto
+// (uno por Gmail, otro por el backend), llegan dos correos con distinto
+// remitente. El chequeo de estado no alcanza: cuando el segundo arranca, el
+// primero todavía no escribió "Enviado" en ningún lado.
+const enviosEnCurso = new Set();
+
 async function enviarReportePorMail(item, tipo, opciones) {
     opciones = opciones || {};
     const reporte = reporteDe(tipo);
@@ -467,6 +478,19 @@ async function enviarReportePorMail(item, tipo, opciones) {
     if (!para || para.indexOf('@') === -1) throw new Error('Falta un correo de destino válido.');
     if (!navigator.onLine) throw new Error('No hay conexión a internet. El reporte no se puede enviar en este momento.');
 
+    const claveEnvio = (tipo || 'carga') + ':' + (item[reporte.campoId] || para);
+    if (enviosEnCurso.has(claveEnvio)) {
+        throw new Error('Ese reporte ya se está enviando en este momento. Esperá a que termine.');
+    }
+    enviosEnCurso.add(claveEnvio);
+    try {
+        return await enviarReportePorMailInterno(item, tipo, opciones, reporte, para);
+    } finally {
+        enviosEnCurso.delete(claveEnvio);
+    }
+}
+
+async function enviarReportePorMailInterno(item, tipo, opciones, reporte, para) {
     const adjunto = await generarAdjuntoPdf(item, tipo);
     const mensaje = opciones.mensaje || mensajeReportePorDefecto(item, tipo);
     const datos = {
@@ -500,14 +524,18 @@ async function enviarReportePorMail(item, tipo, opciones) {
         via = 'backend';
     }
 
+    let duplicado = false;
     if (via === 'backend') {
         const respuesta = await enviarConBackend(datos);
+        // El backend descarta un envío idéntico repetido dentro de unos minutos
+        // y avisa con duplicado:true en vez de mandar el correo dos veces.
+        duplicado = !!(respuesta && respuesta.respuesta && respuesta.respuesta.duplicado);
         estado = datos.estado + (respuesta && respuesta.sinConfirmar ? ' (sin confirmar)' : '');
     }
 
     recordarDestinatario(para);
     await registrarEstadoCorreo(item, tipo, para, estado, via);
-    return { via: via, estado: estado, megas: adjunto.megas };
+    return { via: via, estado: estado, megas: adjunto.megas, duplicado: duplicado };
 }
 
 // Compatibilidad: el envío automático de Control de Carga sigue llamando así.
@@ -700,9 +728,13 @@ async function confirmarEnvioCorreo() {
             mensaje: document.getElementById('correo-mensaje').value
         });
         cerrarModalCorreo();
-        avisoCorreo(resultado.via === 'gmail'
-            ? 'Reporte enviado a ' + para + ' desde tu Gmail.'
-            : 'Reporte enviado a ' + para + '.', 'ok');
+        if (resultado.duplicado) {
+            avisoCorreo('Ese reporte ya se había enviado a ' + para + ' hace instantes: no se mandó de nuevo.', 'info');
+        } else {
+            avisoCorreo(resultado.via === 'gmail'
+                ? 'Reporte enviado a ' + para + ' desde tu Gmail.'
+                : 'Reporte enviado a ' + para + '.', 'ok');
+        }
     } catch (error) {
         console.error('Error al enviar el reporte por correo:', error);
         marcarErrorCorreo(item, tipoCorreoActual, para, error);

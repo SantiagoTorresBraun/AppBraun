@@ -3047,6 +3047,9 @@ h3 {
     font-size: 0.95rem;
     color: var(--color-text-dark);
     background: #fff;
+    /* .gestor-body es flex en columna: sin esto los campos se achican solos
+       cuando el contenido no entra, y quedan ilegibles. */
+    flex-shrink: 0;
 }
 .correo-content input:focus,
 .correo-content textarea:focus {
@@ -3054,7 +3057,21 @@ h3 {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(183, 28, 28, 0.12);
 }
-.correo-content textarea { resize: vertical; line-height: 1.45; }
+/* El textarea del mensaje se veía de UNA sola línea, tapando el texto que se
+   iba a enviar. El rows="6" del HTML no servía de nada: .gestor-body es un
+   contenedor flex en columna y, por defecto, sus hijos se encogen cuando el
+   contenido no entra. flex-shrink:0 + min-height le devuelven la altura. */
+.correo-content textarea {
+    resize: vertical;
+    line-height: 1.45;
+    min-height: 150px;
+    flex-shrink: 0;
+    font-family: inherit;
+}
+/* En pantallas bajas se le da algo menos, pero nunca una sola línea. */
+@media (max-height: 720px) {
+    .correo-content textarea { min-height: 110px; }
+}
 
 /* Remitente real del correo */
 .correo-de-box {
