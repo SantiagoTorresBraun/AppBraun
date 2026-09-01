@@ -348,6 +348,13 @@ function b64Utf8(texto) {
     return btoa(unescape(encodeURIComponent(texto)));
 }
 
+// El endpoint común de Gmail recibe el mensaje en el campo "raw", codificado en
+// base64url: como el base64 de siempre pero con - y _ en lugar de + y /, y sin
+// los = del final. Con los signos normales Gmail devuelve 400.
+function base64UrlDeMime(mime) {
+    return b64Utf8(mime).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // Los encabezados MIME solo aceptan ASCII: los acentos van codificados
 // (RFC 2047). Cada "palabra codificada" no puede pasar de 75 caracteres, así que
 // el asunto se parte en varios trozos —cuidando de no cortar un carácter UTF-8
@@ -432,32 +439,48 @@ async function enviarConGmail(datos) {
     }
 
     const mime = armarMensajeMime(datos);
-    const megasMime = mime.length / (1024 * 1024);
+    const raw = base64UrlDeMime(mime);
+    const megas = mime.length / (1024 * 1024);
     const arranque = Date.now();
-    // Endpoint de subida (uploadType=media): admite hasta 35 MB de mensaje;
-    // el endpoint común se queda corto apenas el PDF trae las fotos.
+
+    // POR QUÉ NO SE USA SIEMPRE EL ENDPOINT DE SUBIDA
+    //
+    // /upload/...?uploadType=media aguanta 35 MB, pero Google contesta esos
+    // envíos derivándolos a otro host, y esa respuesta no habilita CORS para
+    // nuestro origen. Resultado: el correo SALE, pero el navegador no puede leer
+    // la respuesta y fetch tira "Failed to fetch". La app creía que Gmail había
+    // fallado, mandaba por el backend y al destinatario le llegaban dos.
+    //
+    // El endpoint común acepta hasta 5 MB de cuerpo y responde con CORS bien
+    // puesto. Los reportes reales pesan alrededor de 1 MB (máximo medido sobre
+    // 251 cargas: 1,03 MB de fotos), así que entran todos con margen de sobra.
+    // El de subida queda solo para el caso raro de un reporte enorme.
+    const TOPE_ENDPOINT_SIMPLE = 4.5 * 1024 * 1024;
+    const usarSimple = raw.length <= TOPE_ENDPOINT_SIMPLE;
+
     let respuesta;
     try {
-        respuesta = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
-            body: mime
-        });
+        respuesta = usarSimple
+            ? await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ raw: raw })
+            })
+            : await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
+                body: mime
+            });
     } catch (errorRed) {
-        // Se anotan el tamaño y cuánto tardó en cortarse: si siempre revienta
-        // con mensajes grandes, el problema es de tamaño (proxy o antivirus de
-        // la red); si corta enseguida y con cualquier tamaño, es otra cosa.
-        console.warn('Gmail: se corto el envio. MIME=' + megasMime.toFixed(2) + ' MB, ' +
-            (Date.now() - arranque) + ' ms, error=' + (errorRed && errorRed.name));
-        // ACÁ NACÍAN LOS CORREOS DUPLICADOS.
-        // El fetch se rompió sin respuesta: puede que no haya salido, o que Google
-        // ya lo haya aceptado y la conexión se haya cortado al volver. Con un PDF
-        // de varios MB es justo donde pasa. Antes esto contaba como "Gmail falló"
-        // y se mandaba por el backend: si Gmail sí lo había mandado, al
-        // destinatario le llegaban DOS, uno desde el Gmail del usuario y otro
-        // desde la cuenta del script. No hay forma de saberlo, así que no se
-        // reintenta solo.
-        throw errorDeGmail('Se cortó la conexión con Gmail (' + megasMime.toFixed(1) + ' MB, ' +
+        // Queda anotado el tamaño y cuánto tardó en cortarse, para poder
+        // distinguir un problema de tamaño (proxy/antivirus de la red) de otro.
+        console.warn('Gmail: se cortó el envío. endpoint=' + (usarSimple ? 'simple' : 'upload') +
+            ' MIME=' + megas.toFixed(2) + ' MB, ' + (Date.now() - arranque) + ' ms, error=' +
+            (errorRed && errorRed.name));
+        // No se sabe si salió: puede que Google lo haya aceptado y se haya
+        // cortado al volver la respuesta. Mandarlo por el backend "por las
+        // dudas" es lo que duplicaba los correos, así que no se reintenta solo.
+        throw errorDeGmail('Se cortó la conexión con Gmail (' + megas.toFixed(1) + ' MB, ' +
             Math.round((Date.now() - arranque) / 1000) + 's) y no se pudo confirmar si el correo salió', true);
     }
 
