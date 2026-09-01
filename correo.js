@@ -432,6 +432,8 @@ async function enviarConGmail(datos) {
     }
 
     const mime = armarMensajeMime(datos);
+    const megasMime = mime.length / (1024 * 1024);
+    const arranque = Date.now();
     // Endpoint de subida (uploadType=media): admite hasta 35 MB de mensaje;
     // el endpoint común se queda corto apenas el PDF trae las fotos.
     let respuesta;
@@ -442,6 +444,11 @@ async function enviarConGmail(datos) {
             body: mime
         });
     } catch (errorRed) {
+        // Se anotan el tamaño y cuánto tardó en cortarse: si siempre revienta
+        // con mensajes grandes, el problema es de tamaño (proxy o antivirus de
+        // la red); si corta enseguida y con cualquier tamaño, es otra cosa.
+        console.warn('Gmail: se corto el envio. MIME=' + megasMime.toFixed(2) + ' MB, ' +
+            (Date.now() - arranque) + ' ms, error=' + (errorRed && errorRed.name));
         // ACÁ NACÍAN LOS CORREOS DUPLICADOS.
         // El fetch se rompió sin respuesta: puede que no haya salido, o que Google
         // ya lo haya aceptado y la conexión se haya cortado al volver. Con un PDF
@@ -450,8 +457,8 @@ async function enviarConGmail(datos) {
         // destinatario le llegaban DOS, uno desde el Gmail del usuario y otro
         // desde la cuenta del script. No hay forma de saberlo, así que no se
         // reintenta solo.
-        throw errorDeGmail('Se cortó la conexión con Gmail y no se pudo confirmar el envío: ' +
-            (errorRed.message || errorRed), true);
+        throw errorDeGmail('Se cortó la conexión con Gmail (' + megasMime.toFixed(1) + ' MB, ' +
+            Math.round((Date.now() - arranque) / 1000) + 's) y no se pudo confirmar si el correo salió', true);
     }
 
     if (!respuesta.ok) {
@@ -873,13 +880,50 @@ async function confirmarEnvioCorreo() {
                 : 'Reporte enviado a ' + para + '.', 'ok');
         }
     } catch (error) {
-        console.error('Error al enviar el reporte por correo:', error);
-        marcarErrorCorreo(item, tipoCorreoActual, para, error);
-        avisoCorreo('No se pudo enviar el reporte: ' + (error.message || 'error desconocido'), 'error');
+        if (error.envioIncierto) {
+            // NO es un fallo: Gmail probablemente lo mandó y lo único que se
+            // perdió fue la confirmación. Decir "no se pudo enviar" y dejar
+            // "Error" en la planilla de un correo que el cliente sí recibió es
+            // peor que admitir que no lo sabemos.
+            console.warn('Envío sin confirmar:', error);
+            marcarEnvioSinConfirmar(item, tipoCorreoActual, para);
+            cerrarModalCorreo();
+            avisoCorreo('El envío a ' + para + ' quedó SIN CONFIRMAR. Revisá tu carpeta Enviados de Gmail: ' +
+                'si el correo está, ya salió. Si no está, volvé a mandarlo.', 'info');
+        } else {
+            console.error('Error al enviar el reporte por correo:', error);
+            marcarErrorCorreo(item, tipoCorreoActual, para, error);
+            avisoCorreo('No se pudo enviar el reporte: ' + (error.message || 'error desconocido'), 'error');
+        }
     } finally {
         boton.disabled = false;
         boton.innerHTML = textoOriginal;
     }
+}
+
+// El envío no se pudo confirmar: probablemente salió. Se deja constancia con
+// ese texto exacto, ni "Enviado" ni "Error", para que quien mire la planilla
+// sepa que hay que verificarlo y no vuelva a mandarlo a ciegas.
+function marcarEnvioSinConfirmar(item, tipo, para) {
+    const reporte = reporteDe(tipo);
+    const id = item[reporte.campoId];
+    const estado = 'Sin confirmar ' + fechaHoraCorta() + ' a ' + para + ' — revisá Enviados de Gmail';
+    item.Correo = para;
+    item.Estado_Correo = estado;
+
+    const listaEnMemoria = (tipo === 'calidad')
+        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
+        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    if (Array.isArray(listaEnMemoria)) {
+        const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
+        if (enMemoria) { enMemoria.Correo = para; enMemoria.Estado_Correo = estado; }
+    }
+
+    actualizarEstadoCorreoEnColaLocal(tipo, id, para, estado);
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+        sincronizarEstadoCorreoFormulario(id, para, estado);
+    }
+    repintarHistorial(tipo);
 }
 
 function marcarErrorCorreo(item, tipo, para, error) {
