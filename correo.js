@@ -680,6 +680,24 @@ function abrirModalCorreo(item, tipo) {
         : '';
 
     document.getElementById('modal-envio-correo').classList.add('active');
+    // Recién ahora el modal es visible: hasta que no lo es, scrollHeight da 0 y
+    // no se puede medir cuánto ocupa el texto.
+    ajustarAltoMensaje();
+}
+
+// El campo "Mensaje" crece con su contenido, así se ve el cuerpo entero del
+// correo sin scrollear adentro de un cuadrito.
+//
+// Una altura fija no alcanzaba: el mensaje por defecto son ocho renglones
+// (saludo, presentación, cierre y firma) y quedaban cortados. Y como el modal
+// es un contenedor flex en columna, sus hijos se achican solos cuando el
+// contenido no entra — por eso el rows="6" del HTML no servía de nada.
+function ajustarAltoMensaje() {
+    const caja = document.getElementById('correo-mensaje');
+    if (!caja) return;
+    caja.style.height = 'auto';              // sin esto solo podría crecer, nunca achicarse
+    const alto = caja.scrollHeight + 2;      // +2 por los bordes, para que no quede un renglón cortado
+    caja.style.height = Math.min(Math.max(alto, 140), 400) + 'px';
 }
 
 function usarDestinatario(email) {
