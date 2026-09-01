@@ -320,3 +320,42 @@ El historial mostraba `ACEPTADO` cuando `ESTATUS` venía vacío. Para MP eso ser
 mentir —una carga MP no tiene veredicto—, así que ahora muestra `—` en gris.
 De paso deja de inventar un estado para las **7 cargas PT sin ESTATUS** que ya
 existían (ver sección 8).
+
+---
+
+## 11. Campos sacados de la carga de Control de Calidad (28/08/2026)
+
+Seis campos salieron del **formulario** de Control de Calidad por no usarse:
+
+`Contrato Producción` · `Contrato Comercial` · `Contrato FM` · `Variedad` ·
+`N° CTG` · `Tipo` (Kabuli / Desi)
+
+**Las columnas siguen existiendo en el Sheet y los registros viejos conservan sus
+datos.** Lo único que cambia es que ya no se cargan al crear un control nuevo.
+Se siguen viendo en:
+
+- el **detalle** de cada control (los seis),
+- la columna **"Lote / Variedad"** del historial,
+- el **buscador** del historial (busca por Variedad, Contrato Comercial y Contrato Producción),
+- el **PDF**, donde `Tipo` se usa como respaldo del `N° Lote` cuando está vacío.
+
+### Se OMITEN, no se mandan vacíos
+
+Los campos no se envían al backend como `""`: directamente **no se mandan**. El
+backend distingue las dos cosas:
+
+- `actualizarCalidad()` saltea las claves que llegan como `undefined` → **la celda
+  queda como estaba**.
+- Si se mandara `""`, editar un control viejo le **borraría** los contratos que
+  ya tenía.
+
+### El chequeo que conviene correr al sacar campos
+
+Sacar un input del HTML deja los `document.getElementById('...')` del JS
+devolviendo `null`, y el `.value` siguiente rompe **todo el guardado**. Es
+silencioso hasta que alguien intenta guardar.
+
+Vale la pena verificar que ningún `getElementById('x').algo` del JS apunte a un
+id que no exista en `index.html`. Al hacerlo acá aparecieron además
+`#tab-btn-nuevo` y `#tab-btn-historial` en [app.js](app.js), que no existen —
+pero están protegidos con un `if`, así que no rompen nada.

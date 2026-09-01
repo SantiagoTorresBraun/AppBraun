@@ -260,14 +260,15 @@ function construirRegistroCalidad(idParaGuardar) {
         "Muestreo en": document.getElementById('cal-muestreo').value,
         "N° Lote Cliente/Planta": document.getElementById('cal-lote-cliente').value,
         "N° Lote BRC": document.getElementById('cal-lote-brc').value,
-        "Contrato Produccion": document.getElementById('cal-contrato-prod').value,
-        "Contrato Comercial": document.getElementById('cal-contrato-com').value,
-        "Contrato FM": document.getElementById('cal-contrato-fm').value,
         "N° Proceso": document.getElementById('cal-proceso').value,
-        "Variedad": document.getElementById('cal-variedad').value,
         "N° Lote": document.getElementById('cal-lote').value,
-        "N° CTG": document.getElementById('cal-ctg').value,
-        "Tipo": document.getElementById('cal-tipo').value,
+        // Contrato Producción, Contrato Comercial, Contrato FM, Variedad, N° CTG
+        // y Tipo salieron del formulario: no se usaban al cargar un control.
+        //
+        // No se mandan como "" a propósito, se OMITEN. El backend distingue las
+        // dos cosas: al ACTUALIZAR saltea las claves que no llegan (`undefined`)
+        // y deja la celda como está, así editar un control viejo no le borra los
+        // contratos que ya tenía. Mandar "" sí los borraría.
         "Calibre": document.getElementById('cal-calibre').value,
         "Envase": document.getElementById('cal-envase').value,
         "Kg": parseNumeroAR(document.getElementById('cal-kg').value),
@@ -783,14 +784,11 @@ function cargarCalidadParaEditar(base64Data) {
         poblarSelect(document.getElementById('cal-muestreo'), 'muestreo', item["Muestreo en"] || "");
         document.getElementById('cal-lote-cliente').value = item["N° Lote Cliente/Planta"] || "";
         document.getElementById('cal-lote-brc').value = item["N° Lote BRC"] || "";
-        document.getElementById('cal-contrato-prod').value = item["Contrato Produccion"] || "";
-        document.getElementById('cal-contrato-com').value = item["Contrato Comercial"] || "";
-        document.getElementById('cal-contrato-fm').value = item["Contrato FM"] || "";
         document.getElementById('cal-proceso').value = item["N° Proceso"] || "";
-        document.getElementById('cal-variedad').value = item["Variedad"] || "";
         document.getElementById('cal-lote').value = item["N° Lote"] || "";
-        document.getElementById('cal-ctg').value = item["N° CTG"] || "";
-        poblarSelect(document.getElementById('cal-tipo'), 'tipoGrano', item["Tipo"] || "");
+        // Los campos que salieron del formulario ya no se cargan acá: sus inputs
+        // no existen y getElementById devolvería null. Sus valores siguen en el
+        // Sheet y se ven en el detalle del control.
         poblarSelect(document.getElementById('cal-calibre'), 'calibre', item["Calibre"] || "");
         poblarSelect(document.getElementById('cal-envase'), 'envase', item["Envase"] || "");
         document.getElementById('cal-kg').value = valorPlanoParaEditar(item["Kg"] || 0);

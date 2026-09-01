@@ -504,31 +504,16 @@
                         </div>
                         <div class="form-group"><label for="cal-lote-cliente">N° Lote Cliente/Planta</label><input type="text" id="cal-lote-cliente"></div>
                     </div>
+                    <!-- Se sacaron de la carga por no usarse: Contrato Producción,
+                         Contrato Comercial, Contrato FM, Variedad, N° CTG y Tipo.
+                         Los registros viejos conservan esos datos en el Sheet y se
+                         siguen viendo en el detalle y en el buscador del historial. -->
                     <div class="form-group-row">
                         <div class="form-group"><label for="cal-lote-brc">N° Lote BRC</label><input type="text" id="cal-lote-brc"></div>
-                        <div class="form-group"><label for="cal-contrato-prod">Contrato Producción</label><input type="text" id="cal-contrato-prod"></div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group"><label for="cal-contrato-com">Contrato Comercial</label><input type="text" id="cal-contrato-com"></div>
-                        <div class="form-group"><label for="cal-contrato-fm">Contrato FM</label><input type="text" id="cal-contrato-fm"></div>
-                    </div>
-                    <div class="form-group-row">
                         <div class="form-group"><label for="cal-proceso">N° Proceso</label><input type="text" id="cal-proceso"></div>
-                        <div class="form-group"><label for="cal-variedad">Variedad</label><input type="text" id="cal-variedad"></div>
                     </div>
                     <div class="form-group-row">
                         <div class="form-group"><label for="cal-lote">N° Lote</label><input type="text" id="cal-lote"></div>
-                        <div class="form-group"><label for="cal-ctg">N° CTG</label><input type="text" id="cal-ctg"></div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="cal-tipo">Tipo</label>
-                            <div class="enum-row">
-                                <select id="cal-tipo" class="enum-select" data-enum="tipoGrano"></select>
-                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
-                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
-                            </div>
-                        </div>
                         <div class="form-group">
                             <label for="cal-calibre">Calibre</label>
                             <div class="enum-row">
