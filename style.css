@@ -3599,3 +3599,51 @@ body.carga-mp .solo-pt { display: none !important; }
    sin completar. Antes se mostraban como "ACEPTADO", que era inventar un
    veredicto que nadie dio. */
 .badge.sin-dato { background: #eceff1; color: #78909c; }
+
+/* =====================================================================
+   CONTRASEÑAS — enlace de recuperación y avisos de los modales
+   ===================================================================== */
+
+/* "¿Olvidaste tu contraseña?" debajo del botón de entrar */
+.link-olvide {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 6px;
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-size: 0.88rem;
+    text-decoration: underline;
+    cursor: pointer;
+    font-family: inherit;
+}
+.link-olvide:hover { color: var(--color-primary-dark); }
+
+/* Los avisos de los modales reutilizan .login-error (rojo). Cuando la noticia
+   es buena —"código enviado"— se pinta en verde con esta clase. */
+.login-error.login-ok {
+    background: #e8f5e9;
+    border-color: #2e7d32;
+    color: #1b5e20;
+}
+
+/* El código de 6 dígitos: grande y espaciado, se tipea desde el celular
+   mirando el correo en otra ventana. */
+#rec-codigo {
+    font-size: 1.5rem;
+    letter-spacing: 0.5em;
+    text-align: center;
+    font-weight: 700;
+}
+
+/* Quién es el usuario que está cambiando su contraseña */
+#cam-usuario {
+    background: #f5f5f7;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+}

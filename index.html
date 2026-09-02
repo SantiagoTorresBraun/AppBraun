@@ -40,9 +40,94 @@
                 </div>
                 <div id="login-error" class="login-error hidden"></div>
                 <button type="submit" id="btn-login" class="btn-primary">Iniciar Sesión</button>
+                <button type="button" class="link-olvide" onclick="abrirRecuperarPassword()">¿Olvidaste tu contraseña?</button>
             </form>
         </div>
     </section>
+
+    <!-- ============ RECUPERAR CONTRASEÑA (código por correo) ============ -->
+    <div id="modal-recuperar" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarRecuperarPassword()"></div>
+        <div class="gestor-content correo-content">
+            <header class="gestor-header">
+                <h3><i class="fas fa-key"></i> Recuperar contraseña</h3>
+                <button type="button" class="gestor-close" onclick="cerrarRecuperarPassword()" title="Cerrar">&times;</button>
+            </header>
+            <div class="gestor-body">
+
+                <!-- PASO 1: pedir el código -->
+                <div id="recuperar-paso-1">
+                    <p class="correo-nota" style="margin-top:0">
+                        Escribí tu correo y te mandamos un código de 6 dígitos a esa casilla.
+                        Con ese código vas a poder poner una contraseña nueva.
+                    </p>
+                    <label class="correo-label" for="rec-email">Tu correo</label>
+                    <input type="email" id="rec-email" placeholder="nombre.apellido@braunrelacionescomerciales.com.ar" autocomplete="username">
+                    <div id="rec-aviso-1" class="login-error hidden"></div>
+                    <button type="button" id="btn-rec-pedir" class="btn-primary" style="width:100%; margin-top:14px;" onclick="pedirCodigoUI()">
+                        <i class="fas fa-paper-plane"></i> Enviarme el código
+                    </button>
+                </div>
+
+                <!-- PASO 2: código + contraseña nueva -->
+                <div id="recuperar-paso-2" class="hidden">
+                    <p class="correo-nota" style="margin-top:0">
+                        Te mandamos un código a <b id="rec-destino"></b>. Revisá tu correo
+                        (mirá también el correo no deseado) y escribilo acá abajo.
+                    </p>
+                    <label class="correo-label" for="rec-codigo">Código de 6 dígitos</label>
+                    <input type="text" id="rec-codigo" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+
+                    <label class="correo-label" for="rec-pass-1">Contraseña nueva</label>
+                    <input type="password" id="rec-pass-1" placeholder="Al menos 8 caracteres, con letras y números" autocomplete="new-password">
+
+                    <label class="correo-label" for="rec-pass-2">Repetila</label>
+                    <input type="password" id="rec-pass-2" placeholder="••••••••" autocomplete="new-password">
+
+                    <div id="rec-aviso-2" class="login-error hidden"></div>
+                    <button type="button" id="btn-rec-confirmar" class="btn-primary" style="width:100%; margin-top:14px;" onclick="confirmarRecuperacionUI()">
+                        <i class="fas fa-check"></i> Guardar la contraseña nueva
+                    </button>
+                    <button type="button" class="btn-logout" style="width:100%; margin-top:8px;" onclick="volverAlPaso1()">
+                        Pedir otro código
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ CAMBIAR MI CONTRASEÑA (con sesión abierta) ============ -->
+    <div id="modal-cambiar-password" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarCambiarPassword()"></div>
+        <div class="gestor-content correo-content">
+            <header class="gestor-header">
+                <h3><i class="fas fa-lock"></i> Cambiar mi contraseña</h3>
+                <button type="button" class="gestor-close" onclick="cerrarCambiarPassword()" title="Cerrar">&times;</button>
+            </header>
+            <div class="gestor-body">
+                <p class="correo-nota" style="margin-top:0">
+                    Tu contraseña es personal: nadie más la conoce, ni siquiera se guarda.
+                    Si la olvidás, se recupera con un código a tu correo.
+                </p>
+                <div id="cam-usuario" class="correo-de-box"></div>
+
+                <label class="correo-label" for="cam-actual">Contraseña actual</label>
+                <input type="password" id="cam-actual" placeholder="••••••••" autocomplete="current-password">
+
+                <label class="correo-label" for="cam-nueva-1">Contraseña nueva</label>
+                <input type="password" id="cam-nueva-1" placeholder="Al menos 8 caracteres, con letras y números" autocomplete="new-password">
+
+                <label class="correo-label" for="cam-nueva-2">Repetila</label>
+                <input type="password" id="cam-nueva-2" placeholder="••••••••" autocomplete="new-password">
+
+                <div id="cam-aviso" class="login-error hidden"></div>
+                <button type="button" id="btn-cam-guardar" class="btn-primary" style="width:100%; margin-top:14px;" onclick="guardarPasswordNuevaUI()">
+                    <i class="fas fa-check"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
  
     <section id="view-menu-principal" class="view hidden">
         <div class="container menu-principal-container">
@@ -240,6 +325,10 @@
 
             <!-- Sección de Acciones Inferiores -->
             <div class="menu-footer">
+                <button class="btn-logout-premium" onclick="abrirCambiarPassword()" style="margin-right:10px;">
+                    <i class="fas fa-lock"></i>
+                    <span>Mi contraseña</span>
+                </button>
                 <button class="btn-logout-premium" onclick="cerrarSesion()">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Cerrar Sesión</span>

@@ -121,6 +121,12 @@ function doPost(e) {
     // ==================== NUEVO: AGENTE DE IA ====================
     // El puente hacia Groq vive en 02_agente_ia.gs (ahí está la clave).
     if (accion === "agente_consulta") return consultarAgenteIA(data);
+    // ==================== NUEVO: CONTRASEÑAS ====================
+    // Login y recuperación por correo. Viven en 03_auth.gs.
+    if (accion === "auth_login")           return authLogin(data);
+    if (accion === "auth_definir")         return authDefinir(data);
+    if (accion === "auth_reset_pedir")     return authResetPedir(data);
+    if (accion === "auth_reset_confirmar") return authResetConfirmar(data);
     // ==================== NUEVO: PRODUCCIÓN (muestreo a campo) ====================
     if (accion === "guardar_muestreo")    return guardarMuestreo(data);
     if (accion === "actualizar_muestreo") return actualizarMuestreo(data);
@@ -567,6 +573,12 @@ function doGet(e) {
     // ==================== NUEVO: USUARIOS =====================
     if (e && e.parameter && e.parameter.action === "read_usuarios") {
       return leerUsuarios();
+    }
+    // ==================== NUEVO: CONTRASEÑAS ==================
+    // Devuelve la sal del usuario, que el navegador necesita ANTES de poder
+    // derivar el verificador. La sal es pública por diseño (ver 03_auth.gs).
+    if (e && e.parameter && e.parameter.action === "auth_perfil") {
+      return authPerfil(e.parameter.email);
     }
     // ==================== NUEVO: PRODUCCIÓN ====================
     if (e && e.parameter && e.parameter.action === "read_muestreos") {

@@ -997,6 +997,10 @@ document.getElementById('form-login').addEventListener('submit', async function(
         } else {
             cambiarVista('view-menu-principal');
         }
+        // Entró con la contraseña genérica: se le ofrece crear la propia.
+        // Va con un pequeño retraso para que primero se vea el menú y el cartel
+        // no aparezca sobre la pantalla de login.
+        if (resultado.debeDefinirClave) setTimeout(ofrecerDefinirPassword, 700);
     } else {
         errorBox.textContent = resultado.error;
         errorBox.classList.remove('hidden');
@@ -1006,6 +1010,175 @@ document.getElementById('form-login').addEventListener('submit', async function(
 function cerrarSesion() {
     cerrarSesionAuth();
     cambiarVista('view-login');
+}
+
+// =============================================================================
+// CONTRASEÑAS: recuperar por correo y cambiar la propia
+// -----------------------------------------------------------------------------
+// La criptografía y las llamadas al backend están en auth.js. Acá va solo la
+// pantalla: mostrar avisos, deshabilitar botones y encadenar los dos pasos.
+// =============================================================================
+
+function avisoAuth(id, texto, esError) {
+    const caja = document.getElementById(id);
+    if (!caja) return;
+    if (!texto) { caja.classList.add('hidden'); return; }
+    caja.textContent = texto;
+    caja.classList.remove('hidden');
+    caja.classList.toggle('login-ok', !esError);
+}
+
+// --- RECUPERAR (sin sesión, desde el login) ---------------------------------
+
+function abrirRecuperarPassword() {
+    volverAlPaso1();
+    // Si ya escribió el correo en el login, se arrastra para no tipearlo de nuevo
+    const delLogin = (document.getElementById('login-email').value || '').trim();
+    if (delLogin) document.getElementById('rec-email').value = delLogin;
+    document.getElementById('modal-recuperar').classList.add('active');
+    setTimeout(() => document.getElementById('rec-email').focus(), 150);
+}
+
+function cerrarRecuperarPassword() {
+    document.getElementById('modal-recuperar').classList.remove('active');
+}
+
+function volverAlPaso1() {
+    document.getElementById('recuperar-paso-1').classList.remove('hidden');
+    document.getElementById('recuperar-paso-2').classList.add('hidden');
+    ['rec-codigo', 'rec-pass-1', 'rec-pass-2'].forEach(id => { document.getElementById(id).value = ''; });
+    avisoAuth('rec-aviso-1', '');
+    avisoAuth('rec-aviso-2', '');
+}
+
+async function pedirCodigoUI() {
+    const email = (document.getElementById('rec-email').value || '').trim();
+    if (!email || email.indexOf('@') === -1) {
+        avisoAuth('rec-aviso-1', 'Escribí un correo válido.', true);
+        return;
+    }
+
+    const boton = document.getElementById('btn-rec-pedir');
+    boton.disabled = true;
+    boton.textContent = 'Enviando...';
+    avisoAuth('rec-aviso-1', '');
+
+    try {
+        const r = await pedirCodigoRecuperacion(email);
+        if (!r.ok) { avisoAuth('rec-aviso-1', r.error, true); return; }
+
+        document.getElementById('rec-destino').textContent = email;
+        document.getElementById('recuperar-paso-1').classList.add('hidden');
+        document.getElementById('recuperar-paso-2').classList.remove('hidden');
+        avisoAuth('rec-aviso-2', 'Código enviado. Vence en ' + (r.minutos || 15) + ' minutos.', false);
+        setTimeout(() => document.getElementById('rec-codigo').focus(), 150);
+    } catch (err) {
+        console.error('Error al pedir el código:', err);
+        avisoAuth('rec-aviso-1', err.message || 'No se pudo pedir el código.', true);
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = '<i class="fas fa-paper-plane"></i> Enviarme el código';
+    }
+}
+
+async function confirmarRecuperacionUI() {
+    const email = (document.getElementById('rec-email').value || '').trim();
+    const codigo = (document.getElementById('rec-codigo').value || '').trim();
+    const p1 = document.getElementById('rec-pass-1').value;
+    const p2 = document.getElementById('rec-pass-2').value;
+
+    if (!/^\d{6}$/.test(codigo)) {
+        avisoAuth('rec-aviso-2', 'El código son 6 números.', true);
+        return;
+    }
+    const problema = validarPasswordNueva(p1, p2);
+    if (problema) { avisoAuth('rec-aviso-2', problema, true); return; }
+
+    const boton = document.getElementById('btn-rec-confirmar');
+    boton.disabled = true;
+    boton.textContent = 'Guardando...';
+    avisoAuth('rec-aviso-2', '');
+
+    try {
+        const r = await confirmarRecuperacion(email, codigo, p1);
+        if (!r.ok) { avisoAuth('rec-aviso-2', r.error, true); return; }
+
+        cerrarRecuperarPassword();
+        document.getElementById('login-email').value = email;
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
+        alert('¡Listo! Tu contraseña quedó cambiada.\n\nYa podés entrar con la nueva.');
+    } catch (err) {
+        console.error('Error al confirmar la recuperación:', err);
+        avisoAuth('rec-aviso-2', err.message || 'No se pudo cambiar la contraseña.', true);
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = '<i class="fas fa-check"></i> Guardar la contraseña nueva';
+    }
+}
+
+// --- CAMBIAR LA PROPIA (con sesión abierta) ---------------------------------
+
+function abrirCambiarPassword() {
+    const sesion = obtenerSesion();
+    if (!sesion) { alert('Iniciá sesión para cambiar tu contraseña.'); return; }
+
+    document.getElementById('cam-usuario').textContent = sesion.nombre + ' <' + sesion.email + '>';
+    ['cam-actual', 'cam-nueva-1', 'cam-nueva-2'].forEach(id => { document.getElementById(id).value = ''; });
+    avisoAuth('cam-aviso', '');
+    document.getElementById('modal-cambiar-password').classList.add('active');
+    setTimeout(() => document.getElementById('cam-actual').focus(), 150);
+}
+
+function cerrarCambiarPassword() {
+    document.getElementById('modal-cambiar-password').classList.remove('active');
+}
+
+async function guardarPasswordNuevaUI() {
+    const sesion = obtenerSesion();
+    if (!sesion) { alert('Se cerró tu sesión. Volvé a entrar.'); return; }
+
+    const actual = document.getElementById('cam-actual').value;
+    const p1 = document.getElementById('cam-nueva-1').value;
+    const p2 = document.getElementById('cam-nueva-2').value;
+
+    if (!actual) { avisoAuth('cam-aviso', 'Escribí tu contraseña actual.', true); return; }
+    const problema = validarPasswordNueva(p1, p2);
+    if (problema) { avisoAuth('cam-aviso', problema, true); return; }
+    if (p1 === actual) { avisoAuth('cam-aviso', 'La contraseña nueva tiene que ser distinta de la actual.', true); return; }
+
+    const boton = document.getElementById('btn-cam-guardar');
+    boton.disabled = true;
+    boton.textContent = 'Guardando...';
+    avisoAuth('cam-aviso', '');
+
+    try {
+        const r = await definirPasswordPropia(sesion.email, actual, p1);
+        if (!r.ok) { avisoAuth('cam-aviso', r.error, true); return; }
+        cerrarCambiarPassword();
+        alert('¡Listo! Tu contraseña quedó cambiada.\n\nLa próxima vez entrá con la nueva.');
+    } catch (err) {
+        console.error('Error al cambiar la contraseña:', err);
+        avisoAuth('cam-aviso', err.message || 'No se pudo cambiar la contraseña.', true);
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = '<i class="fas fa-check"></i> Guardar';
+    }
+}
+
+// Al entrar con la contraseña genérica, se le ofrece crear la propia. No se
+// fuerza: si el operario está en medio de una carga, obligarlo a cambiarla lo
+// deja trabado. Se le ofrece una vez por sesión.
+function ofrecerDefinirPassword() {
+    const sesion = obtenerSesion();
+    if (!sesion) return;
+    const quiere = confirm(
+        'Estás usando la contraseña genérica, la misma que el resto del equipo.\n\n' +
+        '¿Querés crear tu contraseña personal ahora?\n\n' +
+        'Si la olvidás, la recuperás con un código a tu correo. ' +
+        'También podés hacerlo más tarde desde "Mi contraseña" en el menú.'
+    );
+    if (quiere) abrirCambiarPassword();
 }
 
 // El botón flotante del Agente de IA ahora abre el chat real (agente.js).
