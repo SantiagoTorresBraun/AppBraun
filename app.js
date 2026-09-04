@@ -2327,7 +2327,7 @@ async function filtrarYRenderizarTabla() {
             <td data-label="Fecha" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-fecha">${item.Fecha || '-'}${numRegistroMovil}</td>
             <td data-label="Producto" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
             <td data-label="Contrato" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
-            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? item.ESTATUS.toLowerCase() : 'sin-dato'}">${item.ESTATUS || '—'}</span></td>
+            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? String(item.ESTATUS).toLowerCase() : 'sin-dato'}">${item.ESTATUS || '—'}</span></td>
             <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${fmtKg(item.Kg_Cargados)} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro">
@@ -3105,7 +3105,7 @@ function abrirDetalleCarga(registro) {
     // Llenar información general
     document.getElementById('det-fecha').textContent = registro.Fecha || '-';
     document.getElementById('det-tipo').textContent = registro.Tipo_Carga || '-';
-    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? registro.ESTATUS.toLowerCase() : 'sin-dato'}">${registro.ESTATUS || '—'}</span>`;
+    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? String(registro.ESTATUS).toLowerCase() : 'sin-dato'}">${registro.ESTATUS || '—'}</span>`;
     document.getElementById('det-kg').textContent = fmtKg(registro.Kg_Cargados) + ' kg';
     
     // Llenar productos

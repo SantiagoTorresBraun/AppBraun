@@ -567,11 +567,25 @@ function imgProduccionADataUrl(src) {
     });
 }
 
+// Envoltorio con manejo de error. Sin esto, cualquier excepción adentro de la
+// función async se convertía en una promesa rechazada que nadie escuchaba: el
+// botón no hacía NADA y no aparecía ningún mensaje. Pasó de verdad con un
+// muestreo cuyo Lote era el número 1 (ver armarReporteMuestreo).
 async function generarReporteMuestreo(modo) {
+    try {
+        await armarReporteMuestreo(modo);
+    } catch (err) {
+        console.error('No se pudo generar el reporte del muestreo:', err);
+        alert('No se pudo generar el reporte.\n\nMotivo: ' + ((err && err.message) || err) +
+              '\n\nSi se repite, avisá con este mensaje.');
+    }
+}
+
+async function armarReporteMuestreo(modo) {
     if (!muestreoActual) return;
     const m = muestreoActual;
     if (!(m.Puntos || []).length) { alert('Agregá al menos un punto antes de generar el reporte.'); return; }
-    if (!window.jspdf) { alert('No se pudo cargar el generador de PDF.'); return; }
+    if (!window.jspdf) { alert('No se pudo cargar el generador de PDF. Revisá tu conexión: la librería se baja de internet.'); return; }
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
@@ -662,7 +676,15 @@ async function generarReporteMuestreo(modo) {
         doc.text(doc.splitTextToSize(m.Observaciones, W - 2 * M), M, y);
     }
 
-    const nombre = `Muestreo_${(m.Lote || 'lote').replace(/\s+/g, '_')}_${m.Fecha || ''}.pdf`;
+    // ACÁ ESTABA EL BUG DEL REPORTE QUE NO SALÍA.
+    // El Sheet devuelve un NÚMERO cuando la celda tiene un número, así que un
+    // muestreo con el lote "1" llegaba con m.Lote = 1, y los números no tienen
+    // .replace(): TypeError. Como la función es async y no atrapaba nada, el
+    // botón no hacía absolutamente nada y no aparecía ningún error.
+    // Los muestreos con lote "Lote1" o "ddd" funcionaban, y por eso parecía
+    // que el reporte "andaba a veces".
+    const loteTexto = String(m.Lote === undefined || m.Lote === null || m.Lote === '' ? 'lote' : m.Lote);
+    const nombre = `Muestreo_${loteTexto.replace(/\s+/g, '_')}_${m.Fecha || ''}.pdf`;
 
     if (modo === 'compartir') {
         const blob = doc.output('blob');
@@ -673,9 +695,22 @@ async function generarReporteMuestreo(modo) {
                 return;
             } catch (e) { return; /* el usuario canceló */ }
         }
-        // Fallback: descarga el PDF y abre WhatsApp con un resumen
+        // Plan B (típicamente escritorio, donde no se puede compartir archivos):
+        // se descarga el PDF y se abre WhatsApp con un resumen para adjuntarlo a mano.
         doc.save(nombre);
-        window.open('https://wa.me/?text=' + encodeURIComponent(`Reporte de muestreo ${m.Lote || ''} (${m.Cultivo || ''}) — ${(m.Puntos || []).length} puntos.`), '_blank');
+        const resumen = `Reporte de muestreo ${loteTexto} (${m.Cultivo || ''}) — ${(m.Puntos || []).length} puntos.`;
+        const enlace = 'https://wa.me/?text=' + encodeURIComponent(resumen);
+
+        // OJO: esto corre DESPUÉS de varios await, así que el navegador ya no lo
+        // considera parte del clic del usuario y el bloqueador de pop-ups lo puede
+        // frenar sin decir nada. Si eso pasa, window.open devuelve null y hay que
+        // avisar, porque si no el operario ve que se descargó el PDF y cree que
+        // WhatsApp no funciona.
+        const ventana = window.open(enlace, '_blank');
+        if (!ventana) {
+            alert('El PDF se descargó: "' + nombre + '".\n\n' +
+                  'El navegador bloqueó la ventana de WhatsApp. Abrilo vos y adjuntá el archivo.');
+        }
     } else {
         doc.save(nombre);
     }
