@@ -548,23 +548,27 @@ function hexToRgb(hex) {
 }
 
 // Convierte una foto (dataURL o URL de Drive) a dataURL para el PDF.
+//
+// POR QUÉ ESTO DELEGA EN CALIDAD
+// La versión propia que había acá cargaba la foto en un <img> con
+// crossOrigin="anonymous" apuntando al link que guarda el backend
+// (drive.google.com/uc?export=download). Ese link devuelve la imagen, pero
+// SIN el encabezado Access-Control-Allow-Origin, así que el navegador aborta
+// la carga, salta onerror y el PDF salía con "sin foto" en todos los puntos.
+//
+// calidad.js ya había resuelto exactamente esto: hay que bajar del CDN final
+// (lh3.googleusercontent.com/d/<id>), que responde la imagen directo y con
+// CORS abierto. En vez de repetir esa lógica, se reusa la que ya está probada.
+//
+// La dependencia es segura: index.html carga calidad.js ANTES de produccion.js,
+// igual que produccion.js ya depende de escapeHtml y parseNumeroAR de app.js.
 function imgProduccionADataUrl(src) {
-    return new Promise(resolve => {
-        if (!src) { resolve(null); return; }
-        if (String(src).startsWith('data:')) { resolve(src); return; }
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = function () {
-            try {
-                const c = document.createElement('canvas');
-                c.width = img.naturalWidth; c.height = img.naturalHeight;
-                c.getContext('2d').drawImage(img, 0, 0);
-                resolve(c.toDataURL('image/jpeg', 0.7));
-            } catch (e) { resolve(null); }
-        };
-        img.onerror = function () { resolve(null); };
-        img.src = src;
-    });
+    if (typeof cargarImagenParaPDF === 'function') return cargarImagenParaPDF(src);
+
+    // Solo se llega acá si calidad.js no se cargó. Se resuelve en null para que
+    // el reporte salga igual, con el recuadro de "sin foto".
+    console.warn('cargarImagenParaPDF no está disponible: el reporte sale sin fotos.');
+    return Promise.resolve(String(src || '').startsWith('data:') ? src : null);
 }
 
 // Envoltorio con manejo de error. Sin esto, cualquier excepción adentro de la
