@@ -6,9 +6,9 @@
     <title>App Braun - Sistema de Control</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
 </head>
 <body>
  
@@ -1597,6 +1597,9 @@
     <script src="calidad.js"></script>
     <script src="produccion.js"></script>
     <script src="agente.js"></script>
+
+    <!-- Modo offline: registra el Service Worker (sw.js). Va ultimo a proposito. -->
+    <script src="offline.js"></script>
 
     <!-- ================= AGENTE DE IA: panel de chat ================= -->
     <div id="agente-overlay" class="agente-overlay" onclick="cerrarAgenteIA()"></div>

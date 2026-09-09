@@ -11,7 +11,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 |---|---|---|
 | 1 | Cualquiera en internet puede leer y borrar todos los datos | 🔴 Crítico |
 | 2 | La contraseña está publicada en GitHub, en texto plano | 🔴 Crítico |
-| 3 | La app no abre sin internet (el Service Worker nunca se registra) | 🔴 Alto |
+| 3 | ~~La app no abre sin internet (el Service Worker nunca se registra)~~ | ✅ **Resuelto 09/09/2026** |
 | 4 | Un registro que falla bloquea toda la cola offline, para siempre | 🔴 Alto |
 | 5 | El historial arma 27 MB de HTML y se rehace en cada tecla | 🟠 Alto |
 | 6 | Las fotos van dentro del Sheet: el arranque crece sin techo | 🟠 Alto |
@@ -100,7 +100,7 @@ nada (hallazgo 1), no hace falta ni pasar por la pantalla de login.
 
 ---
 
-## 3. 🔴 La app no abre sin internet
+## 3. ✅ La app no abre sin internet — RESUELTO el 09/09/2026
 
 La documentación dice "offline-first" y los operarios trabajan en silos y
 centros de acopio. Pero:
@@ -171,6 +171,37 @@ Y **descargar jsPDF y Font Awesome al repo** en vez de traerlos del CDN.
 
 > Al cachear hay que versionar el `CACHE` en cada despliegue, si no los operarios
 > se quedan con la versión vieja pegada.
+
+### ✅ Cómo quedó (09/09/2026)
+
+| Lo que estaba mal | Cómo quedó |
+|---|---|
+| `sw.js` nunca se registraba | [offline.js](offline.js) lo registra en el evento `load`, con `updateViaCache: none` |
+| El `fetch` del SW estaba vacío | [sw.js](sw.js) precachea 20 archivos (1,7 MB) y sirve con dos estrategias |
+| jsPDF venía de cdnjs | [vendor/jspdf.umd.min.js](vendor/jspdf.umd.min.js) — local |
+| Font Awesome venía de cdnjs | [vendor/fontawesome/](vendor/fontawesome/) — CSS + las 4 fuentes woff2 |
+| El fondo del login venía de Unsplash | [fondo-login.jpg](fondo-login.jpg) — local |
+
+Dos detalles que cambian respecto de la receta de arriba, y por qué:
+
+1. **No se usa `cache.addAll()`.** Es todo-o-nada: un solo 404 deja la caché
+   vacía y el modo offline muerto, en silencio. Se guarda archivo por archivo.
+2. **El armazón NO es cache-first, es red-primero con 3,5 s de paciencia.**
+   Cache-first obligaría a subir `VERSION` en cada despliegue (y olvidarse una
+   vez deja a todos con la app vieja pegada). Con red-primero un despliegue se
+   ve al recargar, y el límite de 3,5 s cubre el caso real del silo: la señal
+   no está cortada, está *lenta*. Solo `vendor/`, imágenes y fuentes van
+   cache-first, porque no cambian nunca.
+
+Verificado con 48 pruebas automáticas que ejecutan el
+`sw.js` real: instalación, limpieza de versiones viejas, que el backend y Drive
+nunca se cacheen, y que las 20 rutas respondan 200 con mayúsculas exactas (GitHub
+Pages distingue mayúsculas; Windows no).
+
+**Queda afuera, a propósito:** el ícono del `manifest.json` sigue en Drive. Solo
+se usa al instalar la app en el celular, y para instalarla hace falta internet
+igual. Y `accounts.google.com/gsi`, que es el login de Gmail: sin señal no se
+puede mandar un correo de todos modos.
 
 ---
 

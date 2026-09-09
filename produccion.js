@@ -589,7 +589,7 @@ async function armarReporteMuestreo(modo) {
     if (!muestreoActual) return;
     const m = muestreoActual;
     if (!(m.Puntos || []).length) { alert('Agregá al menos un punto antes de generar el reporte.'); return; }
-    if (!window.jspdf) { alert('No se pudo cargar el generador de PDF. Revisá tu conexión: la librería se baja de internet.'); return; }
+    if (!window.jspdf) { alert('No se pudo cargar el generador de PDF (vendor/jspdf.umd.min.js). Probá recargar la app.'); return; }
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');

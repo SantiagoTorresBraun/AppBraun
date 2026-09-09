@@ -17,7 +17,10 @@
 | **produccion.js** | Módulo de Producción / muestreo a campo: carga de muestreos con sus puntos individuales (conteos, severidades, tipos de observación, notas y foto por punto), guardado offline en el store `muestreos` de IndexedDB y su PDF. Escribe en las hojas `Muestreo` y `Muestreo_Puntos`. |
 | **style.css** | Todos los estilos: identidad visual Braun (rojo `#b71c1c`), diseño de tarjetas, tablas, modales, responsive para celular (incluye el rediseño del menú y las cards del historial en mobile). |
 | **manifest.json** | Manifest de PWA: nombre de la app, ícono, color de tema, modo standalone (para "Agregar a pantalla de inicio"). |
-| **sw.js** | Service Worker mínimo — hoy no cachea nada todavía (`/* Estrategia de red posterior */`), solo activa el ciclo de vida básico para que la PWA sea instalable. |
+| **sw.js** | Service Worker: guarda una copia de la app para que abra **sin señal**. Precachea 20 archivos (1,7 MB). `vendor/`, imágenes y fuentes van **cache-primero**; `index.html`, los `.js` y el `.css` van **red-primero con 3,5 s de paciencia**, así un despliegue se ve al recargar pero en un silo con señal lenta no deja al operario esperando. Nunca toca los POST ni nada de otro dominio (backend, Drive, Google, Groq). Detalle en [DOCUMENTACION_OFFLINE.md](DOCUMENTACION_OFFLINE.md). |
+| **offline.js** | Registra el `sw.js`. **Sin este archivo el Service Worker es código muerto** — ese fue el Hallazgo 3 de la auditoría durante toda la vida del proyecto. Chequea soporte del navegador y contexto https, avisa (sin recargar sola) cuando hay una versión nueva, y expone `estadoOffline()` y `borrarCacheOffline()` para soporte desde la consola. |
+| **vendor/** | Librerías bajadas del CDN al repo, para que la app no dependa de internet: `jspdf.umd.min.js` (2.5.1) y `fontawesome/` (6.4.0: el CSS y sus 4 fuentes `.woff2`). |
+| **fondo-login.jpg** | El fondo de campo del login y del menú. Antes se traía de Unsplash en caliente. |
 
 ## Backend (Google Apps Script)
 

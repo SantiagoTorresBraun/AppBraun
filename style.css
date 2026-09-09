@@ -81,7 +81,7 @@ header h1 {
 /* 1. PANTALLA DE LOGIN CON FONDO ESTILO BIENVENIDA BRAUN */
 #view-login {
     background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), 
-                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+                url('fondo-login.jpg') no-repeat center center;
     background-size: cover;
     flex: 1;
     display: flex;
@@ -467,7 +467,7 @@ h3 {
     min-height: calc(100vh - 80px);
     /* Misma foto de campo que el login, con velo blanco al 92% para dar textura sin perder legibilidad */
     background: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
-                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+                url('fondo-login.jpg') no-repeat center center;
     background-size: cover;
     background-attachment: fixed;
 }
@@ -777,7 +777,7 @@ h3 {
     min-height: calc(100vh - 80px);
     /* Coherente con el menú principal: campo con velo blanco */
     background: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
-                url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600') no-repeat center center;
+                url('fondo-login.jpg') no-repeat center center;
     background-size: cover;
     background-attachment: fixed;
 }
