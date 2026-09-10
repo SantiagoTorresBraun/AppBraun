@@ -22,6 +22,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 11 | `Kg_Cargados` se escribe a mano y nada lo controla | 🟡 Bajo |
 | 12 | Varios menores | 🟡 Bajo |
 | 13 | ~~Sin señal, Carga / Calidad / Contratos / Ticketera muestran la tabla vacía~~ | ✅ **Resuelto 09/09/2026** |
+| **14** | **El historial de Calidad aparece y después se desaparece** (mitigado, causa sin identificar) | 🟠 Alto |
 
 ---
 
@@ -751,6 +752,60 @@ es una fecha inválida sino el 1/1/1970 (el cartel mostraba "31/12 21:00").
 
 ---
 
+## 14. 🟠 El historial de Calidad aparece y después se desaparece — SIN RESOLVER
+
+*Reportado el 10/09/2026. Mitigado, pero la causa NO está identificada.*
+
+Santiago entra a Control de Calidad — Garbanzo, no ve nada; recarga, los 64
+controles aparecen, y al rato **se desaparecen solos**.
+
+### Lo que se descartó, con evidencia
+
+| Revisado | Resultado |
+|---|---|
+| Los 99 controles en el backend | ✅ están (64 Garbanzo, 35 Poroto Mung) |
+| Los 4 endpoints con `Origin` y `Referer` del sitio | ✅ 200 OK |
+| Preflight CORS (`OPTIONS`) | ✅ 200 |
+| Los 9 archivos JS cargando en el orden real de `index.html` | ✅ sin errores |
+| Colisiones de nombres entre archivos | ✅ ninguna |
+| `calidad.js` desplegado vs. disco | ✅ idéntico |
+
+Se reprodujo la carga con **tiempos reales medidos** (backend 2,5 s, IndexedDB
+5 ms) y se probaron nueve escenarios buscando cuál vacía la tabla: reabrir el
+módulo, cambiar de pestaña, el latido de la cola, una cola con pendientes,
+escribir y borrar en el buscador, perder la señal, tres renders simultáneos,
+cambiar de grano, y no hacer nada. **Ninguno la vacía.**
+
+Pasa algo en el navegador que la simulación no reproduce.
+
+### Lo que sí se hizo (mitigación, no arreglo)
+
+1. **Red de contención** en `filtrarYRenderizarCalidad()`: si `historialCalidad`
+   queda vacío pero hay copia guardada en el celular, se usa la copia y se
+   muestra el cartel de "estás viendo la copia guardada del…". Verificado en
+   los dos sentidos: forzando el vaciado la tabla se mantiene en 64 filas, y
+   sin copia guardada sí queda vacía, como corresponde.
+
+2. **Rastro**: si la tabla **tenía** filas y queda vacía, se escribe en consola
+   el estado completo (`historialCalidad`, locales, grano, filtros) **y el stack
+   de quién la vacío**. Es la única forma de agarrar esto si pasa en el celular
+   de un operario y no en la máquina de desarrollo.
+
+3. **Mensaje honesto**: cuando el historial no se puede traer, la tabla ya no
+   dice "No hay controles registrados" —que es mentira y puede hacer que alguien
+   recargue algo que ya existía— sino el motivo real, en rojo.
+
+### Cómo cerrarlo
+
+Cuando vuelva a pasar, buscar en la consola la línea que empieza con
+`[calidad] La tabla TENÍA datos y quedó vacía` y leer el stack: dice exactamente
+qué función la vació.
+
+**Pregunta abierta que acorta la búsqueda:** ¿el historial de Control de Carga
+también se vacía, o solo Calidad? Separa "falla el backend" de "falla solo
+calidad".
+
+---
 ## Lo que revisé y está BIEN
 
 Para que quede claro qué no hace falta tocar:
