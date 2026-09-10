@@ -13,7 +13,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 2 | La contraseña está publicada en GitHub, en texto plano | 🔴 Crítico |
 | 3 | ~~La app no abre sin internet (el Service Worker nunca se registra)~~ | ✅ **Resuelto 09/09/2026** |
 | 4 | ~~Un registro que falla bloquea toda la cola offline, para siempre~~ | ✅ **Resuelto 09/09/2026** |
-| 5 | El historial arma 27 MB de HTML y se rehace en cada tecla | 🟠 Alto |
+| 5 | ~~El historial arma 27 MB de HTML y se rehace en cada tecla~~ (eran 54,2 MB) | ✅ **Resuelto 10/09/2026** |
 | 6 | Las fotos van dentro del Sheet: el arranque crece sin techo | 🟠 Alto |
 | 7 | `responder_ticket` puede mandar el correo dos veces | 🟠 Medio |
 | 8 | Los catálogos son por dispositivo, no compartidos | 🟠 Medio |
@@ -327,7 +327,7 @@ intento, que dos sincronizaciones simultáneas no duplican nada, y que
 
 ---
 
-## 5. 🟠 El historial arma 27 MB de HTML y se rehace en cada tecla
+## 5. ✅ El historial arma 27 MB de HTML — RESUELTO el 10/09/2026 (eran 54,2 MB)
 
 [app.js:2139](app.js#L2139) mete el registro **entero** —fotos en base64
 incluidas— dentro de los atributos `onclick` de cada fila:
@@ -358,6 +358,84 @@ Y se reconstruye **en cada tecla**: `filter-search`, `filter-lote` y
    `Id_Carga` y pasar solo el id: `onclick="abrirDetalle('BC-123')"`. La tabla
    pasa de 27 MB a unos pocos KB.
 2. **Debounce de 250 ms** en los tres filtros de texto.
+
+---
+
+### ✅ Cómo quedó (10/09/2026)
+
+Primero hubo que medirlo de nuevo, y era **peor de lo que decía este documento**:
+no 27 MB sino **54,2 MB**, con una sola fila que llegaba a **12,34 MB**.
+
+**Y el culpable no era la cantidad de filas.** Cada fila hacía esto:
+
+```javascript
+const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(item))));
+```
+
+Es decir: metía el **registro entero** —con sus fotos en base64 adentro, porque
+las fotos viven dentro del Sheet (Hallazgo 6)— convertido otra vez a base64, y
+lo pegaba **nueve veces** en el HTML de esa fila, una por cada `onclick`.
+
+Una carga con fotos pesa ~680 KB. En base64, ~900 KB. Por nueve: **8 MB en una
+fila de tabla**.
+
+Entonces la solución de fondo no era paginar: era **dejar de meter el dato en el
+HTML**. Ahora la fila lleva una clave de dos caracteres (`r7`) y el registro se
+queda en memoria, que es donde siempre estuvo.
+
+| | Antes | Ahora |
+|---|---|---|
+| HTML del historial | **54,23 MB** | **78 KB** |
+| La fila más pesada | 12,34 MB | 1.734 caracteres |
+| Renders al escribir "garbanzo" | 8 | 1 |
+
+**708 veces menos.** Medido ejecutando el `app.js` real con las 253 cargas.
+
+#### Lo que se hizo, en orden de impacto
+
+1. **El registro sale del HTML** ([render-historial.js](render-historial.js)).
+   Una libreta en memoria traduce la clave corta al registro. `resolverRegistro()`
+   acepta tres cosas a propósito —un objeto, una clave, o el base64 de antes—
+   así no hubo que tocar a ninguno de los que ya la llamaban.
+
+2. **Paginado de a 50**, con un pie que dice *"Mostrando 50 de 251"* y un botón
+   *Ver 50 más*. Al agregar una página NO se rehacen las filas que ya están.
+
+3. **`DocumentFragment`**: se arma todo aparte y se cuelga de una sola vez, en
+   lugar de un `appendChild` por fila.
+
+4. **Espera de 300 ms** antes de filtrar, en los cinco buscadores: historial,
+   lote, posición, contratos y ticketera.
+
+#### Un efecto secundario que valía la pena
+
+Las pantallas de detalle hacían `btoa(JSON.stringify(registro))` para pasarle el
+registro a otra función que lo decodificaba enseguida. Con una carga con fotos
+eso era casi un mega de ida y otro de vuelta, cada vez que se tocaba "Editar" o
+"PDF". Ahora pasan el objeto directo.
+
+#### Una cosa que casi rompe todo
+
+`rebotar()` se llama en el **nivel superior** de `app.js`. Si
+`render-historial.js` no cargara, un `ReferenceError` ahí se llevaría puesta la
+app entera, login incluido. Quedó con respaldo: si el helper falta, el historial
+filtra con cada tecla como antes, pero **la app arranca**. Lo encontró la prueba
+de integración, no el navegador.
+
+#### Lo que NO se tocó
+
+El historial de **Control de Calidad** usa el mismo patrón `dataString`, pero sus
+registros no tienen fotos en base64 (sus imágenes ya son rutas): las 99 filas dan
+alrededor de 1 MB, no 54. Con la espera de 300 ms alcanza por ahora. Conviene
+pasarlo a la libreta cuando se toque ese módulo.
+
+#### Cómo se verificó
+
+**35 pruebas** que ejecutan el `app.js` real con las 253 cargas del Sheet y miden
+el HTML generado fila por fila. Se comprueba que no quede ni un `data:image` en
+las filas, que la clave corta resuelva al registro correcto **con todos sus
+campos**, que "Ver más" no invalide las claves de las filas de arriba, y que
+`resolverRegistro()` siga aceptando el base64 viejo.
 
 ---
 

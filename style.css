@@ -3820,3 +3820,31 @@ body.carga-mp .solo-pt { display: none !important; }
     cursor: pointer;
     font-size: inherit;
 }
+
+/* =====================================================================
+   PIE DE TABLA CON PAGINADO (Hallazgo 5)
+   Antes se dibujaban las 253 filas de una. Ahora van de a 50.
+   ===================================================================== */
+.pie-tabla-historial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 10px 24px;
+}
+
+.pie-tabla-cuenta { color: #777; font-size: 13px; }
+
+.pie-tabla-vermas {
+    background: #fff;
+    color: #b71c1c;
+    border: 1px solid #b71c1c;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pie-tabla-vermas:hover { background: #b71c1c; color: #fff; }

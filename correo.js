@@ -755,7 +755,10 @@ let tipoCorreoActual = 'carga';
 
 function abrirModalCorreoDesdeTabla(dataString, tipo) {
     try {
-        const item = JSON.parse(decodeURIComponent(escape(atob(dataString))));
+        const item = (typeof resolverRegistro === 'function')
+            ? resolverRegistro(dataString)
+            : JSON.parse(decodeURIComponent(escape(atob(dataString))));
+        if (!item) throw new Error('No se encontró el registro');
         abrirModalCorreo(item, tipo);
     } catch (e) {
         console.error('No se pudo leer el registro para enviarlo por correo:', e);

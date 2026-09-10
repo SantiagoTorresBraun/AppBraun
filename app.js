@@ -816,7 +816,8 @@ function abrirVistaContratos() {
 }
 
 // Filtros de la vista de Contratos: refrescan la tabla en vivo
-document.getElementById('filter-cont-search').addEventListener('input', renderizarTablaContratos);
+document.getElementById('filter-cont-search').addEventListener('input',
+    (typeof rebotar === 'function') ? rebotar(function () { renderizarTablaContratos(); }) : renderizarTablaContratos);
 document.getElementById('filter-cont-fecha-desde').addEventListener('change', renderizarTablaContratos);
 document.getElementById('filter-cont-fecha-hasta').addEventListener('change', renderizarTablaContratos);
 
@@ -1903,7 +1904,8 @@ function updateTicketFields(id, patch, cb) {
 function escapeHtml(str){ if(!str) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Filtros del historial de tickets: refrescan la tabla en vivo
-document.getElementById('filter-ticket-search').addEventListener('input', renderTicketsTicketera);
+document.getElementById('filter-ticket-search').addEventListener('input',
+    (typeof rebotar === 'function') ? rebotar(function () { renderTicketsTicketera(); }) : renderTicketsTicketera);
 document.getElementById('filter-ticket-estado').addEventListener('change', renderTicketsTicketera);
 document.getElementById('filter-ticket-prioridad').addEventListener('change', renderTicketsTicketera);
 
@@ -2266,19 +2268,30 @@ function obtenerRegistrosLocales() {
     });
 }
 
-document.getElementById('filter-search').addEventListener('input', filtrarYRenderizarTabla);
+// Antes cada tecla rehacía el historial entero. Escribir "garbanzo" eran
+// 8 renders completos. Ahora se espera a que el operario deje de escribir.
+// Se llama en el nivel superior del archivo: si render-historial.js no cargara,
+// un ReferenceError acá se lleva puesta TODA la app (login incluido). Con el
+// respaldo, lo peor que pasa es que el historial filtre con cada tecla, como antes.
+const filtrarHistorialConEspera = (typeof rebotar === 'function')
+    ? rebotar(function () { filtrarYRenderizarTabla(); })
+    : function () { filtrarYRenderizarTabla(); };
+document.getElementById('filter-search').addEventListener('input', filtrarHistorialConEspera);
 document.getElementById('filter-fecha-desde').addEventListener('change', filtrarYRenderizarTabla);
 document.getElementById('filter-fecha-hasta').addEventListener('change', filtrarYRenderizarTabla);
 document.getElementById('filter-status').addEventListener('change', filtrarYRenderizarTabla);
-document.getElementById('filter-lote').addEventListener('input', filtrarYRenderizarTabla);
-document.getElementById('filter-posicion').addEventListener('input', filtrarYRenderizarTabla);
+document.getElementById('filter-lote').addEventListener('input', filtrarHistorialConEspera);
+document.getElementById('filter-posicion').addEventListener('input', filtrarHistorialConEspera);
 
 // Formatea kilos con separador de miles es-AR (ej: 31380 -> "31.380")
 function fmtKg(valor) {
     return formatNumeroAR(valor, 2);
 }
 
-async function filtrarYRenderizarTabla() {
+// opciones.agregar = true -> es un "Ver más": se agregan filas abajo sin
+// rehacer las que ya están en pantalla.
+async function filtrarYRenderizarTabla(opciones) {
+    const soloAgregar = !!(opciones && opciones.agregar);
     const txt = document.getElementById('filter-search').value.toLowerCase();
     const fechaDesde = document.getElementById('filter-fecha-desde').value;
     const fechaHasta = document.getElementById('filter-fecha-hasta').value;
@@ -2295,7 +2308,14 @@ async function filtrarYRenderizarTabla() {
     const remotosNoDuplicados = historialGeneral.filter(r => !idsLocales.has(r.Id_Carga));
     const listaCombinada = registrosLocalesMarcados.concat(remotosNoDuplicados);
  
-    tbody.innerHTML = "";
+    // En un render completo se tira todo y se vuelve a empezar. En un
+    // "Ver más" NO: las filas que ya están en pantalla siguen apuntando a
+    // sus claves de la libreta.
+    if (!soloAgregar) {
+        tbody.innerHTML = "";
+        vaciarLibreta("carga");
+        reiniciarPaginado("carga");
+    }
  
     const filtrados = listaCombinada.filter(item => {
         if (item.Tipo_Carga !== tipoCargaActual) return false;
@@ -2324,14 +2344,29 @@ async function filtrarYRenderizarTabla() {
     // Más recientes primero (los locales recién guardados quedan arriba)
     filtrados.sort((a, b) => (b.Fecha || '').localeCompare(a.Fecha || ''));
  
-    if(filtrados.length === 0) {
+    if (filtrados.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay controles registrados.</td></tr>`;
+        pieDeTabla("tabla-historial-body", 0, 0, null);
         return;
     }
  
-    filtrados.forEach(item => {
+    // Solo se dibuja la página que toca. Con 253 cargas, 50 filas.
+    const hasta = visiblesDe("carga");
+    const desde = soloAgregar ? Math.max(0, hasta - FILAS_POR_PAGINA) : 0;
+    const enPantalla = filtrados.slice(desde, hasta);
+ 
+    // Un solo reflow: se arma todo aparte y se cuelga una vez sola.
+    const fragmento = document.createDocumentFragment();
+ 
+    enPantalla.forEach(item => {
         const tr = document.createElement('tr');
-        const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(item))));
+        // ACÁ ESTABA EL PROBLEMA. Antes esto era:
+        //     btoa(unescape(encodeURIComponent(JSON.stringify(item))))
+        // o sea el registro ENTERO —con las fotos en base64 adentro— pegado
+        // nueve veces en el HTML de la fila. Una carga con fotos son 8 MB
+        // en una sola fila. Ahora la fila lleva una clave de 3 letras y el
+        // registro se queda en memoria.
+        const dataString = anotarEnLibreta("carga", item);
         const etiquetaPendiente = item._pendienteSync
             ? `<br><span class="badge-pendiente" title="Todavía no se sincronizó con el servidor"><i class="fas fa-clock"></i> Pendiente de sincronizar</span>`
             : '';
@@ -2368,15 +2403,24 @@ async function filtrarYRenderizarTabla() {
                 </button>` : ''}
             </td>
         `;
-        tbody.appendChild(tr);
+        fragmento.appendChild(tr);
+    });
+ 
+    tbody.appendChild(fragmento);
+ 
+    pieDeTabla("tabla-historial-body", filtrados.length, Math.min(hasta, filtrados.length), function () {
+        verMasFilas("carga");
+        filtrarYRenderizarTabla({ agregar: true });
     });
 }
 
 // --- 9-B. EDITAR UN REGISTRO EXISTENTE (carga los datos en el formulario) ---
 function cargarRegistroParaEditar(base64Data) {
     try {
-        const rawJson = decodeURIComponent(escape(atob(base64Data)));
-        const item = JSON.parse(rawJson);
+        // Acepta la clave corta de la tabla, el registro entero, o el base64
+        // de antes. Así no hubo que tocar a los que ya la llamaban.
+        const item = resolverRegistro(base64Data);
+        if (!item) throw new Error('No se encontró el registro');
 
         // Nos aseguramos de estar parados en el módulo/tipo correcto y con el form limpio
         tipoCargaActual = item.Tipo_Carga || tipoCargaActual;
@@ -2538,8 +2582,8 @@ function cancelarEdicion() {
 // --- 9-C. ELIMINAR UN REGISTRO ---
 function eliminarRegistro(base64Data) {
     try {
-        const rawJson = decodeURIComponent(escape(atob(base64Data)));
-        const item = JSON.parse(rawJson);
+        const item = resolverRegistro(base64Data);
+        if (!item) throw new Error('No se encontró el registro');
 
         const confirmado = confirm(`¿Seguro que querés eliminar el control de "${item.Nombre_Chofer || 'este registro'}" (${item.Fecha || ''})? Esta acción no se puede deshacer.`);
         if (!confirmado) return;
@@ -2630,8 +2674,8 @@ async function compartirPDF(doc, nombreArchivo, item) {
 // modo: 'descargar' (default, comportamiento original) | 'compartir' (Web Share API en celulares)
 async function generarPDFReporte(base64Data, modo) {
     try {
-        const rawJson = decodeURIComponent(escape(atob(base64Data)));
-        const item = JSON.parse(rawJson);
+        const item = resolverRegistro(base64Data);
+        if (!item) throw new Error('No se encontró el registro');
 const camposImagen = [
     "Firma_Chofer", "Firma_Control",
     "Foto_Frente", "Foto_Culo", "Foto_Interior_Chasis", "Foto_Interior_Acoplado",
@@ -3110,8 +3154,8 @@ let registroDetalleActual = null; // Almacena el registro actual en vista de det
 
 function abrirDetalleCargaDesdeTabla(dataString) {
     try {
-        const registroJSON = decodeURIComponent(escape(atob(dataString)));
-        const registro = JSON.parse(registroJSON);
+        const registro = resolverRegistro(dataString);
+        if (!registro) throw new Error('No se encontró el registro');
         abrirDetalleCarga(registro);
     } catch (e) {
         console.error("Error al decodificar registro:", e);
@@ -3221,18 +3265,15 @@ function cerrarDetalleCarga() {
     cambiarVista('view-modulo-carga');
 }
 
+// Estas tres ya tienen el registro en la mano: pasarlo a base64 para que la
+// otra función lo vuelva a decodificar era trabajo al pedo, y con una carga
+// con fotos era casi un mega de ida y otro de vuelta.
 function abrirEdicionDesdeDetalle() {
-    if (registroDetalleActual) {
-        const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(registroDetalleActual))));
-        cargarRegistroParaEditar(dataString);
-    }
+    if (registroDetalleActual) cargarRegistroParaEditar(registroDetalleActual);
 }
 
 function generarPDFDesdeDetalle() {
-    if (registroDetalleActual) {
-        const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(registroDetalleActual))));
-        generarPDFReporte(dataString);
-    }
+    if (registroDetalleActual) generarPDFReporte(registroDetalleActual);
 }
 
 function enviarCorreoDesdeDetalle() {
@@ -3247,8 +3288,7 @@ function enviarCorreoDesdeDetalle() {
 function eliminarDesdeDetalle() {
     if (registroDetalleActual) {
         if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
-            const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(registroDetalleActual))));
-            eliminarRegistro(dataString);
+            eliminarRegistro(registroDetalleActual);
             cerrarDetalleCarga();
         }
     }

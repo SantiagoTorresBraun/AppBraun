@@ -28,7 +28,7 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
@@ -44,6 +44,7 @@ const RECURSOS = [
     './manifest.json',
 
     './offline.js',
+    './render-historial.js',
     './historial-local.js',
     './cola-sync.js',
     './auth.js',
