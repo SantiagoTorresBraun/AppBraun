@@ -21,6 +21,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 10 | El historial de Carga inserta datos del Sheet sin escapar (XSS) | 🟡 Medio |
 | 11 | `Kg_Cargados` se escribe a mano y nada lo controla | 🟡 Bajo |
 | 12 | Varios menores | 🟡 Bajo |
+| **13** | **Sin señal, Carga / Calidad / Contratos / Ticketera muestran la tabla vacía y sin avisar** | 🟠 Alto |
 
 ---
 
@@ -475,6 +476,79 @@ pantalla cuando se aparta más de un 2%.
 | 203 nombres de chofer distintos en 251 cargas | Datos | `Taborda Lucas` / `Lucas Taborda` es la misma persona contada dos veces |
 | El agente manda a **Groq** nombres de clientes, destinos y contratos | [agente.js](agente.js) | Es un tercero fuera de Braun. Vale saberlo aunque sea aceptable |
 | `escape()` / `unescape()` están obsoletas | varios | Funcionan, pero conviene migrar a `TextEncoder` |
+
+---
+
+## 13. 🟠 Sin señal, casi todos los historiales se ven vacíos — y sin avisar
+
+*Encontrado el 09/09/2026, al verificar el arreglo del Hallazgo 3.*
+
+Arreglar el Service Worker hizo que la app **abra** sin internet. Pero abrir no
+es lo mismo que **mostrar**: hoy, sin señal, el operario entra a Control de
+Carga y ve **una tabla en blanco, sin ningún mensaje**. No tiene forma de saber
+si es porque no hay señal o porque no hay registros.
+
+| Módulo | Sin señal |
+|---|---|
+| **Producción** | ✅ Muestra todos los muestreos |
+| Control de Carga | ⚠️ Tabla vacía |
+| Control de Calidad | ⚠️ Tabla vacía |
+| Contratos | ⚠️ Tabla vacía |
+| Ticketera | ⚠️ Tabla vacía |
+
+**La causa.** Los cinco módulos arman la lista igual: lo que está en IndexedDB
+más lo que vino del Sheet. La diferencia está en qué pasa con la copia local
+*después* de sincronizar.
+
+Producción **la conserva**, y el comentario en [produccion.js](produccion.js)
+dice explícitamente por qué:
+
+> *"marca `_synced` sin borrar la copia local, para que siga siendo la copia de
+> trabajo del operario"*
+
+Los otros **la borran** apenas el backend confirma:
+
+```javascript
+// app.js:2533 — Control de Carga
+if (cursor.value.Id_Carga === item.Id_Carga) { cursor.delete(); }
+
+// calidad.js:410 — Control de Calidad
+delTx.objectStore("controles_calidad").delete(idKey)
+
+// app.js — Ticketera
+delTx.objectStore('ticketera_tickets').delete(idKey)
+```
+
+Y la otra mitad del historial vive **solo en memoria**:
+
+```javascript
+let historialGeneral = [];   // app.js:90 — se pierde al cerrar la app
+
+function cargarHistorialDesdeGoogle() {
+    if (!navigator.onLine || ...) return;   // ← sin señal se va sin hacer nada
+}
+```
+
+**Verificado:** `grep localStorage` sobre los historiales no devuelve nada. No
+se persisten en ningún lado. Sin señal, la cola local está vacía (ya sincronizó
+todo) y `historialGeneral` es `[]`. Resultado: tabla en blanco.
+
+Tampoco hay estado vacío: el código hace `tbody.innerHTML = ""` y, si no hay
+filas, no agrega nada más.
+
+**Cómo se arregla.** Dos niveles:
+
+1. **Un cartel honesto** (10 minutos): si la tabla queda vacía y
+   `!navigator.onLine`, decirlo. No arregla el fondo, pero saca la ambigüedad
+   entre "no hay señal" y "no hay registros".
+
+2. **Guardar el historial, como ya hace Producción** (unas horas): dejar de
+   borrar la copia local al sincronizar (marcarla `_synced` y listo) y persistir
+   lo que baja del Sheet. Es un patrón que en este mismo proyecto ya funciona.
+
+> **Ojo:** el Hallazgo 6 (fotos en base64 adentro del Sheet) choca con esto.
+> Guardar el historial de Carga completo en el celular arrastraría las fotos.
+> Conviene guardarlo **sin fotos**, o resolver el 6 antes.
 
 ---
 
