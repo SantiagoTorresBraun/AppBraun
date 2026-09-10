@@ -14,7 +14,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 3 | ~~La app no abre sin internet (el Service Worker nunca se registra)~~ | ✅ **Resuelto 09/09/2026** |
 | 4 | ~~Un registro que falla bloquea toda la cola offline, para siempre~~ | ✅ **Resuelto 09/09/2026** |
 | 5 | ~~El historial arma 27 MB de HTML y se rehace en cada tecla~~ (eran 54,2 MB) | ✅ **Resuelto 10/09/2026** |
-| 6 | Las fotos van dentro del Sheet: el arranque crece sin techo | 🟠 Alto |
+| 6 | ~~Las fotos van dentro del Sheet: el arranque crece sin techo~~ | ✅ **Resuelto 10/09/2026** (falta correr la migración) |
 | 7 | `responder_ticket` puede mandar el correo dos veces | 🟠 Medio |
 | 8 | Los catálogos son por dispositivo, no compartidos | 🟠 Medio |
 | 9 | La hoja `Orden` se lee y escribe por POSICIÓN de columna | 🟠 Medio |
@@ -440,7 +440,7 @@ campos**, que "Ver más" no invalide las claves de las filas de arriba, y que
 
 ---
 
-## 6. 🟠 Las fotos van dentro del Sheet: el arranque crece sin techo
+## 6. ✅ Las fotos van dentro del Sheet — RESUELTO el 10/09/2026
 
 Las fotos de Control de Carga se guardan **en base64 dentro de la celda**, no en
 Drive como hacen Calidad y Producción.
@@ -483,6 +483,135 @@ está actuando sobre lo que escribe el script.
 Vale igual una observación: `crearTicket()` **sí** trunca a 45.000 caracteres
 (`"(adjunto demasiado grande...)"`), o sea que el límite se tuvo en cuenta para
 los tickets pero no para las fotos de carga. Inconsistente, pero hoy no rompe.
+
+---
+
+### ✅ Cómo quedó (10/09/2026)
+
+**Falta un paso manual: hay que pegar el backend en Apps Script y correr la
+migración una vez.** Ver "Qué hacer" al final.
+
+Calidad, Producción y los archivos de Carta de Porte **ya subían a Drive**. El
+único que seguía metiendo base64 en el Sheet era Control de Carga. Ahora sube
+igual que los demás.
+
+| | Antes | Ahora |
+|---|---|---|
+| Hoja `Orden` completa | **4,50 MB** | **740 KB** |
+| Una carga con sus 8 fotos | **546 KB** | **26 KB** |
+| Promedio por carga | — | **3 KB** |
+| A 200 cargas/año | ~135 MB/año | **1 MB/año** |
+
+Eso es lo que saca el "sin techo" del título: el crecimiento deja de depender de
+cuántas fotos saquen.
+
+#### Por qué se guarda una URL `lh3` y no una ruta relativa
+
+Calidad guarda `"Control de Calidad_Images/xxx.jpg"` y después resuelve esa ruta
+a una URL, con caché, una por una. Para Carga eso no sirve: son 8 imágenes por
+fila y 253 filas — resolverlas en cada lectura sería eterno.
+
+Acá se guarda **la URL final ya armada**. Y se eligió `lh3.googleusercontent.com`
+y no `drive.google.com/uc` porque se verificaron las dos con el `Origin` del
+sitio:
+
+```
+lh3.googleusercontent.com/d/<id>  ->  200 + Access-Control-Allow-Origin: *
+drive.google.com/uc?id=<id>       ->  403
+```
+
+Esa diferencia importa: con `lh3` la foto se ve en un `<img>` **y** se puede
+bajar con `fetch()` para meterla en el PDF. Con `/uc` no — y es exactamente por
+eso que las fotos de Producción no salían en el reporte de muestreo.
+
+#### Las firmas se quedan en la celda, a propósito
+
+Se midió: las firmas son **198 KB de los 4.063 KB, el 5%** (16 KB cada una).
+Las fotos son el 95%. Sacando solo las fotos ya se consigue casi todo.
+
+Y moverlas rompía dos cosas del editor de cargas:
+
+1. `restaurarFirmaEnCanvas()` descarta cualquier valor de menos de 100
+   caracteres. Una URL `lh3` mide unos 50: **la firma desaparecería al editar**.
+2. Dibujar una imagen de otro dominio en un canvas lo *contamina*, y
+   `soloPTFirma()` hace `canvas.toDataURL()` al guardar → `SecurityError`.
+
+Se podría arreglar con `crossOrigin="anonymous"`, pero son tres cambios en un
+camino que hoy anda, por el 5% del problema. Queda anotado en el código por si
+algún día vale la pena.
+
+#### La compresión del cliente ya estaba, y ya da 100 KB
+
+El punto 3 del pedido —comprimir a ~100 KB antes de mandar— **ya estaba hecho**:
+[app.js](app.js) redimensiona a 600 px de ancho y guarda JPEG con calidad 0,5.
+Medido sobre las 39 fotos reales: **99 KB de promedio**, 163 KB la mayor. No
+hacía falta agregar nada.
+
+> Nota para más adelante: Carga usa 600 px / 0,5, mientras que Producción usa
+> 1280 px / 0,6. Ahora que las fotos no pesan en el Sheet, se podría subir la
+> calidad de Carga sin costo. No se tocó porque nadie lo pidió.
+
+#### Detalles que evitan sorpresas
+
+- **Se sube ANTES del lock.** Subir 8 imágenes tarda segundos y no hay que dejar
+  a los demás pedidos esperando.
+- **Pero primero se chequea si la carga ya existe.** Sin eso, un reintento de la
+  cola offline subiría las 8 fotos otra vez antes de descubrir —ya adentro del
+  lock— que la fila estaba, y dejaría 8 archivos huérfanos en Drive **por cada
+  reintento**. El chequeo de adentro del lock sigue estando: el de afuera cubre
+  el reintento (lo común), el de adentro la carrera real (lo raro).
+- **Solo se sube lo que empieza con `data:image`.** Si ya es una URL —una
+  edición, un reintento— se deja como está.
+- **Si Drive falla, la carga NO se pierde:** la foto queda en base64 en la celda,
+  como antes, y queda anotado en el log. Vale más una carga guardada con una
+  foto pesada que una carga perdida.
+- **Cada archivo se comparte** con `ANYONE_WITH_LINK`. Sin ese permiso la URL se
+  graba igual pero la app recibe 403 y el operario ve "Sin foto", como si nunca
+  se hubiera guardado. Ya pasó con las fotos de Calidad.
+
+#### El frontend no hubo que tocarlo
+
+Los cuatro caminos que usan las fotos ya aceptaban URLs:
+
+| Camino | Por qué anda |
+|---|---|
+| El PDF | `obtenerImagenComoBase64()` ya distinguía `data:` de `http` |
+| El detalle | pinta con `<img src>` |
+| Editar una carga | también usa `<img src>`, y conserva el valor tal cual |
+| Guardar una edición | el backend saltea lo que no es `data:image` |
+
+#### Cómo se verificó
+
+**33 pruebas** que ejecutan las funciones reales de `01_backend_principal.gs`
+con Drive y Sheets simulados y las **253 cargas reales**: que las 8 fotos suban
+y queden como URL, que las firmas y los datos no se toquen, que un reintento no
+suba nada de nuevo, que si Drive falla la foto quede en base64 en vez de
+perderse, y que una carga sin fotos no toque Drive.
+
+---
+
+### Qué hacer (paso a paso)
+
+1. **Sacar una copia del Sheet** — Archivo → Hacer una copia. Son 5 segundos y
+   es la red de seguridad.
+2. **Abrir el editor de Apps Script** y reemplazar `01_backend_principal.gs` por
+   el de este repo.
+3. **Guardar** y volver a desplegar (Implementar → Administrar implementaciones →
+   editar → Nueva versión).
+4. Antes de migrar, correr **`medirPesoDeLaHojaOrden()`** y anotar el número.
+5. Correr **`migrarImagenesDeCargaADrive()`**. Son 39 imágenes en 6 filas:
+   alrededor de un minuto. El log dice cuántas movió.
+6. Volver a correr **`medirPesoDeLaHojaOrden()`** y comparar.
+7. Abrir el historial de Control de Carga y verificar que las fotos de una
+   carga vieja se sigan viendo, y que el PDF salga con las fotos.
+
+La migración se puede correr **varias veces sin problema**: lo que ya es URL lo
+saltea. Si alguna falla, queda en base64 y se puede reintentar.
+
+**La primera vez** que se guarde una foto, Apps Script va a crear la carpeta
+`Control de Carga_Images` dentro de `APP_Braun_2026/Images` y va a dejar su ID
+en el log. Conviene copiarlo a `ID_CARPETA_CARGA_IMAGES` para que no la tenga
+que buscar por nombre cada vez.
 
 ---
 

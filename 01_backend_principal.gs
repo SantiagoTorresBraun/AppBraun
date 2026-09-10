@@ -206,6 +206,27 @@ function guardarRegistroCompleto(data) {
   // contratos para una sola carga real). Por eso el chequeo y el appendRow van
   // adentro de un LOCK: el segundo pedido espera, vuelve a mirar, encuentra la
   // fila y se va sin escribir.
+  // HALLAZGO 6: las fotos van a Drive y en la celda queda la URL.
+  //
+  // Va ANTES del lock a proposito: subir 10 imagenes tarda varios segundos y
+  // no hay que tener a los demas pedidos esperando por eso.
+  //
+  // Pero primero se mira si la carga ya existe. Sin ese chequeo, un reintento
+  // de la cola offline subiria las 10 fotos de nuevo antes de descubrir -ya
+  // adentro del lock- que la fila estaba, y dejaria 10 archivos huerfanos en
+  // Drive por cada reintento. El chequeo de adentro del lock sigue estando:
+  // este de aca cubre el reintento (lo comun), el de alla cubre la carrera
+  // real entre dos pedidos simultaneos (lo raro).
+  if (!data.Id_Carga || buscarFilaPorId(sheetOrden, data.Id_Carga) === -1) {
+    try {
+      subirImagenesDeCarga(data);
+    } catch (errFotos) {
+      // Que falle Drive no puede impedir que se guarde la carga: las imagenes
+      // quedan en base64 en la celda, como antes, y la carga se guarda igual.
+      Logger.log("Fotos a Drive fallaron, se guardan en la celda: " + errFotos);
+    }
+  }
+
   var lock = LockService.getScriptLock();
   var conLock = false;
   try { conLock = lock.tryLock(30000); } catch (errLock) { conLock = false; }
@@ -1635,4 +1656,240 @@ function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjun
   } catch (err) {
     Logger.log("No se pudo enviar el correo del ticket: " + err);
   }
+}
+
+
+// ============================================================================
+//  HALLAZGO 6 — Las fotos de Control de Carga salen del Sheet y van a Drive
+// ----------------------------------------------------------------------------
+//  Medido el 10/09/2026 sobre los datos reales: en la hoja "Orden" hay 39 fotos
+//  guardadas en base64 que pesan 3.865 KB, y 12 firmas que pesan 198 KB. Las
+//  fotos son el 95% del peso. Una carga con fotos ocupa 644 KB de fotos.
+//
+//  Hoy solo 6 de 253 cargas llevan foto. El dia que todos las saquen como
+//  corresponde, 200 cargas por año serian ~135 MB por año adentro del Sheet, y
+//  ?action=read -que hoy ya tarda 8,6 segundos- se vuelve inusable.
+//
+//  Calidad, Produccion y los archivos de Carta de Porte YA suben a Drive. Esto
+//  le pone a Control de Carga el mismo tratamiento.
+//
+//  POR QUE SE GUARDA LA URL lh3 Y NO LA RUTA RELATIVA
+//  ---------------------------------------------------
+//  Calidad guarda "Control de Calidad_Images/xxx.jpg" y despues resuelve esa
+//  ruta a una URL, con cache, una por una. Para Carga eso no sirve: son 10
+//  imagenes por fila y 253 filas; resolverlas en cada lectura seria eterno.
+//
+//  Aca se guarda directamente la URL final. Y se usa lh3.googleusercontent.com,
+//  NO drive.google.com/uc, porque se verificaron las dos:
+//
+//      lh3.googleusercontent.com/d/<id>  ->  200 + Access-Control-Allow-Origin: *
+//      drive.google.com/uc?id=<id>       ->  403 con Origin del sitio
+//
+//  Esa diferencia importa: con lh3 la foto se ve en un <img> Y se puede bajar
+//  con fetch() para meterla en el PDF. Con /uc no: es exactamente por eso que
+//  las fotos de Produccion no salian en el reporte de muestreo.
+// ============================================================================
+
+// Carpeta donde van las fotos de Control de Carga. Si queda vacio, se crea sola
+// dentro de APP_Braun_2026/Images y deja el ID en el log para configurarlo.
+var ID_CARPETA_CARGA_IMAGES = "";
+var CARPETA_FOTOS_CARGA     = "Control de Carga_Images";
+
+// Los 8 campos de foto de la hoja "Orden".
+var CAMPOS_FOTO_CARGA = [
+  "Foto_Frente", "Foto_Culo", "Foto_Interior_Chasis", "Foto_Interior_Acoplado",
+  "Foto_Proceso_Carga", "Foto_Etiqueta_Bolsa", "Foto_Camion_Cargado", "Foto_Ticket_Balanza"
+];
+
+// LAS FIRMAS SE QUEDAN EN LA CELDA, a proposito.
+//
+// Se midio: las firmas son 198 KB de los 4.063 KB, o sea el 5% del peso
+// (16 KB cada una). Las fotos son el 95%. Sacando solo las fotos, una carga
+// pasa de 677 KB a 33 KB: el 95% del beneficio.
+//
+// Y moverlas rompe dos cosas del editor de cargas:
+//   1. restaurarFirmaEnCanvas() descarta cualquier valor de menos de 100
+//      caracteres. Una URL lh3 mide unos 50: la firma desapareceria al editar.
+//   2. Dibujar una imagen de otro dominio en un canvas lo "contamina", y
+//      soloPTFirma() hace canvas.toDataURL() al guardar -> SecurityError.
+//      Se podria arreglar con crossOrigin="anonymous", pero son tres cambios
+//      en un camino que hoy anda, por el 5% del problema.
+//
+// Si algun dia las firmas pesan de verdad, se agrega esta lista al concat de
+// abajo y se arreglan esos dos puntos primero.
+var CAMPOS_FIRMA_CARGA = ["Firma_Chofer", "Firma_Control"];
+
+
+// ---------------------------------------------------------------------------
+// Sube UNA imagen y devuelve su URL definitiva
+// ---------------------------------------------------------------------------
+function subirImagenCargaADrive(idCarga, campo, base64) {
+  try {
+    var carpeta = obtenerCarpetaApp(ID_CARPETA_CARGA_IMAGES, CARPETA_FOTOS_CARGA, ID_SUBCARPETA_IMAGES);
+
+    var partes = base64.split(",");
+    if (partes.length < 2) return "";
+
+    var tipo = (partes[0].match(/data:(image\/\w+)/) || [null, "image/jpeg"])[1];
+    var extension = EXTENSIONES_POR_MIME[tipo] || "jpg";
+    var nombre = (idCarga || Utilities.getUuid()) + "." + campo + "." + new Date().getTime() + "." + extension;
+
+    var blob = Utilities.newBlob(Utilities.base64Decode(partes[1]), tipo, nombre);
+    var archivo = carpeta.createFile(blob);
+
+    // Sin este permiso el archivo queda privado: la URL se graba igual pero la
+    // app recibe 403 y el operario ve "Sin foto", como si nunca se hubiera
+    // guardado. Ya paso con las fotos de Calidad.
+    try {
+      archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (permErr) {
+      Logger.log("No se pudo compartir " + nombre + ": " + permErr);
+    }
+
+    return "https://lh3.googleusercontent.com/d/" + archivo.getId();
+
+  } catch (err) {
+    // NO se devuelve "" en silencio: si Drive falla (tipico: el proyecto
+    // autorizado sin el scope .../auth/drive, que deja leer pero no crear), es
+    // preferible que la foto quede en base64 adentro de la celda -fea pero
+    // presente- a que se pierda. El que llama decide con esto.
+    Logger.log("No se pudo subir " + campo + " de " + idCarga + ": " + err);
+    throw err;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Reemplaza en `data` las imagenes base64 por sus URL de Drive
+// ---------------------------------------------------------------------------
+// Muta `data` a proposito: despues insertarFilaOrden escribe lo que quedo.
+// Devuelve cuantas subio, para el log.
+//
+// Si una imagen falla, se la deja como estaba (base64) y se sigue con las
+// demas. Vale mas una carga guardada con una foto pesada que una carga perdida.
+function subirImagenesDeCarga(data) {
+  if (!data) return 0;
+
+  var campos = CAMPOS_FOTO_CARGA;   // las firmas NO: ver el comentario de arriba
+  var subidas = 0;
+  var fallaron = [];
+
+  for (var i = 0; i < campos.length; i++) {
+    var campo = campos[i];
+    var valor = data[campo];
+
+    // Solo se sube lo que es base64. Si ya es una URL (reintento de la cola
+    // offline, o una edicion), se deja como esta: subirla de nuevo dejaria un
+    // archivo huerfano en Drive por cada reintento.
+    if (!valor || typeof valor !== "string" || valor.indexOf("data:image") !== 0) continue;
+
+    try {
+      var url = subirImagenCargaADrive(data.Id_Carga, campo, valor);
+      if (url) { data[campo] = url; subidas++; }
+    } catch (err) {
+      fallaron.push(campo);   // queda el base64: se guarda igual
+    }
+  }
+
+  if (fallaron.length) {
+    Logger.log("Carga " + data.Id_Carga + ": " + fallaron.length +
+               " imagen(es) quedaron en base64 porque Drive fallo: " + fallaron.join(", "));
+  }
+  return subidas;
+}
+
+
+// ---------------------------------------------------------------------------
+// MIGRACION de lo que ya esta guardado — se corre UNA vez, a mano
+// ---------------------------------------------------------------------------
+// Recorre la hoja "Orden", sube a Drive cada imagen que hoy es base64 y deja la
+// URL en su lugar. Se puede correr varias veces sin miedo: lo que ya es URL lo
+// saltea.
+//
+// COMO SE USA:
+//   1. Abrir el editor de Apps Script
+//   2. Elegir "migrarImagenesDeCargaADrive" y darle a Ejecutar
+//   3. Mirar el log (Ver > Registros)
+//
+// Antes de correrla conviene sacar una copia del Sheet (Archivo > Hacer una
+// copia). Son 51 imagenes en 6 filas: tarda alrededor de un minuto.
+function migrarImagenesDeCargaADrive() {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_ORDEN);
+  if (!hoja) { Logger.log("No encontre la hoja " + NOMBRE_HOJA_ORDEN); return; }
+
+  var datos = hoja.getDataRange().getValues();
+  var encabezados = datos[0];
+
+  // Se buscan las columnas POR NOMBRE, no por posicion: la hoja "Orden" ya
+  // tiene el problema de leerse por posicion (hallazgo 9) y no hay que
+  // agregarle uno mas.
+  var campos = CAMPOS_FOTO_CARGA;   // idem: las firmas se quedan en la celda
+  var columnas = {};
+  for (var c = 0; c < encabezados.length; c++) {
+    var nombre = String(encabezados[c]).trim();
+    if (campos.indexOf(nombre) !== -1) columnas[nombre] = c;
+  }
+
+  var faltantes = campos.filter(function (x) { return !(x in columnas); });
+  if (faltantes.length) {
+    Logger.log("OJO: no encontre estas columnas en la hoja: " + faltantes.join(", "));
+  }
+
+  var migradas = 0, salteadas = 0, errores = 0, filas = 0;
+
+  for (var f = 1; f < datos.length; f++) {
+    var idCarga = datos[f][0];
+    var cambio = false;
+
+    for (var k in columnas) {
+      var col = columnas[k];
+      var valor = String(datos[f][col] || "");
+      if (valor.indexOf("data:image") !== 0) { if (valor) salteadas++; continue; }
+
+      try {
+        var url = subirImagenCargaADrive(idCarga, k, valor);
+        if (url) {
+          hoja.getRange(f + 1, col + 1).setValue(url);
+          migradas++;
+          cambio = true;
+        }
+      } catch (err) {
+        errores++;
+        Logger.log("Fila " + (f + 1) + " campo " + k + ": " + err);
+      }
+    }
+    if (cambio) filas++;
+  }
+
+  Logger.log("=== MIGRACION TERMINADA ===");
+  Logger.log("  imagenes movidas a Drive: " + migradas);
+  Logger.log("  filas tocadas: " + filas);
+  Logger.log("  ya estaban como URL (no se tocaron): " + salteadas);
+  Logger.log("  errores: " + errores);
+  if (errores) Logger.log("  -> las que fallaron siguen en base64: se puede volver a correr");
+}
+
+
+// ---------------------------------------------------------------------------
+// Cuanto pesa hoy la hoja "Orden" — para medir antes y despues
+// ---------------------------------------------------------------------------
+function medirPesoDeLaHojaOrden() {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_ORDEN);
+  if (!hoja) { Logger.log("No encontre la hoja"); return; }
+
+  var datos = hoja.getDataRange().getValues();
+  var total = 0, enBase64 = 0, cuantas = 0;
+
+  for (var f = 1; f < datos.length; f++) {
+    for (var c = 0; c < datos[f].length; c++) {
+      var v = String(datos[f][c] || "");
+      total += v.length;
+      if (v.indexOf("data:") === 0) { enBase64 += v.length; cuantas++; }
+    }
+  }
+
+  Logger.log("Filas: " + (datos.length - 1));
+  Logger.log("Peso total de la hoja: " + Math.round(total / 1024) + " KB");
+  Logger.log("De eso, en base64: " + Math.round(enBase64 / 1024) + " KB en " + cuantas + " celdas (" +
+             (total ? Math.round(enBase64 / total * 100) : 0) + "%)");
 }
