@@ -1727,6 +1727,16 @@ var CAMPOS_FOTO_CARGA = [
 // abajo y se arreglan esos dos puntos primero.
 var CAMPOS_FIRMA_CARGA = ["Firma_Chofer", "Firma_Control"];
 
+// OJO: en la HOJA las columnas NO se llaman como en la app.
+// La app manda "Foto_Frente"; el encabezado de la hoja dice "Foto1".
+// Vienen de la epoca de AppSheet. La migracion recorre la HOJA, asi que
+// tiene que buscar por estos nombres, no por los de la app.
+//
+// La primera version de migrarImagenesDeCargaADrive() buscaba por los
+// nombres de la app y no encontraba ninguna columna: no movio nada (por
+// suerte) pero tampoco hizo nada.
+var COLUMNAS_FOTO_EN_HOJA_ORDEN = ["Foto1", "Foto2", "Foto3", "Foto4", "Foto5", "Foto6", "Foto7", "Foto8"];
+
 
 // ---------------------------------------------------------------------------
 // Sube UNA imagen y devuelve su URL definitiva
@@ -1831,7 +1841,7 @@ function migrarImagenesDeCargaADrive() {
   // Se buscan las columnas POR NOMBRE, no por posicion: la hoja "Orden" ya
   // tiene el problema de leerse por posicion (hallazgo 9) y no hay que
   // agregarle uno mas.
-  var campos = CAMPOS_FOTO_CARGA;   // idem: las firmas se quedan en la celda
+  var campos = COLUMNAS_FOTO_EN_HOJA_ORDEN;   // "Foto1".."Foto8", no los nombres de la app
   var columnas = {};
   for (var c = 0; c < encabezados.length; c++) {
     var nombre = String(encabezados[c]).trim();
@@ -1840,7 +1850,14 @@ function migrarImagenesDeCargaADrive() {
 
   var faltantes = campos.filter(function (x) { return !(x in columnas); });
   if (faltantes.length) {
-    Logger.log("OJO: no encontre estas columnas en la hoja: " + faltantes.join(", "));
+    Logger.log("OJO: no encontre estas columnas: " + faltantes.join(", "));
+    // Se listan los encabezados REALES para no tener que adivinar cual es
+    // el nombre correcto.
+    Logger.log("Los encabezados que SI tiene la hoja son: " + encabezados.join(" | "));
+    if (faltantes.length === campos.length) {
+      Logger.log("No se encontro NINGUNA columna de foto: no se toco nada.");
+      return;
+    }
   }
 
   var migradas = 0, salteadas = 0, errores = 0, filas = 0;

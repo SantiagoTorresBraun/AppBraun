@@ -590,6 +590,43 @@ perderse, y que una carga sin fotos no toque Drive.
 
 ---
 
+#### Lo que apareció al correr la migración (10/09/2026)
+
+Dos cosas, una mía y una del proyecto.
+
+**El error mío:** la primera versión de  buscaba
+las columnas por el nombre que usa la app (), pero en la hoja se
+llaman **…** — nombres heredados de AppSheet. No encontró ninguna
+columna, así que **no movió nada** y no hubo daño, pero tampoco hizo nada.
+Corregido: ahora busca por el encabezado real, y si no lo encuentra **lista los
+encabezados que sí tiene la hoja** en vez de dejar un log confuso.
+
+La confusión venía de que hay dos caminos y solo uno mira la hoja:
+
+| Función | Sobre qué trabaja | Qué nombres usa |
+|---|---|---|
+|  | el JSON que manda la app | … ✅ estaba bien |
+|  | la hoja  | … ❌ estaba mal |
+
+**Lo del proyecto, que es la noticia buena:** al mirar las 2.024 celdas de foto
+de la hoja resultó que **1.804 ya eran URLs de Drive** y solo **39 eran base64**.
+
+| Qué hay en las celdas de foto | Cuántas |
+|---|---|
+| URL de Drive () | **1.804** |
+| Vacías | 181 |
+| base64 | **39** |
+
+O sea: las **237 cargas de la época de AppSheet ya guardaban bien las fotos**.
+Los 4,5 MB los generaron las **6 cargas creadas por esta app**, que era lo único
+que escribía base64.
+
+Y el formato de URL que se eligió acá —— es
+**exactamente el mismo que ya usaba AppSheet**. No se inventó un formato nuevo:
+la app vuelve a escribir como escribía el sistema anterior.
+
+---
+
 ### Qué hacer (paso a paso)
 
 1. **Sacar una copia del Sheet** — Archivo → Hacer una copia. Son 5 segundos y
