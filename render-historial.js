@@ -172,6 +172,28 @@ function pieDeTabla(idCuerpo, total, mostradas, alVerMas) {
     }
 }
 
+// Cuando el historial no se pudo traer, la tabla NO puede decir "no hay
+// registros": son dos cosas distintas y confundirlas hace que alguien vuelva
+// a cargar algo que ya estaba. Esto pinta el motivo real en la tabla.
+function avisoTablaSinDatos(idCuerpo, columnas, motivo) {
+    try {
+        const cuerpo = document.getElementById(idCuerpo);
+        if (!cuerpo) return;
+        cuerpo.innerHTML = '';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = columnas || 6;
+        td.className = 'tabla-sin-datos-error';
+        // textContent, no innerHTML: el motivo lo escribe el servidor.
+        td.textContent = motivo;
+        tr.appendChild(td);
+        cuerpo.appendChild(tr);
+    } catch (e) {
+        console.warn('[historial] No se pudo mostrar el motivo:', e);
+    }
+}
+
+window.avisoTablaSinDatos = avisoTablaSinDatos;
 window.rebotar = rebotar;
 window.resolverRegistro = resolverRegistro;
 window.anotarEnLibreta = anotarEnLibreta;

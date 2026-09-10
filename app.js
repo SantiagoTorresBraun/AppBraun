@@ -2234,17 +2234,29 @@ function cargarHistorialDesdeGoogle() {
     })
     .catch(err => {
         console.error("Error cargando historial:", err);
-        restaurarHistorialGuardado();   // el backend no contestó: al menos mostrar lo guardado
+        // el backend no contestó: al menos mostrar lo guardado, o decir por qué no
+        restaurarHistorialGuardado(err && err.message ? err.message : "error de red");
     });
 }
 
 // Sin señal, o si el backend no contestó: se muestra la copia guardada.
 // El chequeo de length evita pisar datos frescos si la red llegó a contestar
 // mientras tanto: lo viejo nunca gana sobre lo nuevo.
-function restaurarHistorialGuardado() {
+function restaurarHistorialGuardado(motivo) {
     if (historialGeneral.length > 0) return;
     const copia = (typeof leerHistorialLocal === "function") ? leerHistorialLocal("cargas") : null;
-    if (!copia) return;
+
+    if (!copia) {
+        // Ídem calidad: "no hay registros" y "no los pude traer" son cosas
+        // distintas, y confundirlas hace que alguien recargue algo que ya estaba.
+        if (typeof avisoTablaSinDatos === "function") {
+            avisoTablaSinDatos("tabla-historial-body", 6,
+                "No se pudo cargar el historial" + (motivo ? " (" + motivo + ")" : "") +
+                ". Las cargas NO se perdieron: revisá la conexión y volvé a entrar.");
+        }
+        return;
+    }
+
     historialGeneral = copia.registros;
     avisoHistorialGuardado("tabla-historial-body", copia);
     avisoHistorialGuardado("tabla-contratos-body", copia);

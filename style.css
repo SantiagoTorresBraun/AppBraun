@@ -3821,6 +3821,17 @@ body.carga-mp .solo-pt { display: none !important; }
     font-size: inherit;
 }
 
+/* Cuando el historial no se pudo traer: rojo, no gris. El gris de "no hay
+   registros" hacía pensar que la tabla estaba vacía de verdad. */
+.tabla-sin-datos-error {
+    text-align: center;
+    padding: 22px 16px;
+    color: #b71c1c;
+    background: #fdecea;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 /* =====================================================================
    PIE DE TABLA CON PAGINADO (Hallazgo 5)
    Antes se dibujaban las 253 filas de una. Ahora van de a 50.

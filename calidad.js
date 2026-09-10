@@ -549,16 +549,28 @@ function cargarHistorialCalidadDesdeGoogle() {
         })
         .catch(err => {
             console.error("Error cargando historial de calidad:", err);
-            restaurarCalidadGuardada();
+            restaurarCalidadGuardada(err && err.message ? err.message : "error de red");
         });
 }
 
 // Sin señal, o si el backend no contestó: la copia guardada en el celular.
 // El chequeo de length evita pisar datos frescos: lo viejo nunca gana.
-function restaurarCalidadGuardada() {
+function restaurarCalidadGuardada(motivo) {
     if (historialCalidad.length > 0) return;
     const copia = (typeof leerHistorialLocal === "function") ? leerHistorialLocal("calidad") : null;
-    if (!copia) return;
+
+    if (!copia) {
+        // Ni datos del servidor ni copia guardada. ANTES acá no pasaba nada y
+        // la tabla quedaba con "No hay controles de calidad registrados", que
+        // es mentira: los controles están, lo que falló fue traerlos.
+        if (typeof avisoTablaSinDatos === "function") {
+            avisoTablaSinDatos("tabla-calidad-body", 6,
+                "No se pudo cargar el historial" + (motivo ? " (" + motivo + ")" : "") +
+                ". Los controles NO se perdieron: revisá la conexión y volvé a entrar.");
+        }
+        return;
+    }
+
     historialCalidad = copia.registros;
     avisoHistorialGuardado("tabla-calidad-body", copia);
     filtrarYRenderizarCalidad();
