@@ -217,8 +217,17 @@ function avisoHistorialGuardado(idCuerpoTabla, info) {
         const recortado = info.total > info.registros.length
             ? ' (los ' + info.registros.length + ' más nuevos de ' + info.total + ')'
             : '';
-        aviso.innerHTML =
-            '<i class="fas fa-wifi" aria-hidden="true"></i> Sin conexión: estás viendo la copia guardada' +
+
+        // Decir "Sin conexión" cuando SÍ hay conexión manda a buscar el
+        // problema al lado equivocado. Son dos situaciones distintas:
+        //   - de verdad no hay señal
+        //   - hay señal pero el servidor no contestó (o tardó demasiado)
+        const sinSenal = (typeof navigator !== 'undefined') && navigator.onLine === false;
+        const encabezado = sinSenal
+            ? '<i class="fas fa-wifi" aria-hidden="true"></i> Sin conexión: estás viendo la copia guardada'
+            : '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i> No se pudo traer el historial del servidor: estás viendo la copia guardada';
+
+        aviso.innerHTML = encabezado +
             (cuando ? ' del <strong>' + cuando + '</strong>' : '') + recortado +
             '. Las fotos y firmas no se guardan en el celular.';
     } catch (e) {

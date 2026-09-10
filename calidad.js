@@ -610,6 +610,17 @@ async function filtrarYRenderizarCalidad() {
             if (typeof avisoHistorialGuardado === "function") {
                 avisoHistorialGuardado("tabla-calidad-body", copiaLocal);
             }
+
+            // EL RASTRO VA ACÁ, no en el "no hay controles" de más abajo.
+            // Al rellenar con la copia, la tabla ya nunca queda vacía, así
+            // que aquel rastro no se escribía NUNCA y el hallazgo 14 seguía
+            // sin poder diagnosticarse. Este es el momento exacto en que
+            // algo dejó historialCalidad vacío: acá es donde sirve el stack.
+            console.warn("[calidad] historialCalidad estaba VACÍO y se usó la copia guardada del " +
+                (copiaLocal.fecha || "?") +
+                ". online=" + navigator.onLine +
+                " grano=" + granoActual +
+                "\nQuién llegó hasta acá:\n" + (new Error().stack || "(sin rastro)"));
         }
     }
 
