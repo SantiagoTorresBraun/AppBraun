@@ -597,6 +597,22 @@ async function filtrarYRenderizarCalidad() {
     const fechaHasta = document.getElementById('filter-cal-fecha-hasta').value;
 
     const locales = (await obtenerCalidadLocales()).map(r => Object.assign({}, r, { _pendienteSync: true }));
+
+    // RED DE CONTENCIÓN. Si el historial quedó vacío pero hay una copia
+    // guardada en el celular, se usa la copia. Sin esto, cualquier cosa que
+    // deje historialCalidad en [] hace que la tabla pase de 64 filas a "no hay
+    // controles registrados", que es lo peor que puede decir: parece que los
+    // datos no existen cuando en realidad están en el Sheet.
+    if (historialCalidad.length === 0 && typeof leerHistorialLocal === "function") {
+        const copiaLocal = leerHistorialLocal("calidad");
+        if (copiaLocal && copiaLocal.registros && copiaLocal.registros.length) {
+            historialCalidad = copiaLocal.registros;
+            if (typeof avisoHistorialGuardado === "function") {
+                avisoHistorialGuardado("tabla-calidad-body", copiaLocal);
+            }
+        }
+    }
+
     const idsLocales = new Set(locales.map(r => r["Id_Calidad"]));
     const remotos = historialCalidad.filter(r => !idsLocales.has(r["Id_Calidad"]));
     const lista = locales.concat(remotos);
@@ -619,8 +635,23 @@ async function filtrarYRenderizarCalidad() {
 
     filtrados.sort((a, b) => (b["Fecha Analisis"] || '').localeCompare(a["Fecha Analisis"] || ''));
 
+    // Si la tabla YA tenía filas y ahora queda vacía, algo se perdió por el
+    // camino. Se deja el rastro con el stack para saber quién la vacío: es la
+    // única forma de agarrar esto si pasa en el celular de un operario.
+    const teniaFilas = tbody.getAttribute("data-tenia-filas") === "1";
+    tbody.setAttribute("data-tenia-filas", filtrados.length ? "1" : "0");
+
     tbody.innerHTML = "";
     if (filtrados.length === 0) {
+        if (teniaFilas) {
+            console.warn("[calidad] La tabla TENÍA datos y quedó vacía." +
+                " historialCalidad=" + historialCalidad.length +
+                " locales=" + locales.length +
+                " grano=" + granoActual +
+                " filtroTexto=" + JSON.stringify(txt) +
+                " desde=" + JSON.stringify(fechaDesde) + " hasta=" + JSON.stringify(fechaHasta) +
+                "\nQuién la vacío:\n" + (new Error().stack || "(sin rastro)"));
+        }
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">No hay controles de calidad registrados.</td></tr>`;
         return;
     }
