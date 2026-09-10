@@ -12,7 +12,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 1 | Cualquiera en internet puede leer y borrar todos los datos | 🔴 Crítico |
 | 2 | La contraseña está publicada en GitHub, en texto plano | 🔴 Crítico |
 | 3 | ~~La app no abre sin internet (el Service Worker nunca se registra)~~ | ✅ **Resuelto 09/09/2026** |
-| 4 | Un registro que falla bloquea toda la cola offline, para siempre | 🔴 Alto |
+| 4 | ~~Un registro que falla bloquea toda la cola offline, para siempre~~ | ✅ **Resuelto 09/09/2026** |
 | 5 | El historial arma 27 MB de HTML y se rehace en cada tecla | 🟠 Alto |
 | 6 | Las fotos van dentro del Sheet: el arranque crece sin techo | 🟠 Alto |
 | 7 | `responder_ticket` puede mandar el correo dos veces | 🟠 Medio |
@@ -206,7 +206,7 @@ puede mandar un correo de todos modos.
 
 ---
 
-## 4. 🔴 Un registro que falla bloquea toda la cola offline
+## 4. ✅ Un registro que falla bloquea toda la cola offline — RESUELTO el 09/09/2026
 
 [app.js — `sincronizarDatosPendientes()`](app.js) y
 [calidad.js — `sincronizarCalidadPendientes()`](calidad.js) tienen el mismo bug:
@@ -246,6 +246,84 @@ de que quedaron ahí.
 
 Hace falta llevar una lista de "ya intentados en esta pasada" para no quedar en
 un bucle infinito sobre el mismo registro fallado.
+
+---
+
+### ✅ Cómo quedó (09/09/2026)
+
+Toda la lógica vive ahora en [cola-sync.js](cola-sync.js), un solo motor que
+usan las tres colas. `sincronizarDatosPendientes()`, `sincronizarCalidadPendientes()`
+y `sincronizarTicketsPendientes()` siguen existiendo con el mismo nombre —las
+llaman muchos lugares— pero adentro solo delegan.
+
+**El cambio de fondo:** la cola se recorre entera de a uno, y un fallo NO frena
+al resto. El registro que falla se queda donde está y los demás siguen saliendo.
+
+#### Los dos tipos de error, que no son lo mismo
+
+Esta es la decisión de diseño que más importa, y va más allá de lo que pedía el
+hallazgo:
+
+| Qué pasó | ¿Suma intento? | Qué hace |
+|---|---|---|
+| El backend contestó **que no** (dato inválido, Drive rechazó la foto) | **Sí** | A los 3 intentos pasa a revisión manual |
+| **No hubo respuesta** (sin señal, timeout, CORS) | **No** | Reintenta siempre, cada 2 minutos |
+
+Si los errores de red contaran, **un día entero en un silo quemaría los 3
+intentos de todo lo pendiente**, y el operario se encontraría al volver con
+veinte registros marcados como "fallidos" que en realidad estaban perfectos. La
+falta de señal es justo lo que la cola tiene que tolerar, no lo que la tiene que
+romper.
+
+#### Reintentos con espera
+
+Tras un rechazo del backend: **1 minuto → 5 minutos → 15 minutos**, y al tercero
+queda para revisión manual. Un latido cada 60 segundos vuelve a intentar solo;
+sin él, un registro en espera se quedaría esperando hasta que algo más disparara
+una sincronización.
+
+#### Lo que se ve en pantalla
+
+Aparece una **barra fija abajo**, visible desde cualquier pantalla:
+
+> ⚠️ *2 registros no se pudieron enviar y necesitan que los revises.* **[Revisar]**
+
+Va fija a propósito: el panel `#offline-records` que ya existía está enterrado al
+fondo del formulario de Control de Carga, y el operario solo lo ve si baja hasta
+el final. Sirve para "tenés cosas en cola", no para algo que necesita atención.
+
+"Revisar" abre una pantalla con cada registro trabado, su motivo, y dos botones:
+**Reintentar** y **Descartar**. Descartar pregunta con todas las letras que el
+registro nunca llegó al servidor y que se pierde para siempre.
+
+#### Decisiones que vale la pena dejar escritas
+
+- **Un registro fallido NUNCA se borra solo.** Los datos que cargó el operario no
+  se tiran sin que él lo decida.
+- **Reintentar es seguro:** el backend ya es idempotente (chequea `Id_Carga` /
+  `Id_Calidad` adentro de un `LockService` antes de escribir).
+- **Una cola por vez.** Si vuelve la señal, se toca refrescar y salta el latido,
+  los tres disparos no mandan el mismo registro tres veces.
+- **Si se corta la señal a mitad**, la pasada se interrumpe en vez de seguir
+  golpeando al vacío.
+- **Los campos internos** (`_intentos`, `_fallido`, `_ultimoError`…) nunca viajan
+  al backend.
+- **Producción no se tocó:** `sincronizarMuestreosPendientes()` ya recorría con
+  `getAll()` + `forEach`, así que cada muestreo iba por su cuenta. Ese módulo
+  nunca tuvo el bug.
+
+#### Cómo se verificó
+
+**43 pruebas** sobre el `cola-sync.js` real con un IndexedDB simulado. La primera
+**reproduce el bug viejo** ejecutando el patrón exacto que tenía `app.js`, para
+que quede demostrado que el arreglo arregla algo real: con una cola de 5 y el
+primero fallando, el bucle viejo manda 1 solo y deja los otros 4 sin enviar para
+siempre.
+
+También se comprueba que un registro cargado **después** del que falló sí se
+envía —el corazón del hallazgo—, que 5 fallos de red seguidos no gastan ni un
+intento, que dos sincronizaciones simultáneas no duplican nada, y que
+`sincronizarDatosPendientes()` de `app.js` llega de verdad al motor.
 
 ---
 

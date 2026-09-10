@@ -24,6 +24,9 @@ request.onupgradeneeded = function(e) {
 request.onsuccess = function(e) {
     db = e.target.result;
     renderOfflineCount();
+    // Reintento automático cada minuto y aviso de lo que quedó trabado.
+    if (typeof arrancarLatidoCola === 'function') arrancarLatidoCola();
+    if (typeof actualizarAvisoCola === 'function') actualizarAvisoCola();
     cargarHistorialDesdeGoogle();
     if (typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
     if (typeof sincronizarCalidadPendientes === 'function' && navigator.onLine) sincronizarCalidadPendientes();
@@ -1718,27 +1721,10 @@ function obtenerTicketsLocales() {
 }
 
 // Sube los tickets en cola al backend (que guarda la fila y manda el correo)
+// Ídem: la lógica está en cola-sync.js. Tenía el mismo bug de trabarse.
 function sincronizarTicketsPendientes() {
-    if (!db || !navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
-    const tx = db.transaction(['ticketera_tickets'], 'readonly');
-    tx.objectStore('ticketera_tickets').openCursor().onsuccess = function(e) {
-        const cursor = e.target.result;
-        if (!cursor) { setTimeout(cargarTicketsDesdeGoogle, 2500); return; }
-        const item = cursor.value;
-        const idKey = item.id;
-        const payload = Object.assign({ _accion: 'crear_ticket' }, item);
-        delete payload.id;
-
-        // El ticket sale de la cola local solo si el backend confirmó que lo creó.
-        enviarAlBackend(payload)
-        .then(() => {
-            const delTx = db.transaction(['ticketera_tickets'], 'readwrite');
-            delTx.objectStore('ticketera_tickets').delete(idKey).onsuccess = function() {
-                sincronizarTicketsPendientes();
-            };
-        })
-        .catch(err => console.error('No se pudo sincronizar el ticket:', err));
-    };
+    if (typeof sincronizarCola !== 'function') return;
+    sincronizarCola(colaPorStore('ticketera_tickets'));
 }
 
 // Aplica un cambio a un ticket (estado, responsable, respuesta) y avisa al backend,
@@ -3394,53 +3380,57 @@ async function obtenerImagenComoBase64(urlOBase64) {
     }
 }
 // --- 11. SINCRONIZACIÓN DE COLA OFFLINE ---
+// Muestra la cola de Control de Carga separando dos cosas que antes se
+// contaban juntas: lo que espera señal (normal) y lo que el servidor rechazó
+// y necesita que alguien lo mire (no es normal).
 function renderOfflineCount() {
     if (!db) return;
     const store = db.transaction(["controles_carga"], "readonly").objectStore("controles_carga");
-    const req = store.count();
+    const req = store.getAll();
     req.onsuccess = function() {
         const div = document.getElementById("offline-records");
         const list = document.getElementById("records-list");
-        if(!div || !list) return;
-        if (req.result > 0) {
-            div.classList.remove("hidden");
-            list.innerHTML = `<li>Tienes <b>${req.result}</b> reporte(s) en cola esperando señal.</li>`;
-        } else { div.classList.add("hidden"); }
+        if (!div || !list) return;
+
+        const todos = req.result || [];
+        const fallidos = todos.filter(function (r) { return r._fallido; }).length;
+        const esperando = todos.length - fallidos;
+
+        if (!todos.length) { div.classList.add("hidden"); return; }
+        div.classList.remove("hidden");
+
+        list.innerHTML = "";
+        if (esperando > 0) {
+            const li = document.createElement("li");
+            li.textContent = "Tenés " + esperando + " reporte(s) en cola esperando señal.";
+            list.appendChild(li);
+        }
+        if (fallidos > 0) {
+            const li = document.createElement("li");
+            li.className = "cola-item-fallido";
+            li.textContent = fallidos + " reporte(s) no se pudieron enviar y necesitan que los revises. ";
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.className = "cola-link-revisar";
+            boton.textContent = "Revisar";
+            boton.onclick = function () { if (typeof abrirRevisionCola === "function") abrirRevisionCola(); };
+            li.appendChild(boton);
+            list.appendChild(li);
+        }
     };
 }
 
+// La cola de Control de Carga. Toda la lógica vive en cola-sync.js: acá se
+// deja el nombre de siempre porque lo llaman muchos lugares.
+//
+// Antes esta función recorría la cola con un cursor y volvía a llamarse SOLO
+// desde el .then(). Si un registro fallaba, el .catch() no seguía y la cola
+// quedaba trabada para siempre: como openCursor() arranca desde el principio,
+// el registro roto bloqueaba a todos los que venían atrás, sin ningún aviso.
+// Era el Hallazgo 4 de la auditoría.
 function sincronizarDatosPendientes() {
-    if (!db || !navigator.onLine) return;
-    const tx = db.transaction(["controles_carga"], "readwrite");
-    const store = tx.objectStore("controles_carga");
-    
-    store.openCursor().onsuccess = function(e) {
-        const cursor = e.target.result;
-        if (cursor) {
-            const item = cursor.value;
-            const idKey = item.id;
-            // Igual que en Control de Calidad: la carga se borra de la cola local
-            // SOLO si el backend confirmó que la guardó. Si falla (por ejemplo, no
-            // puede subir el archivo de la Carta de Porte a Drive), queda pendiente
-            // y se reintenta, en vez de desaparecer sin aviso.
-            enviarAlBackend(item)
-            .then(() => {
-                const delTx = db.transaction(["controles_carga"], "readwrite");
-                delTx.objectStore("controles_carga").delete(idKey).onsuccess = function() {
-                    renderOfflineCount();
-                    sincronizarDatosPendientes();
-                };
-            })
-            .catch(err => {
-                console.error("No se pudo sincronizar la carga:", err);
-                if (err && err.rechazadoPorBackend) {
-                    alert("⚠️ La carga no se pudo guardar en el servidor y quedó pendiente en este dispositivo.\n\n" +
-                          "Motivo: " + err.message + "\n\n" +
-                          "No borres los datos del navegador: se va a reintentar sola.");
-                }
-            });
-        }
-    };
+    if (typeof sincronizarCola !== 'function') return;   // cola-sync.js no cargó
+    sincronizarCola(colaPorStore('controles_carga'));
 }
 
 // --- INICIALIZACIÓN ---

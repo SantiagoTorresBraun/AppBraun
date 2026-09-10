@@ -389,37 +389,13 @@ function actualizarCalidadExistente(registro) {
 }
 
 // Sube al backend (Google Apps Script) los registros en cola y los saca de IndexedDB
+// La cola de Control de Calidad. La lógica está en cola-sync.js.
+// Tenía el mismo bug que Control de Carga: la recursión vivía solo en el
+// .then(), así que un control rechazado (por ejemplo, si Drive no aceptaba las
+// fotos) frenaba la cola entera y los controles siguientes no salían nunca.
 function sincronizarCalidadPendientes() {
-    if (!db || !navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
-    const tx = db.transaction(["controles_calidad"], "readonly");
-    tx.objectStore("controles_calidad").openCursor().onsuccess = function(e) {
-        const cursor = e.target.result;
-        if (!cursor) return;
-        const item = cursor.value;
-        const idKey = item.id;
-        const payload = Object.assign({ _accion: "guardar_calidad" }, item);
-        delete payload.id; // el id local de IndexedDB no viaja al Sheet
-
-        // El registro se borra de la cola local SOLO si el backend confirmó que
-        // lo guardó. Si Drive rechaza las fotos (o falla cualquier otra cosa),
-        // el control queda en el dispositivo con sus fotos y se reintenta en la
-        // próxima sincronización, en vez de perderse en silencio.
-        enviarAlBackend(payload)
-        .then(() => {
-            const delTx = db.transaction(["controles_calidad"], "readwrite");
-            delTx.objectStore("controles_calidad").delete(idKey).onsuccess = function() {
-                sincronizarCalidadPendientes(); // procesa el siguiente de la cola
-            };
-        })
-        .catch(err => {
-            console.error("No se pudo sincronizar el control de calidad:", err);
-            if (err && err.rechazadoPorBackend) {
-                alert("⚠️ El control de calidad no se pudo guardar en el servidor y quedó pendiente en este dispositivo.\n\n" +
-                      "Motivo: " + err.message + "\n\n" +
-                      "No cierres sesión ni borres los datos del navegador: se va a reintentar solo.");
-            }
-        });
-    };
+    if (typeof sincronizarCola !== 'function') return;
+    sincronizarCola(colaPorStore('controles_calidad'));
 }
 
 // --- 9. HISTORIAL: LECTURA DEL BACKEND + RENDER DE LA LISTA ---
