@@ -28,7 +28,7 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

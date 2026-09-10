@@ -845,6 +845,13 @@ async function renderizarTablaContratos() {
         if (!Array.isArray(contratos)) return;
         contratos.forEach(c => {
             filas.push({
+                // Para poder editar los Kg de descarga hace falta saber QUÉ
+                // fila tocar. id_contrato es el UUID de la hoja "Contrato
+                // Comercial"; los registros que todavía están en la cola
+                // local no lo tienen todavía (lo asigna el backend).
+                id_contrato: c.id_contrato || '',
+                id_carga: registro.Id_Carga || '',
+                pendiente: !!registro._pendienteSync,
                 fecha: registro.Fecha || '-',
                 contrato_com: c.contrato_com || '-',
                 contrato_cli: c.contrato_cli || '-',
@@ -891,7 +898,7 @@ async function renderizarTablaContratos() {
             <td data-label="Contrato Cliente">${f.contrato_cli}</td>
             <td data-label="Carta de Porte">${f.carta_porte}</td>
             <td data-label="Kg CP">${fmt(f.kg_cp)}</td>
-            <td data-label="Kg Descarga">${fmt(f.kg_descarga)}</td>
+            <td data-label="Kg Descarga" class="celda-kg-descarga">${celdaKgDescargaHtml(f)}</td>
             <td data-label="Diferencia KG" class="${claseDif}"><b>${fmt(diferencia)}</b></td>
             <td data-label="Observaciones CP">${f.observaciones}</td>
             <td data-label="Archivo">${archivoCpLinkHtml(f.archivo_cp)}</td>
@@ -899,6 +906,138 @@ async function renderizarTablaContratos() {
         tbody.appendChild(tr);
     });
 }
+
+// ---------------------------------------------------------------------------
+// EDITAR LOS KG DE DESCARGA DESDE CONTRATOS
+// ---------------------------------------------------------------------------
+// Antes, para corregir un número había que abrir la carga entera en Control
+// de Carga y volver a guardarla. Acá se toca una sola celda del Sheet.
+
+function celdaKgDescargaHtml(f) {
+    const valor = formatNumeroAR(f.kg_descarga);
+
+    // Un contrato que todavía no subió no tiene UUID: el backend se lo asigna
+    // al guardarlo. Editarlo acá no tendría a qué fila apuntar.
+    if (!f.id_contrato) {
+        return '<span class="kg-no-editable" title="Este contrato todavía no se sincronizó. Se puede editar desde Control de Carga.">' + valor + '</span>';
+    }
+
+    return '<button type="button" class="kg-editable" '
+         +   'data-contrato="' + escapeHtml(f.id_contrato) + '" '
+         +   'data-carga="' + escapeHtml(f.id_carga) + '" '
+         +   'data-kgcp="' + f.kg_cp + '" '
+         +   'title="Tocá para editar los kg de descarga">'
+         +   valor
+         + '<i class="fas fa-pen"></i>'
+         + '</button>';
+}
+
+// Un solo listener para toda la tabla, en vez de uno por fila: la tabla se
+// vuelve a dibujar seguido y así no quedan listeners viejos dando vueltas.
+document.addEventListener('click', function (ev) {
+    const boton = ev.target && ev.target.closest ? ev.target.closest('.kg-editable') : null;
+    if (!boton) return;
+    abrirEdicionKgDescarga(boton);
+});
+
+function abrirEdicionKgDescarga(boton) {
+    if (boton.dataset.editando === '1') return;
+    boton.dataset.editando = '1';
+
+    const celda = boton.parentNode;
+    const idContrato = boton.dataset.contrato;
+    const idCarga = boton.dataset.carga;
+    const kgCp = parseFloat(boton.dataset.kgcp) || 0;
+    const valorOriginal = parseNumeroAR(boton.textContent);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.min = '0';
+    input.className = 'kg-input';
+    input.value = valorOriginal || '';
+
+    celda.innerHTML = '';
+    celda.appendChild(input);
+    input.focus();
+    input.select();
+
+    let cerrado = false;
+
+    function cancelar() {
+        if (cerrado) return;
+        cerrado = true;
+        renderizarTablaContratos();
+    }
+
+    async function guardar() {
+        if (cerrado) return;
+        const texto = String(input.value).trim();
+        const nuevo = texto === '' ? '' : Number(texto);
+
+        if (texto !== '' && (isNaN(nuevo) || nuevo < 0)) {
+            alert('Los kg de descarga tienen que ser un número igual o mayor que cero.');
+            input.focus();
+            return;
+        }
+        if (nuevo === valorOriginal) { cancelar(); return; }
+
+        // Un cero de más es el error típico. Se avisa, no se prohíbe.
+        if (texto !== '' && kgCp > 0 && (nuevo > kgCp * 2 || nuevo > 1000000)) {
+            const sigue = confirm('Los kg de descarga (' + formatNumeroAR(nuevo) + ') son muy distintos ' +
+                'a los kg de la carta de porte (' + formatNumeroAR(kgCp) + ').\n\n¿Es correcto?');
+            if (!sigue) { input.focus(); return; }
+        }
+
+        cerrado = true;
+        celda.innerHTML = '<span class="kg-guardando">Guardando…</span>';
+
+        try {
+            await enviarAlBackend({
+                _accion: 'actualizar_kg_descarga',
+                id_contrato: idContrato,
+                kg_descarga: nuevo
+            });
+            // Se actualiza también la copia en memoria: si no, la tabla se
+            // vuelve a dibujar con el valor viejo y parece que no se guardó.
+            actualizarKgEnMemoria(idCarga, idContrato, nuevo);
+        } catch (err) {
+            console.error('No se pudo guardar los kg de descarga:', err);
+            alert('No se pudo guardar: ' + ((err && err.message) || 'sin conexión con el servidor') +
+                  '\n\nEl valor quedó como estaba.');
+        }
+        renderizarTablaContratos();
+    }
+
+    input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); guardar(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); cancelar(); }
+    });
+    input.addEventListener('blur', guardar);
+}
+
+// Deja el valor nuevo en historialGeneral y en la copia guardada del celular.
+function actualizarKgEnMemoria(idCarga, idContrato, kg) {
+    let tocado = false;
+    historialGeneral.forEach(function (registro) {
+        if (registro.Id_Carga !== idCarga) return;
+        let contratos = registro.Contratos;
+        if (typeof contratos === 'string') { try { contratos = JSON.parse(contratos); } catch (e) { return; } }
+        if (!Array.isArray(contratos)) return;
+        contratos.forEach(function (c) {
+            if (c.id_contrato === idContrato) { c.kg_descarga = kg; tocado = true; }
+        });
+        registro.Contratos = contratos;
+    });
+    // Si no se guarda la copia, al abrir la app sin señal volvería el valor viejo.
+    if (tocado && typeof guardarHistorialLocal === 'function') {
+        guardarHistorialLocal('cargas', historialGeneral);
+    }
+    return tocado;
+}
+
+window.celdaKgDescargaHtml = celdaKgDescargaHtml;
+window.actualizarKgEnMemoria = actualizarKgEnMemoria;
 
 function agregarFilaContrato(opciones) {
     opciones = opciones || {};

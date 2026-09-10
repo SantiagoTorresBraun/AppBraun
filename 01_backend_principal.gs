@@ -105,6 +105,10 @@ function doPost(e) {
     var accion = data._accion || "guardar";
 
     // ==================== NUEVO: CONTROL DE CALIDAD ====================
+    // Editar los Kg de descarga desde el modulo de Contratos: toca UNA celda,
+    // sin pasar por "actualizar" (que borra la carga entera y la reinserta).
+    if (accion === "actualizar_kg_descarga") return actualizarKgDescarga(data);
+
     if (accion === "guardar_calidad")    return guardarCalidad(data);
     if (accion === "actualizar_calidad") return actualizarCalidad(data);
     if (accion === "eliminar_calidad")   return eliminarCalidad(data);
@@ -650,6 +654,10 @@ function doGet(e) {
           var kgCpValor = parseFloat(rowsContrato[c][6]) || 0;
           var kgDescargaValor = parseFloat(rowsContrato[c][8]) || 0;
           contratos.push({
+            // El UUID de la fila. Existia desde siempre pero no se devolvia:
+            // sin el, el modulo de Contratos no puede decir QUE fila editar
+            // (la carta de porte se repite entre cargas).
+            id_contrato: rowsContrato[c][0],
             contrato_com: rowsContrato[c][2],
             contrato_cli: rowsContrato[c][3],
             carta_porte: rowsContrato[c][4],
@@ -1892,4 +1900,73 @@ function medirPesoDeLaHojaOrden() {
   Logger.log("Peso total de la hoja: " + Math.round(total / 1024) + " KB");
   Logger.log("De eso, en base64: " + Math.round(enBase64 / 1024) + " KB en " + cuantas + " celdas (" +
              (total ? Math.round(enBase64 / total * 100) : 0) + "%)");
+}
+
+
+// ============================================================================
+//  EDITAR LOS KG DE DESCARGA DESDE EL MÓDULO DE CONTRATOS
+// ----------------------------------------------------------------------------
+//  La vista de Contratos aplana los contratos de todas las cargas: cada fila es
+//  un contrato. Los "Kg Descarga" se cargaban solo desde Control de Carga, y
+//  para corregir uno había que abrir la carga entera y volver a guardarla.
+//
+//  Esta acción toca UNA celda. No pasa por "actualizar", que borra la fila de
+//  la carga y la vuelve a insertar: para cambiar un número eso es desproporcionado
+//  y arriesga el resto del registro.
+//
+//  La fila se busca por el UUID de la columna 1 de "Contrato Comercial", que ya
+//  existía desde siempre pero no se le devolvía al front. Buscar por carta de
+//  porte no serviría: se repite entre cargas.
+// ============================================================================
+
+function actualizarKgDescarga(data) {
+  try {
+    var idContrato = String(data.id_contrato || "").trim();
+    if (!idContrato) return respuestaErrorKg("Falta el identificador del contrato");
+
+    // Se acepta vacío para poder BORRAR el valor, pero si viene algo tiene que
+    // ser un número que cierre.
+    var crudo = data.kg_descarga;
+    var kg = "";
+    if (crudo !== "" && crudo !== null && crudo !== undefined) {
+      kg = Number(crudo);
+      if (isNaN(kg)) return respuestaErrorKg("Los kg de descarga tienen que ser un número");
+      if (kg < 0)    return respuestaErrorKg("Los kg de descarga no pueden ser negativos");
+      // Un camión no lleva un millón de kilos: casi siempre es un cero de más.
+      if (kg > 1000000) return respuestaErrorKg("Los kg de descarga parecen equivocados (más de 1.000.000)");
+    }
+
+    var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_CONTRATO);
+    if (!hoja) return respuestaErrorKg("No encontré la hoja " + NOMBRE_HOJA_CONTRATO);
+
+    var valores = hoja.getDataRange().getValues();
+    var fila = -1;
+    for (var f = 1; f < valores.length; f++) {
+      if (String(valores[f][0]).trim() === idContrato) { fila = f; break; }
+    }
+    if (fila === -1) return respuestaErrorKg("No encontré ese contrato. ¿Se borró la carga?");
+
+    // Columna 9 (índice 8) = Kg Descarga. Ver guardarProductosYContratos().
+    hoja.getRange(fila + 1, 9).setValue(kg);
+    SpreadsheetApp.flush();
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      id_contrato: idContrato,
+      kg_descarga: kg,
+      // Se devuelven los kg de la CP para que el front pueda recalcular la
+      // diferencia con lo que quedó guardado de verdad, y no con lo que creía.
+      kg_cp: parseFloat(valores[fila][6]) || 0
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    Logger.log("actualizarKgDescarga: " + error);
+    return respuestaErrorKg(error.toString());
+  }
+}
+
+function respuestaErrorKg(mensaje) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error", message: mensaje
+  })).setMimeType(ContentService.MimeType.JSON);
 }

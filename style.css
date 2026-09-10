@@ -3859,3 +3859,48 @@ body.carga-mp .solo-pt { display: none !important; }
 }
 
 .pie-tabla-vermas:hover { background: #b71c1c; color: #fff; }
+
+/* =====================================================================
+   EDITAR LOS KG DE DESCARGA DESDE CONTRATOS
+   La celda parece texto hasta que se la toca. El lapiz solo aparece al
+   pasar por encima para no ensuciar una tabla de 392 filas.
+   ===================================================================== */
+.kg-editable {
+    background: none;
+    border: 1px dashed transparent;
+    border-radius: 4px;
+    padding: 3px 7px;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kg-editable:hover, .kg-editable:focus {
+    border-color: #b71c1c;
+    background: #fff5f5;
+}
+
+.kg-editable i {
+    font-size: .72em;
+    opacity: 0;
+    color: #b71c1c;
+}
+
+.kg-editable:hover i, .kg-editable:focus i { opacity: .65; }
+
+.kg-input {
+    width: 108px;
+    padding: 4px 7px;
+    border: 2px solid #b71c1c;
+    border-radius: 4px;
+    font: inherit;
+    text-align: right;
+}
+
+.kg-guardando { color: #888; font-size: .9em; font-style: italic; }
+
+/* Un contrato que todavia no subio no tiene UUID: no hay fila que editar. */
+.kg-no-editable { opacity: .55; cursor: not-allowed; }
