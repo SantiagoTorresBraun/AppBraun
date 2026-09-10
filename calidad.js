@@ -543,7 +543,7 @@ function leerCalidadDirectoDelSheet() {
 }
 
 function cargarHistorialCalidadDesdeGoogle() {
-    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
+    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarCalidadGuardada(); return; }
     fetch(`${WEB_APP_URL}?action=read_calidad`)
         .then(res => res.json())
         .then(data => {
@@ -553,6 +553,10 @@ function cargarHistorialCalidadDesdeGoogle() {
             const soloCalidad = Array.isArray(data) ? data.filter(r => r && r["Id_Calidad"]) : [];
             if (soloCalidad.length > 0) {
                 historialCalidad = soloCalidad.map(normalizarRegistroCalidadRemoto);
+                // Copia para poder verlo sin señal (Calidad no trae base64:
+                // sus imágenes ya son rutas, así que se guarda casi entero).
+                guardarHistorialLocal("calidad", historialCalidad);
+                avisoHistorialGuardado("tabla-calidad-body", null);
                 filtrarYRenderizarCalidad();
                 return;
             }
@@ -567,7 +571,21 @@ function cargarHistorialCalidadDesdeGoogle() {
                 })
                 .catch(err => console.warn("Lectura directa del Sheet no disponible:", err.message));
         })
-        .catch(err => console.error("Error cargando historial de calidad:", err));
+        .catch(err => {
+            console.error("Error cargando historial de calidad:", err);
+            restaurarCalidadGuardada();
+        });
+}
+
+// Sin señal, o si el backend no contestó: la copia guardada en el celular.
+// El chequeo de length evita pisar datos frescos: lo viejo nunca gana.
+function restaurarCalidadGuardada() {
+    if (historialCalidad.length > 0) return;
+    const copia = (typeof leerHistorialLocal === "function") ? leerHistorialLocal("calidad") : null;
+    if (!copia) return;
+    historialCalidad = copia.registros;
+    avisoHistorialGuardado("tabla-calidad-body", copia);
+    filtrarYRenderizarCalidad();
 }
 
 function obtenerCalidadLocales() {

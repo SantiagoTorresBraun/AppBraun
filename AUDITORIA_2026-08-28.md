@@ -21,7 +21,7 @@ Ordenado por urgencia. Los cinco primeros son los que atacaría esta semana.
 | 10 | El historial de Carga inserta datos del Sheet sin escapar (XSS) | 🟡 Medio |
 | 11 | `Kg_Cargados` se escribe a mano y nada lo controla | 🟡 Bajo |
 | 12 | Varios menores | 🟡 Bajo |
-| **13** | **Sin señal, Carga / Calidad / Contratos / Ticketera muestran la tabla vacía y sin avisar** | 🟠 Alto |
+| 13 | ~~Sin señal, Carga / Calidad / Contratos / Ticketera muestran la tabla vacía~~ | ✅ **Resuelto 09/09/2026** |
 
 ---
 
@@ -479,7 +479,7 @@ pantalla cuando se aparta más de un 2%.
 
 ---
 
-## 13. 🟠 Sin señal, casi todos los historiales se ven vacíos — y sin avisar
+## 13. ✅ Sin señal, casi todos los historiales se ven vacíos — RESUELTO el 09/09/2026
 
 *Encontrado el 09/09/2026, al verificar el arreglo del Hallazgo 3.*
 
@@ -549,6 +549,49 @@ filas, no agrega nada más.
 > **Ojo:** el Hallazgo 6 (fotos en base64 adentro del Sheet) choca con esto.
 > Guardar el historial de Carga completo en el celular arrastraría las fotos.
 > Conviene guardarlo **sin fotos**, o resolver el 6 antes.
+
+### ✅ Cómo quedó (09/09/2026)
+
+Se hicieron **los dos** niveles, en [historial-local.js](historial-local.js).
+
+Carga, Calidad, Contratos y Ticketera ahora guardan una copia del historial en
+el celular y la muestran cuando no hay señal, con un cartel arriba de la tabla
+que dice de cuándo son los datos. Producción queda como estaba: ya guardaba sus
+muestreos enteros.
+
+**La copia va sin fotos ni firmas**, y eso es lo que hace viable todo lo demás:
+
+| | Peso |
+|---|---|
+| Historial de Carga como viene del Sheet | 4,50 MB |
+| — de eso, fotos y firmas en base64 | 4,12 MB (**92%**) |
+| Lo que se guarda en el celular | **541 KB** |
+| Calidad (no tiene base64: sus imágenes ya son rutas) | 123 KB |
+| Ticketera | 1 KB |
+
+El filtro es **por tamaño, no por nombre de campo**: cualquier valor que empiece
+con `data:` o pase los 2.000 caracteres se guarda vacío. Así, si mañana alguien
+agrega `Foto_Precinto`, queda cubierto sin tocar nada.
+
+Detalles que importan:
+
+- **El campo no se borra, queda en `""`.** El resto de la app lo sigue
+  encontrando y no hay que revisar cada lugar que lo lee.
+- **Se marca `_sinFotos`**, y la pantalla de detalle ahora dice *"las fotos no se
+  guardan en el celular"* en vez de *"no hay fotos registradas"*, que sería
+  mentira.
+- **Lo viejo nunca pisa lo nuevo:** restaurar la copia solo actúa si el historial
+  en memoria está vacío. Si la red llegó a contestar, gana la red.
+- **Tope de 1,5 MB por módulo.** Si no entra, se guardan los más nuevos. Como el
+  Sheet NO manda los registros ordenados por fecha (y Calidad mezcla
+  `2026-08-18` con `8/10/2025`), hay que ordenar antes de recortar; si no, se
+  guardarían registros al azar y el operario perdería justo los de esta semana.
+
+Verificado con 63 pruebas sobre los **datos reales** (253 cargas de 4,50 MB, 99
+de calidad), incluida una de integración que carga `app.js` entero y comprueba
+que sin señal el historial se restaure de verdad. Dos bugs salieron de ahí: un
+fallo mudo al guardar cuando el teléfono está lleno, y que `new Date(null)` no
+es una fecha inválida sino el 1/1/1970 (el cartel mostraba "31/12 21:00").
 
 ---
 

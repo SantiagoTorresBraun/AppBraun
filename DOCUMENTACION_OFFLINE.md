@@ -7,8 +7,8 @@ error del navegador. Ahora la app abre igual, sin internet.
 Implementado el **09/09/2026**.
 
 > **Leé también la sección "Qué se ve y qué NO, módulo por módulo"** más abajo.
-> Que la app *abra* sin señal no quiere decir que *muestre* todo. Hoy solo
-> Producción muestra su historial sin internet, y eso es un problema aparte.
+> Que la app *abra* sin señal es una cosa; que *muestre* los historiales es
+> otra, y se resolvió aparte (Hallazgo 13).
 
 ---
 
@@ -68,86 +68,81 @@ Esto es tan importante como lo que sí cachea:
 
 ## Qué se ve y qué NO, módulo por módulo
 
-> Verificado el 09/09/2026 leyendo el código de los cuatro módulos.
+> Actualizado el 09/09/2026, después de resolver el Hallazgo 13.
 
-Acá está la parte que sorprende: **el Service Worker hace que la app abra sin
-señal, pero no hace que los historiales se vean.** Son dos cosas distintas, y
-hoy solo un módulo funciona bien sin internet.
-
-| Módulo | Sin señal | Por qué |
+| Módulo | Sin señal | Cómo lo consigue |
 |---|---|---|
-| **Producción** | ✅ Ves todos tus muestreos | La copia en IndexedDB **no se borra** al sincronizar |
-| **Control de Carga** | ⚠️ Tabla vacía | La copia local **se borra** al sincronizar |
-| **Control de Calidad** | ⚠️ Tabla vacía | Ídem |
-| **Contratos** | ⚠️ Tabla vacía | Se arma desde `historialGeneral`, el mismo de Carga |
-| **Ticketera** | ⚠️ Tabla vacía | Ídem |
+| **Producción** | ✅ Todo, **con fotos** | Guarda los muestreos enteros en IndexedDB y **no los borra** al sincronizar |
+| **Control de Carga** | ✅ El historial, **sin fotos** | [historial-local.js](historial-local.js) |
+| **Control de Calidad** | ✅ El historial | Ídem (Calidad no trae base64: sus imágenes ya son rutas) |
+| **Contratos** | ✅ | Se arma desde el mismo historial de Carga |
+| **Ticketera** | ✅ | Ídem |
 
-### La causa exacta
+En los cuatro últimos aparece un cartel arriba de la tabla:
 
-Los cuatro módulos arman su lista igual: **lo que está en IndexedDB + lo que
-vino del Sheet**. La diferencia está en qué pasa con la copia local *después*
-de sincronizar.
+> *Sin conexión: estás viendo la copia guardada del 09/09 14:30. Las fotos y
+> firmas no se guardan en el celular.*
 
-**Producción la conserva.** El comentario en
-[produccion.js:418-420](produccion.js) lo dice con todas las letras:
+Ese cartel no es decorativo. Sin él, el operario vería una tabla llena y creería
+que está mirando el estado de ahora.
+
+### Por qué la copia va sin fotos
+
+Medido sobre los datos reales del 09/09/2026:
+
+| | Peso |
+|---|---|
+| Historial de Carga como viene del Sheet | 4,50 MB |
+| — de eso, fotos y firmas en base64 | 4,12 MB (**92%**) |
+| Lo que se guarda en el celular | **541 KB** |
+
+Y esas fotos son solo de **6 cargas de 253**. Cada una pesa 679 KB de promedio.
+Si todos empezaran a sacar fotos como corresponde, guardar el historial completo
+serían unos **168 MB** en el teléfono del operario. Por eso van afuera.
+
+El filtro es **por tamaño, no por nombre de campo**: cualquier valor que empiece
+con `data:` o pase los 2.000 caracteres se guarda vacío. Si mañana alguien agrega
+`Foto_Precinto`, queda cubierto sin tocar nada.
+
+### Producción es la excepción, y ya lo era
+
+Producción guarda sus muestreos con la foto en base64 adentro y nunca los borra.
+El comentario en [produccion.js](produccion.js) lo dice:
 
 > *"marca `_synced` sin borrar la copia local, para que siga siendo la copia de
 > trabajo del operario"*
 
-**Los otros tres la borran** apenas el backend confirma:
+Dos cosas para tener presentes:
+
+1. **Solo se ven las fotos de los muestreos cargados en ESE celular.** Uno que
+   cargó otra persona llega como link de Drive, y sin señal el link no sirve.
+2. **Crece sin límite.** Una foto pesa ~293 KB, y en base64 ocupa ~390 KB en el
+   teléfono. Un muestreo de 10 puntos son ~4 MB. Con 3 muestreos no molesta;
+   después de unos meses de uso a campo, sí. Cuando llegue el momento: borrar el
+   base64 de los muestreos ya sincronizados de más de X días y dejar el link.
+   Lo reciente offline, lo viejo online.
+
+### Los detalles que evitan sorpresas
+
+- **El campo de la foto no se borra, queda en `""`.** Así el resto de la app lo
+  sigue encontrando.
+- **Se marca `_sinFotos`**, y el detalle de la carga dice *"las fotos no se
+  guardan en el celular"* en vez de *"no hay fotos registradas"*, que sería
+  mentira.
+- **Lo viejo nunca pisa lo nuevo:** la copia solo se usa si el historial en
+  memoria está vacío. Si la red contestó, gana la red.
+- **Tope de 1,5 MB por módulo.** Si no entra, se guardan los más nuevos. Ojo:
+  el Sheet **no** manda los registros ordenados por fecha, y Calidad mezcla
+  `2026-08-18` con `8/10/2025`, así que hay que ordenar antes de recortar.
+- **Si el teléfono está lleno**, se guarda la mitad y se reintenta. Si no entra
+  ni así, no queda una copia a medias: se borra y se avisa en consola.
+
+### Herramientas de soporte
 
 ```javascript
-// app.js:2533 — Control de Carga
-if (cursor.value.Id_Carga === item.Id_Carga) { cursor.delete(); }
-
-// calidad.js:410 — Control de Calidad
-delTx.objectStore("controles_calidad").delete(idKey)
-
-// app.js — Ticketera
-delTx.objectStore('ticketera_tickets').delete(idKey)
+leerHistorialLocal('cargas')   // ver la copia y de cuándo es
+borrarHistorialLocal()         // borrar las copias de los tres módulos
 ```
-
-Y la otra mitad del historial —lo que vino del Sheet— **vive solo en memoria**:
-
-```javascript
-let historialGeneral = [];   // app.js:90 — se pierde al cerrar la app
-
-function cargarHistorialDesdeGoogle() {
-    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;   // ← se va sin hacer nada
-    ...
-}
-```
-
-`grep localStorage` sobre los historiales no devuelve **nada**: no se guardan en
-ningún lado.
-
-Entonces, sin señal: la cola local está vacía (ya sincronizó todo) y
-`historialGeneral` es `[]` porque la función se fue en la primera línea.
-Resultado: **una tabla en blanco**.
-
-### Y encima, sin ningún mensaje
-
-No hay estado vacío. El código hace `tbody.innerHTML = ""` y, si no hay filas,
-no agrega nada más. El operario ve una tabla en blanco y **no tiene forma de
-saber si es porque no hay señal o porque no hay registros**.
-
-### Cómo se arreglaría
-
-Dos caminos, de menor a mayor:
-
-1. **Un cartel honesto** (10 minutos): si la tabla queda vacía y
-   `!navigator.onLine`, mostrar *"Sin conexión: no se puede ver el historial.
-   Lo que cargues ahora se guarda y se sincroniza solo."* No arregla el fondo,
-   pero saca la ambigüedad.
-
-2. **Guardar el historial, como hace Producción** (unas horas): dejar de borrar
-   la copia local al sincronizar —marcarla `_synced` y listo— y persistir lo que
-   baja del Sheet. Es exactamente el patrón que Producción ya usa y que funciona.
-
-   > **Ojo con esto:** el Hallazgo 6 de la auditoría dice que las fotos van en
-   > base64 adentro del Sheet. Guardar el historial de Carga completo en el
-   > celular arrastraría esas fotos. Conviene guardar el historial **sin las
-   > fotos**, o resolver el Hallazgo 6 antes.
 
 ---
 
@@ -214,10 +209,14 @@ una comparaba el mismo contenido antes y después, así que habría pasado igual
 con la caché rota; la otra no reproducía que `fetch` devuelve `type: 'basic'` en
 el navegador, así que el guard del Service Worker nunca se ejecutaba.
 
+La copia del historial tiene sus propias **63 pruebas** sobre los datos reales
+(253 cargas de 4,50 MB, 99 de calidad), incluida una de integración que carga
+`app.js` entero y comprueba que sin señal el historial se restaure de verdad.
+
 Aparte, se levantó un servidor local **sensible a mayúsculas** (como GitHub
 Pages; Windows no lo es) y se pidieron las 20 rutas tal cual están escritas en
 `RECURSOS`: las 20 responden 200.
 
-Y una vez desplegado, se verificaron las 20 rutas contra
+Y una vez desplegado, se verificaron las rutas del precache contra
 `santiagotorresbraun.github.io/AppBraun/` comparando el MD5 de cada archivo vivo
 contra el del disco.

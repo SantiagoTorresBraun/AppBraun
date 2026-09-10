@@ -3647,3 +3647,29 @@ body.carga-mp .solo-pt { display: none !important; }
     color: var(--color-text-muted);
     margin-bottom: 4px;
 }
+
+/* =====================================================================
+   AVISO DE HISTORIAL GUARDADO (modo offline)
+   Aparece arriba de la tabla cuando lo que se ve NO es el estado de
+   ahora sino la copia guardada en el celular. Sin este cartel el
+   arreglo seria peligroso: el operario veria una tabla llena y creeria
+   que esta mirando datos frescos.
+   ===================================================================== */
+.aviso-historial-guardado {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border-left: 4px solid #e6a700;
+    background: #fff8e1;
+    color: #6b5200;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.aviso-historial-guardado i {
+    flex-shrink: 0;
+    opacity: .75;
+}

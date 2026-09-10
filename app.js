@@ -1678,16 +1678,31 @@ function quitarUsuarioUI(email, nombre) {
 let historialTickets = []; // tickets ya sincronizados (vienen de la hoja "Tickets")
 
 function cargarTicketsDesdeGoogle() {
-    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
+    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarTicketsGuardados(); return; }
     fetch(`${WEB_APP_URL}?action=read_tickets`)
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data)) {
                 historialTickets = data.filter(t => t && t.id_ticket);
+                guardarHistorialLocal("tickets", historialTickets);
+                avisoHistorialGuardado("ticketera-body", null);
                 renderTicketsTicketera();
             }
         })
-        .catch(err => console.error('Error cargando tickets:', err));
+        .catch(err => {
+            console.error('Error cargando tickets:', err);
+            restaurarTicketsGuardados();
+        });
+}
+
+// Ídem cargas: sin señal se muestra la copia, y nunca pisa datos frescos.
+function restaurarTicketsGuardados() {
+    if (historialTickets.length > 0) return;
+    const copia = (typeof leerHistorialLocal === "function") ? leerHistorialLocal("tickets") : null;
+    if (!copia) return;
+    historialTickets = copia.registros;
+    avisoHistorialGuardado("ticketera-body", copia);
+    renderTicketsTicketera();
 }
 
 function obtenerTicketsLocales() {
@@ -2216,16 +2231,37 @@ function finalizarGuardadoUI(mensaje, volverAlHistorial) {
 
 // --- 9. TRAER HISTORIAL E INYECTAR EN TABLA ---
 function cargarHistorialDesdeGoogle() {
-    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
+    if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarHistorialGuardado(); return; }
     fetch(`${WEB_APP_URL}?action=read`)
     .then(res => res.json())
     .then(data => {
         if(Array.isArray(data)) {
             historialGeneral = data;
+            // Copia para poder verlo sin señal (sin fotos ni firmas).
+            guardarHistorialLocal("cargas", data);
+            avisoHistorialGuardado("tabla-historial-body", null);
+            avisoHistorialGuardado("tabla-contratos-body", null);
             filtrarYRenderizarTabla();
         }
     })
-    .catch(err => console.error("Error cargando historial:", err));
+    .catch(err => {
+        console.error("Error cargando historial:", err);
+        restaurarHistorialGuardado();   // el backend no contestó: al menos mostrar lo guardado
+    });
+}
+
+// Sin señal, o si el backend no contestó: se muestra la copia guardada.
+// El chequeo de length evita pisar datos frescos si la red llegó a contestar
+// mientras tanto: lo viejo nunca gana sobre lo nuevo.
+function restaurarHistorialGuardado() {
+    if (historialGeneral.length > 0) return;
+    const copia = (typeof leerHistorialLocal === "function") ? leerHistorialLocal("cargas") : null;
+    if (!copia) return;
+    historialGeneral = copia.registros;
+    avisoHistorialGuardado("tabla-historial-body", copia);
+    avisoHistorialGuardado("tabla-contratos-body", copia);
+    filtrarYRenderizarTabla();
+    if (typeof renderizarTablaContratos === "function") renderizarTablaContratos();
 }
 
 // Lee todos los registros que todavía están en la cola local (IndexedDB), sin importar si están sincronizados o no
@@ -3182,6 +3218,10 @@ function abrirDetalleCarga(registro) {
                 <div class="detalle-foto-label">${f.nombre}</div>
             </div>
         `).join('');
+    } else if (registro._sinFotos) {
+        // Ojo: acá SÍ hay fotos, lo que pasa es que la copia guardada en el
+        // celular no las incluye. Decir "no hay fotos" sería mentir.
+        detFotos.innerHTML = '<p style="color: #999;">Las fotos no se guardan en el celular. Conectate a internet para verlas.</p>';
     } else {
         detFotos.innerHTML = '<p style="color: #999;">No hay fotos registradas</p>';
     }
