@@ -3904,3 +3904,279 @@ body.carga-mp .solo-pt { display: none !important; }
 
 /* Un contrato que todavia no subio no tiene UUID: no hay fila que editar. */
 .kg-no-editable { opacity: .55; cursor: not-allowed; }
+
+/* =========================================================================
+   PRODUCCIÓN → INFORMES DE CAMPO
+   Submódulo pensado para usarse a campo: botones grandes, poco texto y
+   contraste alto (se lee con sol de frente). Ver DOCUMENTACION_PRODUCCION_V2.md
+   ========================================================================= */
+
+/* --- Barra de espacio del dispositivo --- */
+.inf-storage-box {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+.inf-storage-texto {
+    display: flex; align-items: center; gap: 9px;
+    font-size: .88rem; color: var(--color-text-muted); margin-bottom: 8px;
+}
+.inf-storage-barra { height: 6px; background: #ececed; border-radius: 3px; overflow: hidden; }
+.inf-storage-barra > div { height: 100%; width: 0; background: var(--color-success); transition: width .4s; }
+.inf-storage-alerta { border-color: var(--color-warning); background: #fff8f0; }
+.inf-storage-alerta .inf-storage-texto { color: var(--color-warning); font-weight: 600; }
+.inf-storage-alerta .inf-storage-barra > div { background: var(--color-warning); }
+
+/* --- Chips: tipo de informe y frases frecuentes --- */
+.chips-tipo, .chips-frases { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips-frases { margin-bottom: 10px; }
+
+.chip-tipo, .chip-frase {
+    border: 2px solid var(--color-border);
+    background: #fff;
+    color: var(--color-text-dark);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .15s;
+}
+.chip-tipo { padding: 11px 16px; font-size: .95rem; font-weight: 600; }
+.chip-frase { padding: 7px 13px; font-size: .85rem; }
+
+.chip-tipo:hover, .chip-frase:hover { border-color: var(--color-primary); }
+.chip-tipo.activo, .chip-frase.activo {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+}
+
+/* --- Bloques del informe abierto --- */
+.inf-bloque {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.inf-bloque-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 12px;
+}
+.inf-bloque-header h3 { font-size: 1.02rem; color: var(--color-text-dark); }
+.inf-contador {
+    display: inline-block; min-width: 22px; padding: 1px 7px; margin-left: 6px;
+    background: var(--color-bg-light); border-radius: 999px;
+    font-size: .8rem; color: var(--color-text-muted); text-align: center;
+}
+
+.btn-inf-agregar {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 15px; border: none; border-radius: 8px;
+    background: var(--color-primary); color: #fff;
+    font-size: .88rem; font-weight: 600; cursor: pointer;
+}
+.btn-inf-agregar:hover { background: var(--color-primary-dark); }
+
+.btn-inf-voz, .btn-inf-borrar {
+    border: none; background: transparent; cursor: pointer;
+    color: var(--color-text-muted); font-size: 1rem; padding: 7px 9px; border-radius: 7px;
+}
+.btn-inf-voz:hover, .btn-inf-borrar:hover { background: var(--color-bg-light); color: var(--color-primary); }
+.btn-inf-voz.grabando { background: var(--color-primary); color: #fff; animation: inf-pulso 1s infinite; }
+@keyframes inf-pulso { 50% { opacity: .55; } }
+
+.inf-textarea {
+    width: 100%; padding: 11px 13px;
+    border: 1px solid var(--color-border); border-radius: 8px;
+    font-size: .95rem; resize: vertical;
+}
+.inf-textarea:focus { outline: none; border-color: var(--color-primary); }
+
+/* --- Mediciones por lote --- */
+.inf-lote-card {
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-primary);
+    border-radius: 9px; padding: 12px; margin-bottom: 11px;
+    background: #fcfcfd;
+}
+.inf-lote-head { display: flex; gap: 9px; align-items: center; margin-bottom: 11px; }
+.inf-lote-select {
+    flex: 1; padding: 10px 12px; font-size: 1rem; font-weight: 600;
+    border: 1px solid var(--color-border); border-radius: 8px; background: #fff;
+}
+.inf-lote-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 11px; }
+/* Números grandes: se cargan parado en el lote, muchas veces con guantes. */
+.inf-lote-campos input, .inf-lote-campos select {
+    width: 100%; padding: 11px 12px; font-size: 1.05rem;
+    border: 1px solid var(--color-border); border-radius: 8px;
+}
+.inf-lote-campos label { display: block; margin-bottom: 5px; font-size: .8rem; color: var(--color-text-muted); }
+
+/* --- Media --- */
+.inf-nota-media {
+    background: #f3f7ff; border-left: 3px solid #2f6fd0;
+    padding: 9px 12px; border-radius: 6px; margin-bottom: 12px;
+    font-size: .83rem; color: #23508f;
+}
+.inf-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 11px; }
+.inf-media-item {
+    border: 1px solid var(--color-border); border-radius: 9px;
+    overflow: hidden; background: #fff;
+}
+.inf-media-item img, .inf-media-item video { width: 100%; height: 118px; object-fit: cover; display: block; background: #000; }
+.inf-media-audio { padding: 12px; text-align: center; color: var(--color-text-muted); }
+.inf-media-audio audio { width: 100%; margin-top: 8px; }
+.inf-media-pie {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 7px 9px; font-size: .74rem; color: var(--color-text-muted);
+}
+.inf-media-pie span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- Listado de informes --- */
+.informes-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)); gap: 13px; }
+.informe-card {
+    background: #fff; border: 1px solid var(--color-border);
+    border-radius: 11px; padding: 14px; cursor: pointer; transition: all .15s;
+}
+.informe-card:hover { border-color: var(--color-primary); transform: translateY(-2px); box-shadow: 0 5px 16px rgba(0,0,0,.08); }
+.informe-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.informe-tipo { font-size: .84rem; font-weight: 700; color: var(--color-primary); }
+.informe-fecha { font-size: .8rem; color: var(--color-text-muted); }
+.informe-card-body { margin-bottom: 9px; }
+.informe-lotes { display: block; margin-top: 3px; font-size: .82rem; color: var(--color-text-muted); }
+.informe-card-pie {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding-top: 9px; border-top: 1px solid var(--color-border);
+    font-size: .78rem; color: var(--color-text-muted);
+}
+.informe-badge-pendiente {
+    background: #fff3e0; color: var(--color-warning);
+    padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+}
+
+/* --- Modal del mensaje de WhatsApp --- */
+.inf-mensaje-texto {
+    width: 100%; padding: 13px;
+    border: 1px solid var(--color-border); border-radius: 8px;
+    font-size: .92rem; line-height: 1.55;
+    resize: vertical; white-space: pre-wrap;
+}
+.inf-mensaje-ayuda { margin: 8px 0 14px; font-size: .8rem; color: var(--color-text-muted); }
+.inf-mensaje-acciones { display: flex; gap: 10px; }
+.inf-mensaje-acciones button { flex: 1; justify-content: center; }
+
+/* --- Gestor de contratos --- */
+.inf-contrato-form { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+.inf-contrato-form input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--color-border); border-radius: 8px; font-size: .93rem;
+}
+.inf-contrato-form .form-group-row { display: flex; gap: 9px; }
+
+@media (max-width: 600px) {
+    .inf-lote-campos { grid-template-columns: 1fr 1fr; }
+    .informes-lista { grid-template-columns: 1fr; }
+    .inf-mensaje-acciones { flex-direction: column; }
+}
+
+/* =========================================================================
+   MUESTREO DE CAMPO — ficha, mapa real y agrupado por campo
+   ========================================================================= */
+
+/* --- Ficha del muestreo (arriba del mapa) --- */
+.ficha-muestreo {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.ficha-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 13px;
+}
+.ficha-item { display: flex; flex-direction: column; gap: 3px; }
+.ficha-label {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .4px;
+    color: var(--color-text-muted); font-weight: 700;
+}
+.ficha-valor { font-size: .97rem; color: var(--color-text-dark); font-weight: 600; }
+
+.ficha-ubicacion {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
+    margin-top: 14px; padding-top: 13px;
+    border-top: 1px solid var(--color-border);
+    font-size: .87rem; color: var(--color-text-muted);
+}
+.ficha-ubicacion i { color: var(--color-primary); }
+.ficha-link-maps {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: 7px;
+    background: var(--color-bg-light); color: var(--color-primary);
+    text-decoration: none; font-weight: 600; font-size: .84rem;
+}
+.ficha-link-maps:hover { background: var(--color-primary); color: #fff; }
+
+/* --- Mapa real (Leaflet) --- */
+.mapa-muestreo {
+    width: 100%;
+    height: 380px;
+    border-radius: 10px;
+    /* Leaflet dibuja tiles fuera de estos bordes mientras se arrastra. */
+    overflow: hidden;
+    background: #dfe4dd;
+    z-index: 0; /* que los paneles de Leaflet no se monten sobre el header */
+}
+@media (max-width: 600px) { .mapa-muestreo { height: 300px; } }
+
+/* Marcador: circulo del color de la severidad con el numero del punto */
+.marcador-punto span {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45);
+    color: #fff; font-weight: 700; font-size: .82rem;
+}
+
+.popup-punto { min-width: 190px; font-size: .86rem; }
+.popup-titulo { font-weight: 700; color: var(--color-primary); margin-bottom: 6px; font-size: .95rem; }
+.popup-foto { width: 100%; height: 96px; object-fit: cover; border-radius: 6px; margin-bottom: 7px; }
+.popup-fila { margin-bottom: 3px; line-height: 1.4; }
+.popup-coord { color: var(--color-text-muted); font-size: .8rem; margin-top: 5px; }
+
+.mapa-aviso-offline {
+    margin-top: 9px; padding: 9px 12px; border-radius: 7px;
+    background: #fff8f0; border-left: 3px solid var(--color-warning);
+    color: var(--color-warning); font-size: .84rem; font-weight: 600;
+}
+
+/* --- Agrupado por campo en el listado --- */
+.campo-grupo {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.campo-grupo-header {
+    padding: 13px 16px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    color: #fff;
+}
+.campo-grupo-nombre {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 1.05rem; font-weight: 700;
+}
+.campo-grupo-meta { margin-top: 4px; font-size: .8rem; opacity: .9; }
+.campo-grupo-body { padding: 13px; display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 11px; }
+@media (max-width: 600px) { .campo-grupo-body { grid-template-columns: 1fr; } }
+
+/* --- Puntos: coordenada clickeable --- */
+.punto-coord {
+    color: var(--color-primary); text-decoration: none; font-weight: 600;
+}
+.punto-coord:hover { text-decoration: underline; }
+.punto-sin-gps { color: var(--color-warning); font-weight: 600; }
+.punto-medicion { font-size: .82rem; color: var(--color-text-muted); margin-top: 2px; }

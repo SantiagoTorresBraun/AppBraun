@@ -1,6 +1,10 @@
 // --- 1. CONFIGURACIÓN BASE DE DATOS LOCAL (IndexedDB) ---
 let db;
-const request = indexedDB.open("AppBraunDB_v4", 3);
+// v4: se suman los stores del submódulo "Informes de Campo".
+// Subir el número de versión es lo que dispara onupgradeneeded en los celulares
+// que ya tienen la base creada; sin eso, los stores nuevos no existirían ahí y
+// el submódulo no podría guardar nada.
+const request = indexedDB.open("AppBraunDB_v4", 4);
 
 request.onupgradeneeded = function(e) {
     db = e.target.result;
@@ -18,6 +22,19 @@ request.onupgradeneeded = function(e) {
     // Cola offline del módulo Producción (muestreo de campo)
     if (!db.objectStoreNames.contains("muestreos")) {
         db.createObjectStore("muestreos", { keyPath: "id", autoIncrement: true });
+    }
+    // Producción → Informes de Campo. Son DOS stores a propósito:
+    // el informe (texto, chico) va por un lado y la media (Blob, pesada) por
+    // otro. Así listar 50 informes no carga ni un byte de video, que es
+    // exactamente el error que hay que no repetir (ver DOCUMENTACION_PRODUCCION_V2.md §4).
+    if (!db.objectStoreNames.contains("informes_campo")) {
+        db.createObjectStore("informes_campo", { keyPath: "id", autoIncrement: true });
+    }
+    if (!db.objectStoreNames.contains("informes_media")) {
+        const storeMedia = db.createObjectStore("informes_media", { keyPath: "id", autoIncrement: true });
+        // Index por informe: sin esto habría que recorrer TODA la media del
+        // dispositivo (gigabytes) para mostrar las fotos de un solo informe.
+        storeMedia.createIndex("por_informe", "Id_Informe", { unique: false });
     }
 };
 
@@ -313,8 +330,20 @@ function cambiarVista(idDestino) {
             document.getElementById('header-title').textContent = "Ticketera";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
-        } else if (idDestino === 'view-modulo-produccion') {
+        } else if (idDestino === 'view-submenu-produccion') {
             document.getElementById('header-title').textContent = "Producción";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-informes-campo') {
+            document.getElementById('header-title').textContent = "Informes de Campo";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-informe-activo') {
+            document.getElementById('header-title').textContent = "Informe de Campo";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-modulo-produccion') {
+            document.getElementById('header-title').textContent = "Muestreo de Campo";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-muestreo-activo') {

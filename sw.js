@@ -28,7 +28,7 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
-const VERSION = 'v7';
+const VERSION = 'v9';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
@@ -52,6 +52,19 @@ const RECURSOS = [
     './correo.js',
     './calidad.js',
     './produccion.js',
+    './produccion-informes.js',
+
+    // Leaflet: el mapa del modulo de Muestreo. La LIBRERIA se cachea (la app
+    // abre sin internet); los TILES no, porque son de otro dominio y cachear
+    // fotos satelitales llenaria el celular. Sin señal, el mapa se cae al
+    // scatter en canvas, que no necesita nada.
+    './vendor/leaflet/leaflet.js',
+    './vendor/leaflet/leaflet.css',
+    './vendor/leaflet/images/marker-icon.png',
+    './vendor/leaflet/images/marker-icon-2x.png',
+    './vendor/leaflet/images/marker-shadow.png',
+    './vendor/leaflet/images/layers.png',
+    './vendor/leaflet/images/layers-2x.png',
     './agente.js',
 
     './logo-braun.png',

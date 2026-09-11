@@ -5,6 +5,12 @@ ingenieros agrónomos, con reporte PDF y envío por WhatsApp. Pensado para
 **extender la PWA Braun actual** (JS vanilla + IndexedDB + Apps Script + Sheets +
 Drive + jsPDF + `navigator.share`), no como app aparte.
 
+> **Actualizado el 11/09/2026.** Producción ahora tiene **dos submódulos**:
+> *Muestreo de Campo* (lo que describe este documento) e *Informes de Campo*
+> (ver [DOCUMENTACION_PRODUCCION_V2.md](DOCUMENTACION_PRODUCCION_V2.md)).
+> El **mapa base ya no es fase 2**: se implementó con Leaflet + imagen
+> satelital de Esri, vendorizado en `vendor/leaflet/`. Ver §5.4 al final.
+
 Estado: **MVP implementado.** Módulo funcional en `produccion.js` +
 vistas en `index.html` + backend en `Codigo-COMPLETO-para-pegar.gs`
 (hojas `Muestreo` y `Muestreo_Puntos`, se autocrean). Requiere **volver a
@@ -164,7 +170,7 @@ mantiene una sola app. APIs del navegador:
 | Cámara | `<input type="file" accept="image/*" capture="environment">` |
 | Coordenada en la foto | Dibujar watermark con lat/long/fecha sobre canvas + guardar lat/long como dato |
 | Offline | IndexedDB (ya lo usás) + cola de sync (ya la tenés) |
-| Mapa | Leaflet + OpenStreetMap **online**; scatter en canvas **offline** |
+| Mapa | ✅ Leaflet + satelital Esri **online**; scatter en canvas **offline** |
 | PDF | jsPDF (ya lo usás) |
 | Compartir WhatsApp | `navigator.share({files:[pdf]})` (ya lo usás) o `wa.me` |
 | Voz → texto | Web Speech API (online) · fallback a texto |
@@ -243,3 +249,36 @@ clima/lluvias, receta fitosanitaria.
 - **Comparación temporal** del mismo lote entre fechas.
 - **Export GeoJSON/KML** para llevar los puntos a QGIS / Google Earth.
 - **Recorrida sugerida en "W"** sobre el lote para muestreo representativo.
+
+
+---
+
+## 5.4 El mapa (implementado el 11/09/2026)
+
+Son **dos** mapas, y los dos hacen falta:
+
+| | Dónde | Qué necesita |
+|---|---|---|
+| **Leaflet + satelital** | En pantalla | Señal (los tiles vienen de Esri) |
+| **Scatter en canvas** | En el PDF y cuando no hay señal | Nada |
+
+**Por qué satelital y no calles:** sobre la foto del lote se ve si el punto cayó
+en la cabecera, en la huella de la monotolva o en el medio del cultivo. Sobre un
+mapa de calles —o sobre el rectángulo verde que había antes— eso no se ve.
+
+**Por qué no la API de Google Maps:** pide una clave con facturación activa, y
+la clave quedaría a la vista en el repo, que es público (GitHub Pages). Leaflet
+no necesita clave. Para el que quiere *ir* hasta el punto, cada coordenada tiene
+su link **"Abrir en Google Maps"**, que abre la app del celular: Google Maps de
+verdad, sin clave y sin costo.
+
+**El mapa del PDF también sale con imagen satelital.** Los tiles se dibujan en
+el canvas con `crossOrigin="anonymous"`: sin eso, una imagen de otro dominio
+"contamina" el canvas y `toDataURL()` tira `SecurityError` — el reporte se
+quedaría sin mapa. Se verificó que el servidor de Esri devuelve
+`Access-Control-Allow-Origin: *`, que es lo que hace que esto funcione. Si un
+tile igual no carga, se saltea y los puntos se dibujan sobre el fondo liso.
+
+**El círculo de precisión** alrededor de cada punto no es decorativo: si el GPS
+reportó ±40 m, el punto puede estar en cualquier lugar de ese círculo, y eso
+cambia cómo se lee el dato.

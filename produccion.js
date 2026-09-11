@@ -105,8 +105,14 @@ document.getElementById('form-muestreo').addEventListener('submit', function (e)
 function renderMuestreoActivo() {
     const m = muestreoActual;
     if (!m) return;
-    document.getElementById('ma-titulo').textContent = `${m.Lote || 'Lote'} — ${m.Cultivo || ''}`;
-    document.getElementById('ma-subtitulo').textContent = `${m.Establecimiento || ''}${m.Campania ? ' · ' + m.Campania : ''}`;
+    // El titulo arranca por el CAMPO, no por el lote. Antes decia "1 — Soja":
+    // el "1" era el numero de lote y no se entendia de que campo era el recorrido.
+    document.getElementById('ma-titulo').textContent =
+        `${m.Establecimiento || 'Campo'}${m.Lote ? ' · Lote ' + m.Lote : ''}`;
+    document.getElementById('ma-subtitulo').textContent =
+        [m.Cultivo, m.Campania, fechaLegibleMuestreo(m.Fecha)].filter(Boolean).join(' · ');
+
+    renderFichaMuestreo();
 
     const pts = m.Puntos || [];
     document.getElementById('ma-contador').textContent = `${pts.length} punto${pts.length === 1 ? '' : 's'}`;
@@ -120,19 +126,33 @@ function renderMuestreoActivo() {
             const foto = p.Foto
                 ? `<div class="punto-thumb" style="background-image:url('${p.Foto}')"></div>`
                 : `<div class="punto-thumb sin-foto"><i class="fas fa-image"></i></div>`;
-            const coord = (p.Lat && p.Long) ? `${(+p.Lat).toFixed(5)}, ${(+p.Long).toFixed(5)}` : 'Sin GPS';
+            // La coordenada no es solo texto: abre el punto en Google Maps.
+            // Es la forma de "georreferenciar de verdad" sin depender de una
+            // clave de API — el mapa de adentro es Leaflet, pero el que quiere
+            // ir hasta el punto lo abre en la app que ya tiene en el celular.
+            const coord = (p.Lat && p.Long)
+                ? `<a class="punto-coord" href="https://www.google.com/maps?q=${+p.Lat},${+p.Long}" target="_blank" rel="noopener"
+                       onclick="event.stopPropagation()" title="Abrir en Google Maps"><i class="fas fa-location-dot"></i> ${(+p.Lat).toFixed(5)}, ${(+p.Long).toFixed(5)}</a>`
+                : '<span class="punto-sin-gps"><i class="fas fa-location-crosshairs"></i> Sin GPS</span>';
+            const precision = p.Precision_m ? ` ±${Math.round(+p.Precision_m)} m` : '';
+            const medicion = [
+                p.Incidencia_pct ? `Incidencia ${p.Incidencia_pct}%` : '',
+                (p.Conteo_Valor && +p.Conteo_Valor) ? `${p.Conteo_Valor} ${p.Conteo_Unidad || ''}`.trim() : ''
+            ].filter(Boolean).join(' · ');
+
             return `<div class="punto-card" onclick="editarPunto(${i})">
                 ${foto}
                 <div class="punto-info">
                     <div class="punto-top"><span class="punto-num">#${p.Orden || i + 1}</span><span class="sev-pill" style="background:${sev.color}">${sev.label}</span></div>
                     <div class="punto-obs">${escProd(p.Tipo_Observacion || '—')}${p.Objetivo ? ' · ' + escProd(p.Objetivo) : ''}</div>
-                    <div class="punto-meta">${coord}${p.Estado_Fenologico ? ' · ' + escProd(p.Estado_Fenologico) : ''}</div>
+                    ${medicion ? `<div class="punto-medicion">${escProd(medicion)}</div>` : ''}
+                    <div class="punto-meta">${coord}${precision}${p.Estado_Fenologico ? ' · ' + escProd(p.Estado_Fenologico) : ''}</div>
                 </div>
                 <button class="punto-del" onclick="event.stopPropagation(); eliminarPunto(${i})" title="Eliminar punto"><i class="fas fa-trash"></i></button>
             </div>`;
         }).join('');
     }
-    drawMapaEnCanvas(document.getElementById('mapa-puntos'));
+    renderMapaMuestreo();
 }
 
 // --- 4. CAPTURA DE UN PUNTO ---
@@ -333,8 +353,203 @@ function eliminarPunto(idx) {
     guardarMuestreoLocal(renderMuestreoActivo);
 }
 
-// --- 5. MAPA (scatter en canvas, funciona offline; base cartográfica = fase 2) ---
-function drawMapaEnCanvas(canvas) {
+// --- 4.bis FICHA DEL MUESTREO -------------------------------------------
+// Los datos del recorrido, de un vistazo. Antes esta pantalla arrancaba
+// directo con el mapa y la lista de puntos: para saber de que campo, que
+// campaña o quien lo habia hecho, habia que volver al listado.
+
+function fechaLegibleMuestreo(iso) {
+    if (!iso) return '';
+    const p = String(iso).split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(iso);
+}
+
+function renderFichaMuestreo() {
+    const m = muestreoActual;
+    const cont = document.getElementById('ma-ficha');
+    if (!m || !cont) return;
+
+    const pts = m.Puntos || [];
+    const conGps = pts.filter(p => p.Lat && p.Long);
+
+    const filas = [
+        ['Campo', m.Establecimiento],
+        ['Lote', m.Lote],
+        ['Cultivo', [m.Cultivo, m.Variedad].filter(Boolean).join(' / ')],
+        ['Campaña', m.Campania],
+        ['Fecha', fechaLegibleMuestreo(m.Fecha)],
+        ['Responsable', [m.Responsable, m.Matricula ? 'Mat. ' + m.Matricula : ''].filter(Boolean).join(' · ')],
+        ['Puntos', `${pts.length}${conGps.length !== pts.length ? ` (${conGps.length} con GPS)` : ''}`],
+        ['Estado', m.Estado || 'Cerrado']
+    ];
+
+    cont.innerHTML = filas.map(f => `
+        <div class="ficha-item">
+            <span class="ficha-label">${escProd(f[0])}</span>
+            <span class="ficha-valor">${escProd(f[1] || '—')}</span>
+        </div>`).join('');
+
+    // Ubicacion del recorrido: el centro de los puntos y que tan fino esta el GPS.
+    const box = document.getElementById('ma-ubicacion');
+    if (!box) return;
+    if (conGps.length === 0) {
+        box.innerHTML = '<i class="fas fa-location-crosshairs"></i> Ningún punto tiene coordenada guardada.';
+        return;
+    }
+    const lat = conGps.reduce((t, p) => t + (+p.Lat), 0) / conGps.length;
+    const lon = conGps.reduce((t, p) => t + (+p.Long), 0) / conGps.length;
+    const precs = conGps.map(p => +p.Precision_m || 0).filter(Boolean);
+    const precProm = precs.length ? Math.round(precs.reduce((t, x) => t + x, 0) / precs.length) : null;
+
+    box.innerHTML = `
+        <i class="fas fa-location-dot"></i>
+        <span>Centro del recorrido: <b>${lat.toFixed(5)}, ${lon.toFixed(5)}</b>${precProm ? ` · precisión media ±${precProm} m` : ''}</span>
+        <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener" class="ficha-link-maps">
+            <i class="fas fa-up-right-from-square"></i> Abrir en Google Maps
+        </a>`;
+}
+
+// --- 5. MAPA -------------------------------------------------------------
+// Dos mapas, y los dos hacen falta:
+//
+//   - EN PANTALLA: Leaflet con imagen satelital. Es el que pidieron: sobre la
+//     foto del lote se ve si el punto cayo en la cabecera, en la huella de la
+//     monotolva o en el medio del cultivo. Un scatter sobre fondo verde no
+//     dice nada de eso.
+//
+//   - EN CANVAS: el scatter de siempre. Sigue siendo necesario por dos
+//     motivos: es el que se mete en el PDF (jsPDF necesita una imagen, no un
+//     mapa interactivo) y es lo unico que se puede dibujar sin señal.
+//
+// POR QUE NO LA API DE GOOGLE MAPS: pide una clave con facturacion activa, y
+// la clave quedaria a la vista en el repo, que es publico (GitHub Pages).
+// Leaflet no necesita clave. Para el que quiere ir hasta el punto, cada
+// coordenada tiene su link "Abrir en Google Maps", que usa la app del celular.
+
+// Fuentes de tiles. Las dos son gratuitas y sin clave.
+const TILES_SATELITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ATRIB_SATELITE = 'Imagen: Esri, Maxar, Earthstar Geographics';
+const TILES_CALLES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ATRIB_CALLES = '&copy; OpenStreetMap';
+
+let mapaMuestreo = null;      // instancia de Leaflet (se reusa entre muestreos)
+let capaPuntos = null;        // capa con los marcadores del muestreo abierto
+
+function renderMapaMuestreo() {
+    const divMapa = document.getElementById('mapa-muestreo');
+    const canvas = document.getElementById('mapa-puntos');
+    const aviso = document.getElementById('mapa-aviso-offline');
+    if (!divMapa || !canvas) return;
+
+    const pts = ((muestreoActual && muestreoActual.Puntos) || []).filter(p => p.Lat && p.Long);
+
+    // Sin Leaflet (no cargo el vendor) o sin señal: el mapa satelital no puede
+    // funcionar. Se cae al canvas, que no necesita nada.
+    if (typeof L === 'undefined' || !navigator.onLine) {
+        divMapa.classList.add('hidden');
+        canvas.classList.remove('hidden');
+        if (aviso) aviso.classList.toggle('hidden', navigator.onLine);
+        drawMapaEnCanvas(canvas, false);
+        return;
+    }
+
+    divMapa.classList.remove('hidden');
+    canvas.classList.add('hidden');
+    if (aviso) aviso.classList.add('hidden');
+
+    if (!mapaMuestreo) {
+        const satelite = L.tileLayer(TILES_SATELITE, { maxZoom: 19, attribution: ATRIB_SATELITE });
+        const calles = L.tileLayer(TILES_CALLES, { maxZoom: 19, attribution: ATRIB_CALLES });
+        mapaMuestreo = L.map('mapa-muestreo', {
+            center: [-31.4, -64.2], zoom: 13, layers: [satelite],
+            scrollWheelZoom: false   // en el celular se navega con los dedos; en la
+                                     // compu, la rueda tiene que seguir haciendo scroll
+                                     // de la pagina y no zoom del mapa sin querer.
+        });
+        L.control.layers({ 'Satélite': satelite, 'Calles': calles }, null, { position: 'topright' }).addTo(mapaMuestreo);
+        L.control.scale({ imperial: false }).addTo(mapaMuestreo);
+        capaPuntos = L.layerGroup().addTo(mapaMuestreo);
+        // Un solo tile que no carga ya alcanza para avisar: sin base, el mapa
+        // queda gris y el operario no entiende por que.
+        mapaMuestreo.on('tileerror', function () {
+            if (aviso) { aviso.classList.remove('hidden'); }
+        });
+    }
+
+    capaPuntos.clearLayers();
+
+    if (pts.length === 0) {
+        setTimeout(() => mapaMuestreo.invalidateSize(), 60);
+        return;
+    }
+
+    pts.forEach((p, i) => {
+        const sev = SEVERIDADES[+p.Severidad || 0] || SEVERIDADES[0];
+        const n = p.Orden || i + 1;
+        const marcador = L.marker([+p.Lat, +p.Long], {
+            icon: L.divIcon({
+                className: 'marcador-punto',
+                html: `<span style="background:${sev.color}">${n}</span>`,
+                iconSize: [30, 30], iconAnchor: [15, 15]
+            })
+        });
+        marcador.bindPopup(popupPunto(p, n, sev));
+        capaPuntos.addLayer(marcador);
+
+        // El circulo de precision no es decorativo: si el GPS reporto ±40 m, el
+        // punto puede estar en cualquier lado de ese circulo, y eso cambia como
+        // se lee el dato.
+        const prec = +p.Precision_m || 0;
+        if (prec > 0) {
+            capaPuntos.addLayer(L.circle([+p.Lat, +p.Long], {
+                radius: prec, color: sev.color, weight: 1, opacity: .5, fillOpacity: .08
+            }));
+        }
+    });
+
+    // invalidateSize: el mapa se arma mientras la vista todavia esta oculta y
+    // Leaflet lo mide en 0x0. Sin esto, se ve un cuadrado gris hasta que alguien
+    // cambia el tamaño de la ventana.
+    setTimeout(function () {
+        mapaMuestreo.invalidateSize();
+        const bounds = L.latLngBounds(pts.map(p => [+p.Lat, +p.Long]));
+        mapaMuestreo.fitBounds(bounds, { padding: [35, 35], maxZoom: 17 });
+    }, 60);
+}
+
+function popupPunto(p, n, sev) {
+    const foto = p.Foto ? `<img src="${p.Foto}" alt="foto del punto" class="popup-foto">` : '';
+    const filas = [
+        ['Observación', [p.Tipo_Observacion, p.Objetivo].filter(Boolean).join(' · ')],
+        ['Severidad', sev.label],
+        ['Fenología', p.Estado_Fenologico],
+        ['Incidencia', p.Incidencia_pct ? p.Incidencia_pct + '%' : ''],
+        ['Conteo', (p.Conteo_Valor && +p.Conteo_Valor) ? `${p.Conteo_Valor} ${p.Conteo_Unidad || ''}`.trim() : ''],
+        ['Nota', p.Nota]
+    ].filter(f => f[1]);
+
+    return `<div class="popup-punto">
+        <div class="popup-titulo">Punto #${n}</div>
+        ${foto}
+        ${filas.map(f => `<div class="popup-fila"><b>${escProd(f[0])}:</b> ${escProd(f[1])}</div>`).join('')}
+        <div class="popup-fila popup-coord">${(+p.Lat).toFixed(6)}, ${(+p.Long).toFixed(6)}${p.Precision_m ? ` (±${Math.round(+p.Precision_m)} m)` : ''}</div>
+        <a href="https://www.google.com/maps?q=${+p.Lat},${+p.Long}" target="_blank" rel="noopener">Abrir en Google Maps</a>
+    </div>`;
+}
+
+// --- 5.bis MAPA EN CANVAS (para el PDF y para cuando no hay señal) ---
+// El mapa que va al PDF y el que se ve cuando no hay señal.
+//
+// `conTiles` trae la imagen satelital de fondo. Se usa para el PDF: un reporte
+// con los puntos sobre la foto del lote se entiende; el mismo reporte con los
+// puntos sobre un rectangulo verde, no.
+//
+// Los tiles se piden con crossOrigin="anonymous" A PROPOSITO: una imagen de
+// otro dominio dibujada sin eso "contamina" el canvas y despues toDataURL()
+// tira SecurityError — el PDF se quedaria sin mapa. Con crossOrigin, el tile
+// que no da permiso simplemente no carga y se lo saltea; los puntos se dibujan
+// igual sobre el fondo liso.
+async function drawMapaEnCanvas(canvas, conTiles) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
@@ -352,20 +567,16 @@ function drawMapaEnCanvas(canvas) {
         return;
     }
 
-    const lats = pts.map(p => +p.Lat), longs = pts.map(p => +p.Long);
-    let minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
-    let minLong = Math.min.apply(null, longs), maxLong = Math.max.apply(null, longs);
-    const pad = 0.0004;
-    if (maxLat - minLat < pad) { minLat -= pad; maxLat += pad; }
-    if (maxLong - minLong < pad) { minLong -= pad; maxLong += pad; }
+    const proy = proyectarPuntos(pts, W, H);
+    let hayFondo = false;
+    if (conTiles && navigator.onLine) {
+        try { hayFondo = await dibujarTilesEnCanvas(ctx, proy, W, H); }
+        catch (err) { console.warn('[muestreo] No se pudieron dibujar los tiles:', err); }
+    }
 
-    const m = Math.round(W * 0.06);
     const r = Math.max(9, Math.round(W * 0.018));
-    const toX = lon => m + (lon - minLong) / (maxLong - minLong) * (W - 2 * m);
-    const toY = lat => (H - m) - (lat - minLat) / (maxLat - minLat) * (H - 2 * m); // norte arriba
-
     pts.forEach((p, i) => {
-        const x = toX(+p.Long), y = toY(+p.Lat);
+        const x = proy.toX(+p.Long), y = proy.toY(+p.Lat);
         const sev = SEVERIDADES[+p.Severidad || 0] || SEVERIDADES[0];
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -380,8 +591,98 @@ function drawMapaEnCanvas(canvas) {
         ctx.textBaseline = 'middle';
         ctx.fillText(String(p.Orden || i + 1), x, y);
     });
+
+    if (hayFondo) {
+        // Credito obligatorio de la fuente de imagenes.
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.font = `${Math.max(10, Math.round(W * 0.014))}px Arial, sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.fillText(ATRIB_SATELITE, W - 6, H - 5);
+    }
     ctx.textAlign = 'start';
     ctx.textBaseline = 'alphabetic';
+}
+
+// --- Proyeccion Web Mercator, la misma que usan los tiles ---------------
+// Antes los puntos se ubicaban con una regla de tres entre el minimo y el
+// maximo. Sirve para un scatter suelto, pero NO coincide con ningun mapa: para
+// poder poner la imagen satelital abajo hay que usar la proyeccion de verdad.
+function lonAX(lon, z) { return (lon + 180) / 360 * Math.pow(2, z) * 256; }
+function latAY(lat, z) {
+    const r = lat * Math.PI / 180;
+    return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z) * 256;
+}
+
+// Elige el zoom mas cercano donde entran todos los puntos, y devuelve las
+// funciones que pasan de lat/long a pixel del canvas.
+function proyectarPuntos(pts, W, H) {
+    const lats = pts.map(p => +p.Lat), lons = pts.map(p => +p.Long);
+    const minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+    const minLon = Math.min.apply(null, lons), maxLon = Math.max.apply(null, lons);
+    const margen = Math.round(W * 0.08);
+
+    // Tope en 17: con un punto solo, el zoom maximo mostraria cuatro matas y
+    // nada de contexto. 17 deja ver el lote alrededor.
+    let z = 17;
+    for (; z > 2; z--) {
+        const dx = lonAX(maxLon, z) - lonAX(minLon, z);
+        const dy = latAY(minLat, z) - latAY(maxLat, z);
+        if (dx <= W - 2 * margen && dy <= H - 2 * margen) break;
+    }
+
+    const originX = (lonAX(minLon, z) + lonAX(maxLon, z)) / 2 - W / 2;
+    const originY = (latAY(minLat, z) + latAY(maxLat, z)) / 2 - H / 2;
+
+    return {
+        z: z, originX: originX, originY: originY,
+        toX: lon => lonAX(lon, z) - originX,
+        toY: lat => latAY(lat, z) - originY
+    };
+}
+
+// Baja los tiles que cubren el canvas y los dibuja. Devuelve true si entro
+// aunque sea uno (para saber si hay que poner el credito).
+function dibujarTilesEnCanvas(ctx, proy, W, H) {
+    const z = proy.z;
+    const maxTile = Math.pow(2, z) - 1;
+    const tx0 = Math.floor(proy.originX / 256), tx1 = Math.floor((proy.originX + W) / 256);
+    const ty0 = Math.floor(proy.originY / 256), ty1 = Math.floor((proy.originY + H) / 256);
+
+    const cargas = [];
+    for (let tx = tx0; tx <= tx1; tx++) {
+        for (let ty = ty0; ty <= ty1; ty++) {
+            if (tx < 0 || ty < 0 || tx > maxTile || ty > maxTile) continue;
+            const url = TILES_SATELITE.replace('{z}', z).replace('{y}', ty).replace('{x}', tx);
+            cargas.push(cargarTile(url, tx * 256 - proy.originX, ty * 256 - proy.originY));
+        }
+    }
+
+    return Promise.all(cargas).then(function (resultados) {
+        let dibujados = 0;
+        resultados.forEach(function (t) {
+            if (!t) return;                      // tile que no cargo: se saltea
+            ctx.drawImage(t.img, t.x, t.y, 256, 256);
+            dibujados++;
+        });
+        return dibujados > 0;
+    });
+}
+
+// Un tile que falla NO rompe el mapa: se resuelve en null y el fondo queda liso
+// en ese pedazo. Tambien hay un tope de tiempo, porque en el campo la conexion
+// puede quedar colgada y el PDF no puede esperar para siempre.
+function cargarTile(url, x, y) {
+    return new Promise(function (resolve) {
+        const img = new Image();
+        let listo = false;
+        const terminar = valor => { if (!listo) { listo = true; resolve(valor); } };
+        setTimeout(() => terminar(null), 8000);
+        img.crossOrigin = 'anonymous';
+        img.onload = () => terminar({ img: img, x: x, y: y });
+        img.onerror = () => terminar(null);
+        img.src = url;
+    });
 }
 
 // --- 6. PERSISTENCIA LOCAL (IndexedDB) + SINCRONIZACIÓN ---
@@ -498,13 +799,50 @@ async function renderListaMuestreos() {
         cont.innerHTML = '<p class="lista-vacia">No hay muestreos que coincidan con los filtros.</p>';
         return;
     }
-    cont.innerHTML = lista.map((m, i) => {
-        const np = (m.Puntos || []).length;
-        const pend = (m._local && m._synced === false) ? '<span class="badge-pendiente">Sin sincronizar</span>' : '';
-        return `<div class="muestreo-card" onclick="abrirMuestreoDesdeLista(${i})">
-            <div class="muestreo-card-top"><strong>${escProd(m.Lote || 'Lote')} · ${escProd(m.Cultivo || '')}</strong><span class="muestreo-fecha">${escProd(m.Fecha || '')}</span></div>
-            <div class="muestreo-card-sub">${escProd(m.Establecimiento || '')}${m.Campania ? ' · ' + escProd(m.Campania) : ''}</div>
-            <div class="muestreo-card-meta"><i class="fas fa-location-dot"></i> ${np} punto${np === 1 ? '' : 's'}${m.Responsable ? ' · ' + escProd(m.Responsable) : ''} ${pend}</div>
+    // AGRUPADO POR CAMPO.
+    // Antes era una lista plana de tarjetas que arrancaban con el numero de
+    // lote: "1 · Soja", "1 · Soja", "1 · Soja"... tres recorridos distintos que
+    // se veian iguales. El trabajo se organiza por CAMPO: se entra a La Lucila
+    // y ahi estan sus lotes, con su fecha y sus puntos.
+    const porCampo = {};
+    lista.forEach((m, i) => {
+        const campo = (m.Establecimiento || 'Sin campo').trim();
+        if (!porCampo[campo]) porCampo[campo] = [];
+        porCampo[campo].push({ m: m, i: i });   // `i` es el indice en muestreosRenderizados
+    });
+
+    cont.innerHTML = Object.keys(porCampo).sort().map(campo => {
+        const items = porCampo[campo];
+        const lotes = Array.from(new Set(items.map(x => x.m.Lote).filter(Boolean)));
+        const puntos = items.reduce((t, x) => t + ((x.m.Puntos || []).length), 0);
+        const ultima = items.map(x => x.m.Fecha || '').sort().slice(-1)[0] || '';
+
+        const tarjetas = items.map(({ m, i }) => {
+            const np = (m.Puntos || []).length;
+            const pend = (m._local && m._synced === false) ? '<span class="badge-pendiente">Sin sincronizar</span>' : '';
+            const conGps = (m.Puntos || []).filter(p => p.Lat && p.Long).length;
+            return `<div class="muestreo-card" onclick="abrirMuestreoDesdeLista(${i})">
+                <div class="muestreo-card-top">
+                    <strong>${m.Lote ? 'Lote ' + escProd(m.Lote) : 'Sin lote'}</strong>
+                    <span class="muestreo-fecha">${escProd(fechaLegibleMuestreo(m.Fecha))}</span>
+                </div>
+                <div class="muestreo-card-sub">${escProd([m.Cultivo, m.Variedad, m.Campania].filter(Boolean).join(' · '))}</div>
+                <div class="muestreo-card-meta">
+                    <i class="fas fa-location-dot"></i> ${np} punto${np === 1 ? '' : 's'}${conGps < np ? ` (${conGps} con GPS)` : ''}${m.Responsable ? ' · ' + escProd(m.Responsable) : ''} ${pend}
+                </div>
+            </div>`;
+        }).join('');
+
+        return `<div class="campo-grupo">
+            <div class="campo-grupo-header">
+                <div class="campo-grupo-nombre"><i class="fas fa-tractor"></i> ${escProd(campo)}</div>
+                <div class="campo-grupo-meta">
+                    ${items.length} recorrida${items.length === 1 ? '' : 's'} ·
+                    ${lotes.length ? escProd(lotes.length === 1 ? 'lote ' + lotes[0] : lotes.length + ' lotes') : 'sin lotes'} ·
+                    ${puntos} punto${puntos === 1 ? '' : 's'}${ultima ? ' · última ' + escProd(fechaLegibleMuestreo(ultima)) : ''}
+                </div>
+            </div>
+            <div class="campo-grupo-body">${tarjetas}</div>
         </div>`;
     }).join('');
 }
@@ -625,7 +963,8 @@ async function armarReporteMuestreo(modo) {
     // Mapa
     const mapC = document.createElement('canvas');
     mapC.width = 900; mapC.height = 500;
-    drawMapaEnCanvas(mapC);
+    // Con señal, el mapa del reporte sale sobre la imagen satelital.
+    await drawMapaEnCanvas(mapC, true);
     try {
         const mapImg = mapC.toDataURL('image/jpeg', 0.85);
         const mw = W - 2 * M, mh = mw * 500 / 900;

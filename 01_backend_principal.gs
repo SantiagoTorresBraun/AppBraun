@@ -135,6 +135,12 @@ function doPost(e) {
     if (accion === "guardar_muestreo")    return guardarMuestreo(data);
     if (accion === "actualizar_muestreo") return actualizarMuestreo(data);
     if (accion === "eliminar_muestreo")   return eliminarMuestreo(data);
+    // ==================== NUEVO: PRODUCCIÓN (informes de campo) ====================
+    // El otro submódulo de Producción: el informe por visita que hoy se manda
+    // por WhatsApp. Ver DOCUMENTACION_PRODUCCION_V2.md
+    if (accion === "guardar_informe")     return guardarInformeCampo(data);
+    if (accion === "actualizar_informe")  return actualizarInformeCampo(data);
+    if (accion === "eliminar_informe")    return eliminarInformeCampo(data);
     // ===========================================================
 
     if (accion === "eliminar") {
@@ -608,6 +614,9 @@ function doGet(e) {
     // ==================== NUEVO: PRODUCCIÓN ====================
     if (e && e.parameter && e.parameter.action === "read_muestreos") {
       return leerMuestreos();
+    }
+    if (e && e.parameter && e.parameter.action === "read_informes") {
+      return leerInformesCampo();
     }
     // ==========================================================
 
@@ -2041,4 +2050,148 @@ function medirLecturaDeCargas() {
   Logger.log("  tamaño de la respuesta:     " + Math.round(texto.length / 1024) + " KB");
   Logger.log("");
   Logger.log("  (lo que tarde de mas en el navegador es red + arranque en frio)");
+}
+
+
+// ============================================================================
+//  PRODUCCIÓN → INFORMES DE CAMPO
+// ----------------------------------------------------------------------------
+//  Hojas: "Informes_Campo" (encabezado) + "Informes_Campo_Lotes" (una fila por
+//  lote medido en esa visita). Mismo patrón que Muestreo → Muestreo_Puntos.
+//
+//  Por qué el detalle por lote va en su propia hoja y no en una celda: es el
+//  dato que hace posible ver la evolución de un lote a lo largo de la campaña
+//  (14,3 sem/m en la siembra → 11,9 pl/m en el nacimiento). Metido adentro de un
+//  párrafo, como está hoy en WhatsApp, ese número no se puede consultar nunca.
+//
+//  LO QUE ESTA VERSIÓN NO HACE: la media (fotos y videos) NO llega acá. Se queda
+//  en el celular y viaja por WhatsApp. El video no puede pasar por Apps Script
+//  —tamaño, base64, el límite de 6 minutos y la cuota diaria, los cuatro a la
+//  vez— así que va a subir directo del navegador a Drive en la Fase 3.
+//  Ver DOCUMENTACION_PRODUCCION_V2.md §5 y §6.
+// ============================================================================
+
+var NOMBRE_HOJA_INFORMES = "Informes_Campo";
+var NOMBRE_HOJA_INFORMES_LOTES = "Informes_Campo_Lotes";
+
+var COLS_INFORMES = ["Id_Informe", "Fecha", "Tipo", "Id_Contrato", "Codigo",
+  "Descripcion", "Campania", "Cultivo", "Variedad", "Responsable", "Matricula",
+  "Textos_Plano", "Mensaje", "Estado", "usuario_registro"];
+
+// Las columnas de medición son TODAS las posibles: cada tipo de informe llena
+// las suyas y deja el resto vacías. Es a propósito — una sola tabla se puede
+// consultar y graficar; una tabla por tipo, no.
+var COLS_INFORMES_LOTES = ["Id_Lote_Informe", "Id_Informe", "Orden", "Lote",
+  "sem_m", "plantas_m", "prof_cm", "dano_pct", "kg",
+  "distribucion", "humedad", "estadio", "nota"];
+
+// --- GUARDAR (_accion: "guardar_informe") ---
+function guardarInformeCampo(data) {
+  var hojaI = obtenerHojaConEncabezados(NOMBRE_HOJA_INFORMES, COLS_INFORMES);
+  var hojaL = obtenerHojaConEncabezados(NOMBRE_HOJA_INFORMES_LOTES, COLS_INFORMES_LOTES);
+
+  // Idempotencia: la app reintenta el mismo POST cuando no puede leer la
+  // respuesta. Sin esto, cada reintento agregaría otra fila.
+  if (data.Id_Informe && buscarFilaPorId(hojaI, data.Id_Informe) !== -1) {
+    return respuestaOk();
+  }
+
+  hojaI.appendRow([
+    data.Id_Informe || "", data.Fecha || "", data.Tipo || "", data.Id_Contrato || "",
+    data.Codigo || "", data.Descripcion || "", data.Campania || "", data.Cultivo || "",
+    data.Variedad || "", data.Responsable || "", data.Matricula || "",
+    data.Textos_Plano || "", data.Mensaje || "", data.Estado || "Borrador",
+    data.usuario_registro || ""
+  ]);
+
+  if (data.Lotes && Array.isArray(data.Lotes)) {
+    data.Lotes.forEach(function (l, i) {
+      if (!l || !l.Lote) return; // un lote sin nombre es una fila a medio cargar
+      hojaL.appendRow([
+        Utilities.getUuid(), data.Id_Informe || "", (i + 1), l.Lote || "",
+        l.sem_m || "", l.plantas_m || "", l.prof_cm || "", l.dano_pct || "", l.kg || "",
+        l.distribucion || "", l.humedad || "", l.estadio || "", l.nota || ""
+      ]);
+    });
+  }
+  return respuestaOk();
+}
+
+// --- ACTUALIZAR (_accion: "actualizar_informe") ---
+// Borra y reinserta, igual que Muestreo. El informe se edita muchas veces
+// mientras se recorre el lote, y reinsertar entero evita tener que resolver qué
+// lote se agregó, cuál se borró y cuál cambió de número.
+function actualizarInformeCampo(data) {
+  eliminarInformeCampoInterno(data.Id_Informe);
+  return guardarInformeCampo(data);
+}
+
+function eliminarInformeCampo(data) {
+  eliminarInformeCampoInterno(data.Id_Informe);
+  return respuestaOk();
+}
+
+function eliminarInformeCampoInterno(id) {
+  if (!id) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaI = ss.getSheetByName(NOMBRE_HOJA_INFORMES);
+  var hojaL = ss.getSheetByName(NOMBRE_HOJA_INFORMES_LOTES);
+  if (hojaI) borrarFilasPorColumna(hojaI, 0, id);
+  if (hojaL) borrarFilasPorColumna(hojaL, 1, id);
+}
+
+// --- LECTURA (?action=read_informes) → join de las 2 hojas ---
+function leerInformesCampo() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaI = ss.getSheetByName(NOMBRE_HOJA_INFORMES);
+  var hojaL = ss.getSheetByName(NOMBRE_HOJA_INFORMES_LOTES);
+  if (!hojaI) return respuestaJsonCalidad([]);
+
+  var rowsI = hojaI.getDataRange().getValues();
+  var rowsL = hojaL ? hojaL.getDataRange().getValues() : [];
+  if (rowsI.length <= 1) return respuestaJsonCalidad([]);
+
+  // Índice por Id_Informe, armado UNA vez. El bucle anidado (por cada informe,
+  // recorrer todos los lotes) crece al cuadrado: es el mismo error que ya se
+  // corrigió en el historial de cargas.
+  var lotesPorInforme = {};
+  for (var f = 1; f < rowsL.length; f++) {
+    var idL = String(rowsL[f][1] || "");
+    if (!idL) continue;
+    if (!lotesPorInforme[idL]) lotesPorInforme[idL] = [];
+    lotesPorInforme[idL].push({
+      Orden: rowsL[f][2], Lote: rowsL[f][3],
+      sem_m: rowsL[f][4], plantas_m: rowsL[f][5], prof_cm: rowsL[f][6],
+      dano_pct: rowsL[f][7], kg: rowsL[f][8],
+      distribucion: rowsL[f][9], humedad: rowsL[f][10],
+      estadio: rowsL[f][11], nota: rowsL[f][12]
+    });
+  }
+
+  var out = [];
+  for (var i = 1; i < rowsI.length; i++) {
+    var r = rowsI[i];
+    if (!r[0]) continue;
+
+    // Los bloques narrados viajan como JSON en una celda. Si esa celda quedó
+    // mal (una edición a mano en el Sheet), NO se cae la lectura entera: se
+    // devuelve vacío y el informe sigue siendo legible por su columna Mensaje.
+    var textos = {};
+    try { if (r[11]) textos = JSON.parse(r[11]); } catch (err) {
+      Logger.log("Informe " + r[0] + ": Textos_Plano no es JSON válido: " + err);
+    }
+
+    out.push({
+      Id_Informe: r[0],
+      Fecha: r[1] ? (r[1] instanceof Date
+        ? Utilities.formatDate(r[1], Session.getScriptTimeZone(), "yyyy-MM-dd")
+        : String(r[1])) : "",
+      Tipo: r[2], Id_Contrato: r[3], Codigo: r[4], Descripcion: r[5],
+      Campania: r[6], Cultivo: r[7], Variedad: r[8], Responsable: r[9],
+      Matricula: r[10], Textos: textos, Mensaje: r[12], Estado: r[13],
+      usuario_registro: r[14],
+      Lotes: lotesPorInforme[String(r[0])] || []
+    });
+  }
+  return respuestaJsonCalidad(out.reverse()); // más recientes primero
 }

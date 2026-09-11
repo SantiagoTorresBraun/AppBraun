@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <!-- Leaflet 1.9.4: el mapa del modulo de Muestreo. Vendorizado como el
+         resto, para que la app siga abriendo sin internet (los TILES si
+         necesitan señal; sin ella se cae al scatter en canvas). -->
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
     
     <script src="vendor/jspdf.umd.min.js"></script>
 </head>
@@ -221,7 +225,7 @@
                 </div>
 
                 <!-- Producción -->
-                <div class="menu-card active" onclick="abrirModuloProduccion()">
+                <div class="menu-card active" onclick="cambiarVista('view-submenu-produccion')">
                     <div class="card-header">
                         <div class="card-icon production-icon">
                             <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1284,6 +1288,88 @@
     </section>
 
     <!-- ========================================================================= -->
+    <!-- --- SUBMENÚ PRODUCCIÓN: elegir entre los dos submódulos --- -->
+    <!-- ========================================================================= -->
+    <!-- Producción tiene dos formas de trabajar, y son distintas de verdad:
+         - MUESTREO: recorrido con puntos georreferenciados (modelo de monitoreo).
+         - INFORMES: el informe por visita con mediciones por lote, que es lo que
+           el equipo manda hoy por WhatsApp. Ver DOCUMENTACION_PRODUCCION_V2.md -->
+    <section id="view-submenu-produccion" class="view hidden">
+        <div class="container submenu-container">
+            <div class="submenu-header">
+                <h2 class="submenu-title">Producción</h2>
+                <p class="submenu-subtitle">Elegí cómo vas a registrar el trabajo a campo</p>
+            </div>
+
+            <div class="menu-grid premium-grid">
+                <!-- Informes de Campo -->
+                <div class="menu-card active" onclick="abrirInformesCampo()">
+                    <div class="card-header">
+                        <div class="card-icon production-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Planilla -->
+                                <rect x="9" y="6" width="26" height="34" rx="3" fill="#A71D1D" fill-opacity=".12" stroke="#A71D1D" stroke-width="2.2"/>
+                                <rect x="17" y="3.5" width="10" height="5.5" rx="2" fill="#A71D1D"/>
+                                <g stroke="#A71D1D" stroke-width="2" stroke-linecap="round">
+                                    <line x1="14.5" y1="17" x2="29.5" y2="17"/>
+                                    <line x1="14.5" y1="23" x2="29.5" y2="23"/>
+                                    <line x1="14.5" y1="29" x2="24" y2="29"/>
+                                </g>
+                                <!-- Brote -->
+                                <g>
+                                    <line x1="37" y1="42" x2="37" y2="31" stroke="#5E8C4A" stroke-width="2.2" stroke-linecap="round"/>
+                                    <path d="M37 34 q-1 -5 -6 -6 q1 5 6 6" fill="#5E8C4A"/>
+                                    <path d="M37 31 q1 -5 6 -6 q-1 5 -6 6" fill="#6ea355"/>
+                                </g>
+                                <circle cx="33" cy="13" r="4.5" fill="#E0A32E"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Informes de Campo</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Siembra, nacimiento y estadios. Arma el mensaje de WhatsApp solo.</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
+                <!-- Muestreo de Campo (georreferenciado) -->
+                <div class="menu-card active" onclick="abrirModuloProduccion()">
+                    <div class="card-header">
+                        <div class="card-icon production-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Campo -->
+                                <path d="M4 34 Q24 27 44 34 V44 H4 Z" fill="#5E8C4A" fill-opacity=".85"/>
+                                <path d="M4 34 Q24 27 44 34" stroke="#4b7a3b" stroke-width="1.2" fill="none"/>
+                                <!-- Pin de GPS -->
+                                <path d="M24 4 C18.5 4 14 8.5 14 14 C14 21.5 24 32 24 32 C24 32 34 21.5 34 14 C34 8.5 29.5 4 24 4 Z" fill="#A71D1D"/>
+                                <circle cx="24" cy="14" r="4.2" fill="#ffffff"/>
+                                <!-- Puntos secundarios -->
+                                <circle cx="10" cy="38" r="2.6" fill="#E0A32E"/>
+                                <circle cx="38" cy="38" r="2.6" fill="#E0A32E"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Muestreo de Campo</h3>
+                            <span class="card-badge active-badge">Activo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Monitoreo punto por punto con GPS, severidad e incidencia.</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
     <!-- --- MÓDULO PRODUCCIÓN: historial de muestreos + nuevo muestreo --- -->
     <!-- ========================================================================= -->
     <section id="view-modulo-produccion" class="view hidden">
@@ -1291,7 +1377,7 @@
             <div class="header-content">
                 <div class="header-title-section">
                     <h2>Muestreos de Campo</h2>
-                    <p class="header-subtitle">Recorridas georreferenciadas por lote</p>
+                    <p class="header-subtitle">Recorridas georreferenciadas, agrupadas por campo</p>
                 </div>
                 <button class="btn-nuevo-registro-floating" onclick="switchTabProduccion('nuevo')">
                     <i class="fas fa-plus"></i> Nuevo Muestreo
@@ -1381,8 +1467,22 @@
         </div>
 
         <div class="container modulo-carga-container">
+            <!-- FICHA DEL MUESTREO: los datos del recorrido de un vistazo.
+                 Antes había que deducirlos del título y de los puntos. -->
+            <div class="ficha-muestreo">
+                <div id="ma-ficha" class="ficha-grid"></div>
+                <div id="ma-ubicacion" class="ficha-ubicacion"></div>
+            </div>
+
             <div class="mapa-puntos-wrap">
-                <canvas id="mapa-puntos" class="mapa-puntos" width="600" height="360"></canvas>
+                <!-- Mapa real (Leaflet + imagen satelital). Si no hay señal, los
+                     tiles no cargan y se muestra el scatter en canvas de abajo,
+                     que no necesita internet. -->
+                <div id="mapa-muestreo" class="mapa-muestreo"></div>
+                <canvas id="mapa-puntos" class="mapa-puntos hidden" width="600" height="360"></canvas>
+                <div id="mapa-aviso-offline" class="mapa-aviso-offline hidden">
+                    <i class="fas fa-wifi"></i> Sin señal: el mapa satelital no carga. Las coordenadas están guardadas igual.
+                </div>
                 <div class="mapa-leyenda">
                     <span><i class="dot-sev sev-0"></i>Sin daño</span>
                     <span><i class="dot-sev sev-1"></i>Leve</span>
@@ -1479,6 +1579,202 @@
             </form>
         </div>
     </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- INFORMES DE CAMPO: listado + nuevo informe --- -->
+    <!-- Todo el comportamiento vive en produccion-informes.js -->
+    <!-- ========================================================================= -->
+    <section id="view-informes-campo" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2>Informes de Campo</h2>
+                    <p class="header-subtitle">Siembra, nacimiento y estadios — listos para WhatsApp</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="switchTabInformes('nuevo')">
+                    <i class="fas fa-plus"></i> Nuevo Informe
+                </button>
+            </div>
+        </div>
+
+        <div class="container modulo-carga-container">
+            <!-- Espacio disponible en el dispositivo. No es decoración: un celular
+                 lleno no puede guardar los videos de la recorrida, y hay que
+                 enterarse ANTES de salir al campo. -->
+            <div id="inf-storage-box" class="inf-storage-box hidden">
+                <div class="inf-storage-texto">
+                    <i class="fas fa-hard-drive"></i>
+                    <span id="inf-storage-detalle">Calculando espacio…</span>
+                </div>
+                <div class="inf-storage-barra"><div id="inf-storage-relleno"></div></div>
+            </div>
+
+            <!-- TAB: LISTADO -->
+            <div id="tab-content-lista-inf" class="tab-content">
+                <div class="filters-section">
+                    <h3 class="filters-title"><i class="fas fa-filter"></i> Filtros</h3>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="filter-inf-contrato">Contrato</label>
+                            <select id="filter-inf-contrato" onchange="renderListaInformes()"></select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter-inf-tipo">Tipo</label>
+                            <select id="filter-inf-tipo" onchange="renderListaInformes()"></select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter-inf-desde">Desde</label>
+                            <input type="date" id="filter-inf-desde" onchange="renderListaInformes()">
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter-inf-hasta">Hasta</label>
+                            <input type="date" id="filter-inf-hasta" onchange="renderListaInformes()">
+                        </div>
+                    </div>
+                </div>
+                <div id="lista-informes" class="informes-lista">
+                    <p class="lista-vacia">Todavía no hay informes cargados.</p>
+                </div>
+            </div>
+
+            <!-- TAB: NUEVO INFORME (los 3 toques del arranque) -->
+            <div id="tab-content-nuevo-inf" class="tab-content hidden nuevo-registro-section">
+                <div class="form-header-nuevo">
+                    <h3>Nuevo Informe</h3>
+                    <p class="form-subtitle">Tres datos y ya estás adentro. El resto se carga en el campo.</p>
+                </div>
+                <form id="form-informe">
+                    <div class="form-group">
+                        <label for="inf-contrato">Contrato / Campaña</label>
+                        <div class="enum-row">
+                            <select id="inf-contrato" required></select>
+                            <button type="button" class="btn-enum-gestionar" onclick="abrirGestorContratos()" title="Gestionar contratos y lotes"><i class="fas fa-cog"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tipo de informe</label>
+                        <div id="inf-chips-tipo" class="chips-tipo"></div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="inf-fecha">Fecha</label><input type="date" id="inf-fecha" required></div>
+                        <div class="form-group">
+                            <label for="inf-responsable">Responsable</label>
+                            <select id="inf-responsable" class="enum-select" data-enum="personal" required></select>
+                        </div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group"><label for="inf-matricula">Matrícula profesional</label><input type="text" id="inf-matricula" placeholder="Opcional"></div>
+                        <div class="form-group"><label for="inf-variedad">Variedad</label><input type="text" id="inf-variedad" placeholder="Ej. Norteño"></div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="margin-top:16px;">
+                        <i class="fas fa-clipboard-check"></i> Empezar informe
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- INFORME ACTIVO: mediciones por lote + bloques narrados + media --- -->
+    <!-- ========================================================================= -->
+    <section id="view-informe-activo" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2 id="ia-titulo">Informe</h2>
+                    <p class="header-subtitle" id="ia-subtitulo">Contrato · Fecha</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="armarMensajeInforme()">
+                    <i class="fab fa-whatsapp"></i> Armar mensaje
+                </button>
+            </div>
+        </div>
+
+        <div class="container modulo-carga-container" style="padding-top:16px;">
+
+            <!-- Mediciones por lote: el bloque repetible. Los campos que se ven
+                 dependen del TIPO de informe (ver CAMPOS_POR_TIPO). -->
+            <div class="inf-bloque">
+                <div class="inf-bloque-header">
+                    <h3><i class="fas fa-seedling"></i> Lotes <span id="ia-contador-lotes" class="inf-contador">0</span></h3>
+                    <button type="button" class="btn-inf-agregar" onclick="agregarLoteInforme()"><i class="fas fa-plus"></i> Lote</button>
+                </div>
+                <div id="ia-lotes" class="inf-lotes"></div>
+            </div>
+
+            <!-- Bloques narrados. Cada uno = chips frecuentes + texto libre + voz. -->
+            <div id="ia-bloques-texto"></div>
+
+            <!-- Media: foto, video y audio. Se guardan como Blob en IndexedDB. -->
+            <div class="inf-bloque">
+                <div class="inf-bloque-header">
+                    <h3><i class="fas fa-images"></i> Fotos y videos <span id="ia-contador-media" class="inf-contador">0</span></h3>
+                    <label class="btn-inf-agregar" for="ia-input-media"><i class="fas fa-plus"></i> Agregar</label>
+                    <input type="file" id="ia-input-media" accept="image/*,video/*,audio/*" multiple hidden onchange="agregarMediaInforme(this)">
+                </div>
+                <p class="inf-nota-media">
+                    <i class="fas fa-circle-info"></i>
+                    Las fotos y videos viajan por WhatsApp desde este celular.
+                    Todavía <b>no se guardan en el servidor</b> (Fase 3).
+                </p>
+                <div id="ia-media" class="inf-media-grid"></div>
+            </div>
+
+            <div class="punto-acciones">
+                <button type="button" class="btn-cancel-punto" onclick="volverAListaInformes()">Volver</button>
+                <button type="button" class="btn-cancel-punto" onclick="eliminarInformeActual()"><i class="fas fa-trash"></i> Eliminar</button>
+                <button type="button" class="btn-primary" onclick="armarMensajeInforme()"><i class="fab fa-whatsapp"></i> Armar mensaje</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- MODAL: el mensaje de WhatsApp armado -->
+    <div id="modal-mensaje-informe" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarMensajeInforme()"></div>
+        <div class="gestor-content">
+            <div class="gestor-header">
+                <h3><i class="fab fa-whatsapp"></i> Mensaje listo</h3>
+                <button type="button" class="gestor-close" onclick="cerrarMensajeInforme()" title="Cerrar">&times;</button>
+            </div>
+            <div class="gestor-body">
+                <textarea id="inf-mensaje-texto" class="inf-mensaje-texto" rows="16" spellcheck="false"></textarea>
+                <p class="inf-mensaje-ayuda">Podés editarlo antes de mandarlo. Los cambios no se guardan en el informe.</p>
+                <div class="inf-mensaje-acciones">
+                    <button type="button" class="btn-cancel-punto" onclick="copiarMensajeInforme()"><i class="fas fa-copy"></i> Copiar</button>
+                    <button type="button" class="btn-primary" onclick="compartirInforme()"><i class="fab fa-whatsapp"></i> Compartir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: gestor de contratos, campos y lotes -->
+    <div id="modal-gestor-contratos" class="gestor-modal">
+        <div class="gestor-backdrop" onclick="cerrarGestorContratos()"></div>
+        <div class="gestor-content">
+            <div class="gestor-header">
+                <h3><i class="fas fa-file-contract"></i> Contratos y lotes</h3>
+                <button type="button" class="gestor-close" onclick="cerrarGestorContratos()" title="Cerrar">&times;</button>
+            </div>
+            <div class="gestor-body">
+                <ul id="gestor-lista-contratos" class="gestor-lista"></ul>
+                <div class="inf-contrato-form">
+                    <input type="text" id="gc-codigo" placeholder="Código (ej. CN26-044)" maxlength="40">
+                    <input type="text" id="gc-descripcion" placeholder="Descripción (ej. Siembra asociada ACIAGRO-ARGAN-BRC)" maxlength="120">
+                    <div class="form-group-row">
+                        <input type="text" id="gc-campania" placeholder="Campaña (2026/27)" maxlength="20">
+                        <input type="text" id="gc-cultivo" placeholder="Cultivo (Garbanzo)" maxlength="40">
+                    </div>
+                    <input type="text" id="gc-lotes" placeholder="Lotes: Don Manuel/9F, Don Manuel/M8, Ronchi/L1">
+                    <p class="inf-mensaje-ayuda">Un lote por coma, con el formato <b>Campo/Lote</b>.</p>
+                    <button type="button" class="gestor-btn-add" onclick="guardarContratoProd()"><i class="fas fa-plus"></i> Guardar contrato</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL GESTOR DE OPCIONES (Productos, Calibres, Tipos de Carga, Envases) -->
     <div id="modal-gestor-opciones" class="gestor-modal">
@@ -1598,7 +1894,9 @@
     <script src="app.js"></script>
     <script src="correo.js"></script>
     <script src="calidad.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
     <script src="produccion.js"></script>
+    <script src="produccion-informes.js"></script>
     <script src="agente.js"></script>
 
     <!-- Modo offline: registra el Service Worker (sw.js). Va ultimo a proposito. -->
