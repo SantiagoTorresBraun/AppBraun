@@ -827,6 +827,121 @@ function agenteExtraerJson(texto) {
 }
 
 // =========================================================================
+// 7 bis. REGISTRO DE CONSULTAS
+//    Deja en la hoja "Agente_Log" del Sheet una fila por pregunta: quién
+//    preguntó, qué preguntó, qué le contestó el asistente, el plan que armó la
+//    IA y una muestra del resultado real. Con eso se puede revisar después si
+//    la respuesta estaba bien sin tener que reproducir la consulta.
+//    El backend está en 04_agente_log.gs.
+// =========================================================================
+
+// Cuántas filas del resultado se guardan como muestra. No hacen falta todas:
+// con las primeras alcanza para ver si el número que dijo el asistente sale de
+// ahí. Guardar las 25 llenaría la celda de ruido.
+const AGENTE_LOG_FILAS_MUESTRA = 5;
+
+// "Y me olvido": esto es telemetría, NO parte de la consulta del usuario.
+// Si el registro falla (sin internet, backend viejo sin la acción log_agente,
+// hoja rota) no se muestra ningún error ni se reintenta: la persona ya tuvo su
+// respuesta y no tiene por qué enterarse de un problema que no es suyo.
+function agenteRegistrarConsulta(info) {
+    try {
+        fetch(WEB_APP_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(Object.assign({ _accion: "log_agente" }, info))
+        }).catch(function () { /* el registro no molesta al usuario */ });
+    } catch (e) { /* idem */ }
+}
+
+// Arma la fila a partir de lo que devolvió agenteResponder().
+function agenteDatosParaLog(idConsulta, pregunta, ms, r, err) {
+    const base = {
+        Id_Consulta: idConsulta,
+        Fecha_Hora: new Date().toLocaleString("es-AR"),
+        // usuarioRegistroActual() vive en auth.js. Si alguien abre la app sin
+        // sesión, la fila igual se guarda: prefiero una pregunta sin dueño a
+        // perder la pregunta.
+        Usuario: (typeof usuarioRegistroActual === "function" ? usuarioRegistroActual() : "") || "",
+        Pregunta: pregunta,
+        Duracion_ms: ms
+    };
+
+    if (err) {
+        base.Tipo = "error";
+        base.Error = String(err && err.message ? err.message : err);
+        return base;
+    }
+
+    const plan = r.plan || {};
+    base.Respuesta = r.texto || "";
+    // Sin dataset la IA decidió que era charla (un saludo, "qué podés hacer").
+    // Distinguirlo importa: esas no se revisan, no consultaron ningún dato.
+    base.Tipo = (plan.tipo === "charla" || !plan.dataset) ? "charla" : "consulta";
+    base.Dataset = plan.dataset || "";
+    base.Que_Consulto = plan.explicacion || "";
+    base.Plan_JSON = JSON.stringify(plan);
+
+    if (r.resultado) {
+        // grupos_encontrados es la cantidad real de filas que dio la consulta,
+        // ANTES del recorte a 25 para mostrar. Un 0 acá es la señal más útil
+        // del registro: o el dato no existe, o la IA filtró mal.
+        base.Filas_Resultado = r.resultado.grupos_encontrados;
+        base.Resultado_Muestra = JSON.stringify((r.resultado.datos || []).slice(0, AGENTE_LOG_FILAS_MUESTRA));
+    }
+    return base;
+}
+
+// El 👍/👎 debajo de cada respuesta. Es la forma más barata de saber si el
+// asistente contesta bien: el que pregunta es el único que sabe si la respuesta
+// le sirvió, y lo sabe en el momento.
+function agenteVotar(idConsulta, voto, contenedor) {
+    if (!idConsulta) return;
+    try {
+        fetch(WEB_APP_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ _accion: "votar_agente", Id_Consulta: idConsulta, Voto: voto })
+        }).catch(function () { });
+    } catch (e) { }
+
+    // Se agradece de inmediato sin esperar al backend: el voto es opinión, no
+    // un dato que haya que confirmar, y hacerlo esperar solo lo desalienta.
+    if (contenedor) {
+        contenedor.innerHTML = "";
+        const gracias = document.createElement("span");
+        gracias.className = "agente-voto-gracias";
+        gracias.textContent = voto === "👍" ? "¡Gracias! Anotado." : "Gracias, lo vamos a revisar.";
+        contenedor.appendChild(gracias);
+    }
+}
+
+function agentePintarVoto(idConsulta) {
+    const cuerpo = document.getElementById("agente-mensajes");
+    if (!cuerpo) return;
+    const cont = document.createElement("div");
+    cont.className = "agente-voto";
+
+    const etiqueta = document.createElement("span");
+    etiqueta.className = "agente-voto-texto";
+    etiqueta.textContent = "¿Te sirvió?";
+    cont.appendChild(etiqueta);
+
+    ["👍", "👎"].forEach(function (voto) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "agente-voto-btn";
+        btn.textContent = voto;
+        btn.title = voto === "👍" ? "La respuesta estuvo bien" : "La respuesta estuvo mal";
+        btn.onclick = function () { agenteVotar(idConsulta, voto, cont); };
+        cont.appendChild(btn);
+    });
+
+    cuerpo.appendChild(cont);
+    agenteScrollAbajo();
+}
+
+// =========================================================================
 // 8. CICLO COMPLETO DE UNA PREGUNTA
 // =========================================================================
 
@@ -1045,17 +1160,30 @@ function agenteEnviar() {
 
     const pensando = agentePintarMensaje("assistant", "Buscando en los registros…", "agente-pensando");
 
+    // Identificador de ESTA pregunta. Se genera acá y no en el backend porque
+    // el voto (que llega después, cuando el usuario lee la respuesta) tiene que
+    // poder apuntar a la misma fila.
+    const idConsulta = "AG-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    const t0 = Date.now();
+
     agenteResponder(pregunta)
         .then(function (r) {
             if (pensando) pensando.remove();
             agentePintarMensaje("assistant", r.texto);
             agenteConversacion.push({ rol: "assistant", texto: r.texto });
             agentePintarTabla(r.resultado);
+            agenteRegistrarConsulta(agenteDatosParaLog(idConsulta, pregunta, Date.now() - t0, r, null));
+            // Los saludos y el "¿qué podés hacer?" no se votan: no consultaron
+            // ningún dato, no hay nada que estar bien o mal.
+            if (r.plan && r.plan.dataset) agentePintarVoto(idConsulta);
         })
         .catch(function (err) {
             if (pensando) pensando.remove();
             console.error("Agente IA:", err);
             agentePintarMensaje("assistant", "Uy, no pude responder eso.\n\nMotivo: " + (err && err.message ? err.message : err));
+            // Las que fallan son las MÁS importantes de registrar: son las que
+            // hay que arreglar, y son justo las que nadie reporta.
+            agenteRegistrarConsulta(agenteDatosParaLog(idConsulta, pregunta, Date.now() - t0, null, err));
         })
         .finally(function () {
             agenteOcupado = false;

@@ -125,6 +125,10 @@ function doPost(e) {
     // ==================== NUEVO: AGENTE DE IA ====================
     // El puente hacia Groq vive en 02_agente_ia.gs (ahí está la clave).
     if (accion === "agente_consulta") return consultarAgenteIA(data);
+    // Registro de qué se le pregunta al asistente y qué contestó, para poder
+    // revisarlo después. Vive en 04_agente_log.gs (hoja "Agente_Log").
+    if (accion === "log_agente")   return registrarConsultaAgente(data);
+    if (accion === "votar_agente") return votarConsultaAgente(data);
     // ==================== NUEVO: CONTRASEÑAS ====================
     // Login y recuperación por correo. Viven en 03_auth.gs.
     if (accion === "auth_login")           return authLogin(data);

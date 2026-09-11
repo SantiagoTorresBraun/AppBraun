@@ -3504,6 +3504,31 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
 }
 .agente-chip:hover { background: #fdf1f1; border-color: var(--color-primary); }
 
+/* "¿Te sirvió?" debajo de cada respuesta con datos. Deliberadamente discreto:
+   es opcional, no tiene que competir con la respuesta ni con la tabla. */
+.agente-voto {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -2px 0 2px 4px;
+}
+.agente-voto-texto,
+.agente-voto-gracias {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+.agente-voto-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 4px 9px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.agente-voto-btn:hover { background: #fdf1f1; border-color: var(--color-primary); }
+
 /* Tabla de respaldo: el dato crudo detrás de la respuesta */
 .agente-tabla-caja {
     background: var(--color-card-bg);
