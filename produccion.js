@@ -458,7 +458,12 @@ function cargarMuestreosDesdeGoogle() {
     fetch(`${WEB_APP_URL}?action=read_muestreos`)
         .then(res => res.json())
         .then(data => {
-            if (Array.isArray(data)) historialMuestreos = data.filter(m => m && m.Id_Muestreo);
+            // Mismo cuidado que en Calidad (hallazgo 14): un filtro que da cero
+            // puede ser "no hay muestreos" o "me mandaron otra cosa".
+            const pareceMuestreos = Array.isArray(data) &&
+                (data.length === 0 || data.some(m => m && m.Id_Muestreo));
+            if (pareceMuestreos) historialMuestreos = data.filter(m => m && m.Id_Muestreo);
+            else console.warn("[produccion] El servidor devolvió algo que no son muestreos; se conserva lo que había.");
             const vista = document.getElementById('view-modulo-produccion');
             if (vista && !vista.classList.contains('hidden')) renderListaMuestreos();
         })

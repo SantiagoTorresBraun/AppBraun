@@ -518,16 +518,44 @@ function leerCalidadDirectoDelSheet() {
         });
 }
 
-function cargarHistorialCalidadDesdeGoogle() {
+// Cuantas veces se reintenta antes de darse por vencido. El problema es
+// INTERMITENTE: casi siempre alcanza con pedirlo de nuevo.
+const CALIDAD_INTENTOS = 3;
+const CALIDAD_ESPERA_MS = 800;
+
+// Mira SI la respuesta es lo que se pidio.
+//
+// Devuelve: "ok" | "vacia" | "no-es-calidad" | "no-es-lista"
+//
+// La distincion entre "vacia" y "no-es-calidad" es la clave de todo este
+// arreglo. Antes las dos daban cero registros y se trataban igual, asi que
+// recibir las CARGAS por error se veia identico a "no hay controles".
+function clasificarRespuestaCalidad(data) {
+    if (!Array.isArray(data)) return "no-es-lista";
+    if (data.length === 0) return "vacia";
+    if (data.some(r => r && r["Id_Calidad"])) return "ok";
+    // Vinieron registros, pero ninguno es de calidad. Si tienen Id_Carga, el
+    // backend nos mando el historial de CARGAS: el ?action se perdio por el
+    // camino (el 302 de Apps Script lo lleva adentro de una clave opaca).
+    if (data.some(r => r && r["Id_Carga"])) return "no-es-calidad";
+    return "no-es-calidad";
+}
+
+function cargarHistorialCalidadDesdeGoogle(intento) {
+    intento = intento || 1;
     if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarCalidadGuardada(); return; }
-    fetch(`${WEB_APP_URL}?action=read_calidad`)
+
+    // El _ que cambia en cada pedido evita que un cache intermedio (proxy,
+    // navegador) devuelva la respuesta de OTRA accion.
+    const url = `${WEB_APP_URL}?action=read_calidad&_=${Date.now()}_${intento}`;
+
+    fetch(url)
         .then(res => res.json())
         .then(data => {
-            // Solo filas que realmente son de calidad. Si el Apps Script
-            // todavía no atiende ?action=read_calidad, devuelve las cargas
-            // (tienen Id_Carga, no Id_Calidad) y hay que descartarlas.
-            const soloCalidad = Array.isArray(data) ? data.filter(r => r && r["Id_Calidad"]) : [];
-            if (soloCalidad.length > 0) {
+            const que = clasificarRespuestaCalidad(data);
+
+            if (que === "ok") {
+                const soloCalidad = data.filter(r => r && r["Id_Calidad"]);
                 historialCalidad = soloCalidad.map(normalizarRegistroCalidadRemoto);
                 // Copia para poder verlo sin señal (Calidad no trae base64:
                 // sus imágenes ya son rutas, así que se guarda casi entero).
@@ -537,18 +565,36 @@ function cargarHistorialCalidadDesdeGoogle() {
                 return;
             }
 
-            // PLAN B: el Apps Script todavía no soporta read_calidad →
-            // intentamos leer la hoja directo (requiere Sheet compartido como lector)
-            console.warn("El backend no devolvió registros de calidad; intentando lectura directa del Sheet...");
-            return leerCalidadDirectoDelSheet()
-                .then(registros => {
-                    historialCalidad = registros.map(normalizarRegistroCalidadRemoto);
-                    filtrarYRenderizarCalidad();
-                })
-                .catch(err => console.warn("Lectura directa del Sheet no disponible:", err.message));
+            if (que === "vacia") {
+                // El servidor contestó bien y dice que no hay controles. Es una
+                // respuesta válida: NO se reintenta ni se pisa lo que ya haya.
+                console.warn("[calidad] El servidor devolvió una lista vacía.");
+                if (historialCalidad.length === 0) filtrarYRenderizarCalidad();
+                return;
+            }
+
+            // Llegó cualquier otra cosa: lo más común es el historial de CARGAS,
+            // porque el ?action se perdió. Esto NO es "no hay controles".
+            console.warn("[calidad] El servidor devolvió algo que no son controles de calidad" +
+                " (" + que + ", " + (Array.isArray(data) ? data.length + " registros" : typeof data) + ")." +
+                " Intento " + intento + " de " + CALIDAD_INTENTOS + ".");
+
+            if (intento < CALIDAD_INTENTOS) {
+                setTimeout(function () { cargarHistorialCalidadDesdeGoogle(intento + 1); }, CALIDAD_ESPERA_MS * intento);
+                return;
+            }
+
+            // Se acabaron los intentos. NUNCA se pisa historialCalidad con vacío:
+            // si ya había datos, se dejan. Si no, se muestra la copia guardada o
+            // el motivo real.
+            restaurarCalidadGuardada("el servidor devolvió datos de otro módulo");
         })
         .catch(err => {
-            console.error("Error cargando historial de calidad:", err);
+            console.error("[calidad] Error cargando el historial (intento " + intento + "):", err);
+            if (intento < CALIDAD_INTENTOS) {
+                setTimeout(function () { cargarHistorialCalidadDesdeGoogle(intento + 1); }, CALIDAD_ESPERA_MS * intento);
+                return;
+            }
             restaurarCalidadGuardada(err && err.message ? err.message : "error de red");
         });
 }

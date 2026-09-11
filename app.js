@@ -1825,7 +1825,15 @@ function cargarTicketsDesdeGoogle() {
     fetch(`${WEB_APP_URL}?action=read_tickets`)
         .then(res => res.json())
         .then(data => {
-            if (Array.isArray(data)) {
+            // Mismo cuidado que en Calidad (hallazgo 14): si se pierde el
+            // ?action, el backend devuelve las CARGAS y el filtro da cero, que
+            // es indistinguible de "no hay tickets". Solo se acepta la
+            // respuesta si esta vacia de verdad o si trae al menos un ticket.
+            const pareceTickets = Array.isArray(data) &&
+                (data.length === 0 || data.some(t => t && t.id_ticket));
+            if (!pareceTickets) {
+                console.warn("[tickets] El servidor devolvió algo que no son tickets; se conserva lo que había.");
+            } else {
                 historialTickets = data.filter(t => t && t.id_ticket);
                 guardarHistorialLocal("tickets", historialTickets);
                 avisoHistorialGuardado("ticketera-body", null);
