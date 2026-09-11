@@ -625,55 +625,77 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    // ------------------------------------------------------------------
+    // INDICE POR Id_Carga — se arma UNA sola vez
+    // ------------------------------------------------------------------
+    // Antes esto era un bucle ANIDADO: por CADA carga se recorrian TODOS los
+    // productos y TODOS los contratos buscando los suyos. Con los datos reales
+    // eran 253 x (629 + 391) = 258.060 comparaciones para armar 253 filas.
+    //
+    // Agrupando primero, son 1.020 pasadas para armar el indice y despues una
+    // busqueda directa por carga: unas 1.273 operaciones en total, 200 veces
+    // menos. Y deja de crecer al cuadrado: con el doble de cargas, el bucle
+    // viejo se ponia CUATRO veces mas lento; este, solo el doble.
+    //
+    // Ojo con la comparacion: el codigo viejo usaba == (floja) entre el id de
+    // la hoja y el de la carga, que empareja el numero 123 con el texto "123".
+    // Se usa String() en las dos puntas para conservar exactamente eso, y se
+    // saltean los ids vacios: un "" NO tiene que emparejar con un 0.
+    var productosPorCarga = {};
+    for (var p = 1; p < rowsProducto.length; p++) {
+      var idP = String(rowsProducto[p][1] || "");
+      if (!idP) continue;
+      if (!productosPorCarga[idP]) productosPorCarga[idP] = [];
+      productosPorCarga[idP].push({
+        producto: rowsProducto[p][2],
+        calibre: rowsProducto[p][3],
+        tipo: rowsProducto[p][4],
+        lote: rowsProducto[p][5],
+        posicion: rowsProducto[p][6],
+        envase: rowsProducto[p][7],
+        cantidad: rowsProducto[p][8],
+        kg_envase: rowsProducto[p][9],
+        total_kg: rowsProducto[p][10]
+      });
+    }
+
+    var contratosPorCarga = {};
+    for (var c = 1; c < rowsContrato.length; c++) {
+      var idC = String(rowsContrato[c][1] || "");
+      if (!idC) continue;
+      var kgCpValor = parseFloat(rowsContrato[c][6]) || 0;
+      var kgDescargaValor = parseFloat(rowsContrato[c][8]) || 0;
+      if (!contratosPorCarga[idC]) contratosPorCarga[idC] = [];
+      contratosPorCarga[idC].push({
+        // El UUID de la fila. Existia desde siempre pero no se devolvia:
+        // sin el, el modulo de Contratos no puede decir QUE fila editar
+        // (la carta de porte se repite entre cargas).
+        id_contrato: rowsContrato[c][0],
+        contrato_com: rowsContrato[c][2],
+        contrato_cli: rowsContrato[c][3],
+        carta_porte: rowsContrato[c][4],
+        destino: rowsContrato[c][5],
+        kg_cp: rowsContrato[c][6],
+        // Columna 7 = "Observaciones CP". Existía en la hoja desde siempre
+        // pero no se leía: quedaba escrita y la app nunca la volvía a ver.
+        observaciones_cp: rowsContrato[c][7],
+        kg_descarga: rowsContrato[c][8],
+        // La diferencia NO se guarda en el Sheet, se calcula acá.
+        // (La columna 9, "CP", es el archivo adjunto de la Carta de Porte, no una diferencia)
+        diferencia_carga: (kgDescargaValor - kgCpValor).toFixed(2),
+        archivo_cp: resolverArchivoDrive(rowsContrato[c][9] || "")
+      });
+    }
+
     var data = [];
 
     for (var i = 1; i < rowsOrden.length; i++) {
       var row = rowsOrden[i];
       var idCarga = row[0];
+      var claveCarga = String(idCarga || "");
 
-      var productos = [];
-      for (var p = 1; p < rowsProducto.length; p++) {
-        if (rowsProducto[p][1] == idCarga) {
-          productos.push({
-            producto: rowsProducto[p][2],
-            calibre: rowsProducto[p][3],
-            tipo: rowsProducto[p][4],
-            lote: rowsProducto[p][5],
-            posicion: rowsProducto[p][6],
-            envase: rowsProducto[p][7],
-            cantidad: rowsProducto[p][8],
-            kg_envase: rowsProducto[p][9],
-            total_kg: rowsProducto[p][10]
-          });
-        }
-      }
-
-      var contratos = [];
-      for (var c = 1; c < rowsContrato.length; c++) {
-        if (rowsContrato[c][1] == idCarga) {
-          var kgCpValor = parseFloat(rowsContrato[c][6]) || 0;
-          var kgDescargaValor = parseFloat(rowsContrato[c][8]) || 0;
-          contratos.push({
-            // El UUID de la fila. Existia desde siempre pero no se devolvia:
-            // sin el, el modulo de Contratos no puede decir QUE fila editar
-            // (la carta de porte se repite entre cargas).
-            id_contrato: rowsContrato[c][0],
-            contrato_com: rowsContrato[c][2],
-            contrato_cli: rowsContrato[c][3],
-            carta_porte: rowsContrato[c][4],
-            destino: rowsContrato[c][5],
-            kg_cp: rowsContrato[c][6],
-            // Columna 7 = "Observaciones CP". Existía en la hoja desde siempre
-            // pero no se leía: quedaba escrita y la app nunca la volvía a ver.
-            observaciones_cp: rowsContrato[c][7],
-            kg_descarga: rowsContrato[c][8],
-            // La diferencia NO se guarda en el Sheet, se calcula acá.
-            // (La columna 9, "CP", es el archivo adjunto de la Carta de Porte, no una diferencia)
-            diferencia_carga: (kgDescargaValor - kgCpValor).toFixed(2),
-            archivo_cp: resolverArchivoDrive(rowsContrato[c][9] || "")
-          });
-        }
-      }
+      var productos = productosPorCarga[claveCarga] || [];
+      var contratos = contratosPorCarga[claveCarga] || [];
 
       data.push({
         Id_Carga: row[0],
@@ -1986,4 +2008,37 @@ function respuestaErrorKg(mensaje) {
   return ContentService.createTextOutput(JSON.stringify({
     status: "error", message: mensaje
   })).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+// ---------------------------------------------------------------------------
+// Cuanto tarda ?action=read, medido DESDE ADENTRO de Apps Script
+// ---------------------------------------------------------------------------
+// Desde afuera solo se ve el total, que incluye la red y el arranque en frio.
+// Esto separa lo que tarda cada parte, que es lo unico que dice si un cambio
+// en el codigo sirvio o si el tiempo se va en otro lado.
+//
+// Se corre a mano desde el editor y NO escribe nada.
+function medirLecturaDeCargas() {
+  var t0 = new Date().getTime();
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var o = ss.getSheetByName(NOMBRE_HOJA_ORDEN).getDataRange().getValues();
+  var p = ss.getSheetByName(NOMBRE_HOJA_PRODUCTO).getDataRange().getValues();
+  var c = ss.getSheetByName(NOMBRE_HOJA_CONTRATO).getDataRange().getValues();
+  var tLeer = new Date().getTime();
+
+  var salida = doGet({ parameter: {} });
+  var tTodo = new Date().getTime();
+
+  var texto = salida.getContent ? salida.getContent() : String(salida);
+
+  Logger.log("=== LECTURA DE CARGAS ===");
+  Logger.log("  filas: Orden " + (o.length - 1) + " | Producto " + (p.length - 1) + " | Contrato " + (c.length - 1));
+  Logger.log("  leer las 3 hojas del Sheet: " + (tLeer - t0) + " ms");
+  Logger.log("  doGet completo:             " + (tTodo - tLeer) + " ms");
+  Logger.log("  TOTAL en el servidor:       " + (tTodo - t0) + " ms");
+  Logger.log("  tamaño de la respuesta:     " + Math.round(texto.length / 1024) + " KB");
+  Logger.log("");
+  Logger.log("  (lo que tarde de mas en el navegador es red + arranque en frio)");
 }
