@@ -126,18 +126,18 @@ function botonCorreoHistorialHtml(item, dataString, tipo) {
 // =============================================================================
 const REPORTES_CORREO = {
     carga: {
-        etiqueta: 'Control de Carga',
+        etiqueta: 'Control de Transporte',
         campoId: 'Id_Carga',
         accionEstado: 'actualizar_estado_correo',
         // Genera el PDF con la MISMA función que el botón de descarga
         generarPdf: function (dataString) { return generarPDFReporte(dataString, 'blob'); },
         asunto: function (item) {
             const referencia = resumenContratos(item) !== '-' ? resumenContratos(item) : resumenProductos(item);
-            return ['Control de Carga ' + (item.Tipo_Carga || ''), referencia, item.Fecha || '']
+            return ['Control de Transporte ' + (item.Tipo_Carga || ''), referencia, item.Fecha || '']
                 .map(function (p) { return String(p).trim(); }).filter(Boolean).join(' — ');
         },
         introMensaje: function (item) {
-            return 'Te envío el reporte de control de carga correspondiente al ' + (item.Fecha || 'día de la fecha') + '.\n'
+            return 'Te envío el reporte de control de transporte correspondiente al ' + (item.Fecha || 'día de la fecha') + '.\n'
                  + 'El detalle completo, las verificaciones y el registro fotográfico están en el PDF adjunto.';
         },
         // Filas de la tabla de datos generales del cuerpo del mail

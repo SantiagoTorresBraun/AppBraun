@@ -150,7 +150,7 @@
 
             <!-- Grid de Módulos Rediseñado -->
             <div class="menu-grid premium-grid">
-                <!-- Control de Carga -->
+                <!-- Control de Transporte -->
                 <div class="menu-card active" onclick="cambiarVista('view-submenu-carga')">
                     <div class="card-header">
                         <div class="card-icon cargo-icon">
@@ -176,12 +176,12 @@
                             </svg>
                         </div>
                         <div class="card-title-section">
-                            <h3 class="card-title">Control de Carga</h3>
+                            <h3 class="card-title">Control de Transporte</h3>
                             <span class="card-badge active-badge">Activo</span>
                         </div>
                     </div>
                     <div class="card-body">
-                        <p class="card-description">Gestiona y registra todas tus cargas con precisión</p>
+                        <p class="card-description">Órdenes de carga y control de las unidades que se cargan</p>
                     </div>
                     <div class="card-footer">
                         <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
@@ -344,11 +344,46 @@
     <section id="view-submenu-carga" class="view hidden">
         <div class="container submenu-container">
             <div class="submenu-header">
-                <h2 class="submenu-title">Selecciona el Tipo de Carga</h2>
-                <p class="submenu-subtitle">Elige entre Materia Prima o Producto Terminado</p>
+                <h2 class="submenu-title">Control de Transporte</h2>
+                <p class="submenu-subtitle">Elegí Orden de Carga, Producto Terminado o Materia Prima</p>
             </div>
 
             <div class="menu-grid premium-grid">
+                <!-- Orden de Carga (OC) -->
+                <div class="menu-card active" onclick="abrirOrdenCarga()">
+                    <div class="card-header">
+                        <div class="card-icon cargo-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Planilla de la orden -->
+                                <rect x="8" y="5" width="24" height="31" rx="3" fill="#fff"/>
+                                <rect x="8" y="5" width="24" height="31" rx="3" stroke="#A71D1D" stroke-width="2.4"/>
+                                <rect x="15" y="3" width="10" height="5" rx="2" fill="#A71D1D"/>
+                                <g stroke="#E0A32E" stroke-width="2.2" stroke-linecap="round">
+                                    <line x1="13" y1="15" x2="27" y2="15"/>
+                                    <line x1="13" y1="21" x2="27" y2="21"/>
+                                    <line x1="13" y1="27" x2="21" y2="27"/>
+                                </g>
+                                <!-- Camión asignado -->
+                                <path d="M26 33 h9 v5 h-9 z" fill="#A71D1D" fill-opacity=".14"/>
+                                <path d="M26 32.5 v6 h9" stroke="#A71D1D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M36 30 h3.5 l2.5 3.5 v5 h-6 z" fill="#A71D1D"/>
+                                <circle cx="30" cy="40" r="2.6" fill="#A71D1D"/>
+                                <circle cx="39" cy="40" r="2.6" fill="#A71D1D"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Orden de Carga</h3>
+                            <span class="card-badge coming-badge">En desarrollo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Arma la OC desde el contrato y asigna camiones, lotes y cartas de porte</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
                 <!-- Producto Terminado (PT) -->
                 <div class="menu-card active" onclick="abrirModuloCarga('PT')">
                     <div class="card-header">
@@ -410,14 +445,165 @@
                         </div>
                         <div class="card-title-section">
                             <h3 class="card-title">Materia Prima</h3>
-                            <span class="card-badge coming-badge">MP</span>
+                            <span class="card-badge active-badge">MP</span>
                         </div>
                     </div>
                     <div class="card-body">
                         <p class="card-description">Gestiona y registra las materias primas recibidas</p>
                     </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: ORDEN DE CARGA (paso previo al Control de Transporte) --- -->
+    <!-- ========================================================================= -->
+    <!-- La arma la oficina y se le manda a planta como informe de camiones.
+         Cuatro niveles: OC > CAMIÓN > CARTA DE PORTE > LOTE.
+         La lógica vive en orden-carga.js. -->
+    <section id="view-orden-carga" class="view hidden">
+        <div class="modulo-carga-header">
+            <div class="header-content">
+                <div class="header-title-section">
+                    <h2>Orden de Carga</h2>
+                    <p class="header-subtitle">Se arma en la oficina y continúa en planta como Control de Transporte</p>
+                </div>
+                <button class="btn-nuevo-registro-floating" onclick="ocDescartarBorrador()">
+                    <i class="fas fa-eraser"></i> Empezar de cero
+                </button>
+            </div>
+        </div>
+
+        <!-- Totales siempre a la vista: la OC se arma contra un número de kg -->
+        <div class="oc-barra-totales">
+            <div class="oc-total-item"><span class="oc-total-label">Camiones</span><span class="oc-total-valor" id="oc-total-camiones">0</span></div>
+            <div class="oc-total-item"><span class="oc-total-label">Bolsas</span><span class="oc-total-valor" id="oc-total-bolsas">0</span></div>
+            <div class="oc-total-item"><span class="oc-total-label">Total</span><span class="oc-total-valor" id="oc-total-kg">0 kg</span></div>
+            <div class="oc-total-item oc-falta hidden" id="oc-falta"></div>
+        </div>
+
+        <div class="container modulo-carga-container">
+            <div class="oc-nota-estado">
+                <i class="fas fa-info-circle"></i>
+                Módulo en desarrollo: por ahora la orden se guarda como borrador en este dispositivo.
+                Todavía no se envía al Sheet ni genera el Control de Transporte.
+            </div>
+
+            <form id="form-oc" onsubmit="return false;">
+
+                <!-- ===== CABECERA DE LA OC ===== -->
+                <h3>Datos de la Orden</h3>
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="oc-numero">N° de Orden de Carga</label>
+                        <input type="text" id="oc-numero" placeholder="2056" oninput="ocRecalcularTodo()" required>
+                    </div>
+                    <div class="form-group"><label for="oc-fecha">Fecha</label><input type="date" id="oc-fecha" required></div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="oc-contrato-fm">Contrato que encabeza la OC</label>
+                        <input type="text" id="oc-contrato-fm" placeholder="CN26-063">
+                    </div>
+                    <div class="form-group">
+                        <label for="oc-objetivo-kg">Objetivo de kg <span class="oc-ayuda">opcional</span></label>
+                        <input type="text" inputmode="decimal" class="campo-numero-ar" id="oc-objetivo-kg" placeholder="75000" oninput="ocRecalcularTodo()">
+                    </div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="oc-especie">Grano / Especie</label>
+                        <select id="oc-especie" class="enum-select" data-enum="producto"></select>
+                    </div>
+                    <div class="form-group"><label for="oc-cosecha">Cosecha</label><input type="text" id="oc-cosecha" placeholder="25-26"></div>
+                </div>
+
+                <!-- ===== DESTINO ===== -->
+                <h3>Destino</h3>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-destinatario">Destinatario</label><input type="text" id="oc-destinatario" placeholder="Razón social"></div>
+                    <div class="form-group"><label for="oc-destinatario-cuit">CUIT destinatario</label><input type="text" class="campo-cuit" id="oc-destinatario-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-destino">Destino de la mercadería</label><input type="text" id="oc-destino" placeholder="Razón social"></div>
+                    <div class="form-group"><label for="oc-destino-cuit">CUIT destino</label><input type="text" class="campo-cuit" id="oc-destino-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-destino-planta">N° de planta</label><input type="text" id="oc-destino-planta" placeholder="00000"></div>
+                    <div class="form-group"><label for="oc-destino-direccion">Dirección</label><input type="text" id="oc-destino-direccion" placeholder="Calle y número"></div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-destino-localidad">Localidad</label><input type="text" id="oc-destino-localidad" placeholder="Localidad"></div>
+                    <div class="form-group"><label for="oc-destino-provincia">Provincia</label><input type="text" id="oc-destino-provincia" placeholder="Provincia"></div>
+                </div>
+
+                <!-- ===== CARTA DE PORTE: DATOS FIJOS DE TODA LA OC ===== -->
+                <h3>Datos de Carta de Porte</h3>
+                <p class="oc-nota-seccion">Son los mismos para todas las cartas de porte de esta orden.</p>
+                <div class="form-group"><label for="oc-titular-cp">Titular de la carta de porte</label><input type="text" id="oc-titular-cp" placeholder="Razón social"></div>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-remitente-productor">Remitente comercial productor</label><input type="text" id="oc-remitente-productor"></div>
+                    <div class="form-group"><label for="oc-remitente-venta">Remitente comercial venta primaria</label><input type="text" id="oc-remitente-venta"></div>
+                </div>
+
+                <!-- ===== FLETE ===== -->
+                <h3>Flete</h3>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-flete-intermediario">Intermediario del flete</label><input type="text" id="oc-flete-intermediario" placeholder="Razón social"></div>
+                    <div class="form-group"><label for="oc-flete-intermediario-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-intermediario-cuit" inputmode="numeric"></div>
+                </div>
+                <div class="form-group-row">
+                    <div class="form-group"><label for="oc-flete-pagador">Pagador del flete</label><input type="text" id="oc-flete-pagador" placeholder="Razón social"></div>
+                    <div class="form-group"><label for="oc-flete-pagador-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-pagador-cuit" inputmode="numeric"></div>
+                </div>
+
+                <!-- ===== CAMIONES ===== -->
+                <div class="section-dynamic-header">
+                    <h3>Camiones</h3>
+                    <div class="section-actions-group">
+                        <button type="button" class="btn-gestionar-opciones" onclick="abrirGestorOpciones()" title="Gestionar opciones de Productos, Calibres, Tipos y Envases">
+                            <i class="fas fa-cog"></i> Opciones
+                        </button>
+                    </div>
+                </div>
+                <p class="oc-nota-seccion">
+                    Cada camión lleva una o varias cartas de porte, y cada carta de porte uno o varios lotes.
+                    Un camión no equivale a una sola CP.
+                </p>
+                <div id="wrapper-camiones"></div>
+                <button type="button" class="btn-agregar-item" onclick="ocAgregarCamion({ enfocar: true })">
+                    <i class="fas fa-plus"></i> Añadir otro camión
+                </button>
+
+                <!-- ===== ACUMULADO POR LOTE ===== -->
+                <h3>Acumulado por lote</h3>
+                <p class="oc-nota-seccion">
+                    Un mismo lote se reparte entre camiones y cartas de porte. Acá se ve cuánto sale en total de cada uno.
+                </p>
+                <div id="oc-resumen-lotes" class="oc-resumen-lotes">
+                    <p class="oc-vacio">Todavía no hay lotes cargados.</p>
+                </div>
+
+                <!-- ===== OBSERVACIONES Y VALIDACIÓN ===== -->
+                <h3>Observaciones</h3>
+                <div class="form-group">
+                    <label for="oc-observaciones">Indicaciones para la carga y la descarga</label>
+                    <input type="text" id="oc-observaciones">
+                </div>
+
+                <div id="oc-validacion" class="oc-validacion hidden"></div>
+
+                <button type="button" class="btn-primary" style="width:100%; margin-top:18px;" onclick="ocValidar()">
+                    <i class="fas fa-clipboard-check"></i> Revisar la orden
+                </button>
+                <p class="oc-nota-seccion" style="text-align:center; margin-bottom:60px;">
+                    Generar el PDF y crear el Control de Transporte es el paso siguiente del desarrollo.
+                </p>
+            </form>
         </div>
     </section>
 
@@ -1892,6 +2078,7 @@
     <script src="historial-local.js"></script>
     <script src="cola-sync.js"></script>
     <script src="app.js"></script>
+    <script src="orden-carga.js"></script>
     <script src="correo.js"></script>
     <script src="calidad.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>

@@ -469,9 +469,9 @@ function enviarReportePorCorreo(data) {
 // antiduplicado para que un reintento posterior pueda salir.
 function enviarReportePorCorreoInterno(data) {
   {
-    var asunto = data.Correo_Asunto || ("Control de Carga - " + (data.Id_Carga || ""));
+    var asunto = data.Correo_Asunto || ("Control de Transporte - " + (data.Id_Carga || ""));
     var html = data.Correo_Cuerpo_Html || "";
-    var opciones = { name: data.Correo_Nombre_Remitente || "Control de Carga Braun" };
+    var opciones = { name: data.Correo_Nombre_Remitente || "Control de Transporte Braun" };
 
     if (html) {
       opciones.htmlBody = html;

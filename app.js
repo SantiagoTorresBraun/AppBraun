@@ -306,12 +306,14 @@ function cambiarVista(idDestino) {
             const welcome = document.querySelector('.welcome-text');
             const nombre = nombreUsuarioActual();
             if (welcome && nombre) welcome.textContent = `¡Hola, ${nombre.split(' ')[0]}! Selecciona un módulo`;
+        } else if (idDestino === 'view-orden-carga') {
+            document.getElementById('header-title').textContent = "Orden de Carga";
         } else if (idDestino === 'view-submenu-carga') {
-            document.getElementById('header-title').textContent = "Control de Carga";
+            document.getElementById('header-title').textContent = "Control de Transporte";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-modulo-carga') {
-            document.getElementById('header-title').textContent = `Carga ${tipoCargaActual}`;
+            document.getElementById('header-title').textContent = `Transporte ${tipoCargaActual}`;
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-submenu-calidad') {
@@ -948,7 +950,7 @@ function celdaKgDescargaHtml(f) {
     // Un contrato que todavía no subió no tiene UUID: el backend se lo asigna
     // al guardarlo. Editarlo acá no tendría a qué fila apuntar.
     if (!f.id_contrato) {
-        return '<span class="kg-no-editable" title="Este contrato todavía no se sincronizó. Se puede editar desde Control de Carga.">' + valor + '</span>';
+        return '<span class="kg-no-editable" title="Este contrato todavía no se sincronizó. Se puede editar desde Control de Transporte.">' + valor + '</span>';
     }
 
     return '<button type="button" class="kg-editable" '
@@ -2303,7 +2305,7 @@ function guardarRegistroNuevo(registro) {
     const req = tx.objectStore("controles_carga").add(registro);
 
     req.onsuccess = function() {
-        finalizarGuardadoUI("¡Control de carga Braun guardado con éxito!", false);
+        finalizarGuardadoUI("¡Control de transporte Braun guardado con éxito!", false);
         renderOfflineCount();
         if (navigator.onLine) { sincronizarDatosPendientes(); }
         // Envío automático del reporte por correo (solo si el usuario lo activó

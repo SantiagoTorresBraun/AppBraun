@@ -1,0 +1,10 @@
+# Documentos comerciales de origen (propuestas, ordenes de carga reales).
+# NO van al repo: es publico, y estos archivos traen CUIT, CUIL, nombres de
+# choferes, dominios, tarifas y numeros de contrato. Lo que se necesita de
+# ellos ya esta volcado, sin datos personales, en DOCUMENTACION_ORDEN_CARGA.md.
+*.xlsx
+*.xls
+*.docx
+
+# Archivo suelto de notas
+trabajo

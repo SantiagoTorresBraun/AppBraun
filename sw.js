@@ -28,10 +28,12 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v11: modulo de Orden de Carga (orden-carga.js nuevo, index.html y style.css
+// cambiaron) y renombre de Control de Carga a Control de Transporte.
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
@@ -52,6 +54,7 @@ const RECURSOS = [
     './cola-sync.js',
     './auth.js',
     './app.js',
+    './orden-carga.js',
     './correo.js',
     './calidad.js',
     './produccion.js',

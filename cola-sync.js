@@ -70,7 +70,7 @@ const COLA_CAMPOS_INTERNOS = [
 const COLAS = [
     {
         store: 'controles_carga',
-        etiqueta: 'Control de Carga',
+        etiqueta: 'Control de Transporte',
         accion: null,              // el backend asume "guardar" si no viene _accion
         quitarId: false,           // la carga siempre viajó con su id local
         idVisible: item => item.Id_Carga || '(sin id)',
