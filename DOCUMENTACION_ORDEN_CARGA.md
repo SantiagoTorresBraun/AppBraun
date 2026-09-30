@@ -236,8 +236,21 @@ Archivo nuevo [orden-carga.js](orden-carga.js) + la vista `view-orden-carga` en
 Control de Transporte**: es un módulo aparte, y los registros PT ya guardados
 siguen igual, sin OC asociada.
 
+**Sigue la misma lógica que Control de Transporte**: se entra al **historial**,
+con sus filtros y su tabla, y el botón **Nueva Orden** abre el formulario. Dos
+pestañas (`tab-content-historial-oc` / `tab-content-nuevo-oc`) y un `ocSwitchTab`
+propio, calcado de `switchTab()` pero con sus ids — igual que hacen Calidad y
+Producción.
+
 Lo que hace hoy:
 
+- **Historial** con filtros por fecha, por N° de orden y búsqueda rápida sobre
+  todo lo escrito en la orden (contrato, destino, lote, chofer, dominio). Cada
+  fila se puede editar o borrar.
+- **Guardar**, que exige que la orden esté completa: una OC sin chofer o sin
+  contrato no sirve para mandarle a planta.
+- **Número de orden propuesto solo**: toma el mayor de la serie guardada y suma
+  uno. Se puede corregir a mano.
 - Cabecera completa de la OC: número, fecha, contrato, especie, cosecha,
   destino (con planta, dirección, localidad, provincia), destinatario, datos
   fijos de carta de porte y flete.
@@ -255,8 +268,13 @@ Lo que hace hoy:
   sus lotes. Avisa, no bloquea, hasta saber si es la balanza.
 - Botón **Revisar la orden**: lista lo que falta, incluido el CTG que no tenga
   11 dígitos.
-- Borrador guardado en el navegador (`localStorage`), con medio segundo de
-  espera para no escribir en cada tecla.
+- Borrador de lo que se está escribiendo, con medio segundo de espera para no
+  escribir en cada tecla. Si se cierra la app a la mitad, al tocar **Nueva
+  Orden** se ofrece seguir con esa.
+
+Las órdenes viven en `localStorage` (`braun_ordenes_carga`). Cuando exista la
+hoja en el Sheet, lo único que cambia es de dónde salen y a dónde van
+`ocListaOrdenes()` y `ocGuardarOrden()`; el resto de la pantalla no se entera.
 
 Lo que **todavía no** hace: escribir en el Sheet, generar el PDF de la OC y
 crear el Control de Transporte a partir de ella.

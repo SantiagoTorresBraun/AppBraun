@@ -29,6 +29,10 @@
 //  scrollATarjeta(), cambiarVista(). Por eso el <script> va DESPUÉS de app.js.
 // ============================================================================
 
+// Las órdenes guardadas y el borrador de la que se está escribiendo. Son dos
+// cosas distintas: la lista es lo que se ve en el historial, y el borrador es
+// el respaldo de lo que hay en pantalla ahora mismo, por si se cierra la app.
+const OC_LISTA_KEY = 'braun_ordenes_carga';
 const OC_STORAGE_KEY = 'braun_orden_carga_borrador';
 
 // Contador propio para los ids internos de las tarjetas anidadas. No es el
@@ -37,9 +41,15 @@ const OC_STORAGE_KEY = 'braun_orden_carga_borrador';
 let ocSecuencia = 0;
 function ocNuevoId(prefijo) { ocSecuencia += 1; return prefijo + '-' + ocSecuencia; }
 
+// Qué orden se está editando. null = se está creando una nueva.
+let ocIdEditando = null;
+
 // =========================================================================
-// --- 1. ENTRADA AL MÓDULO -------------------------------------------------
+// --- 1. ENTRADA AL MÓDULO Y PESTAÑAS --------------------------------------
 // =========================================================================
+// Misma lógica que Control de Transporte: al módulo se entra por el HISTORIAL,
+// y el botón "Nueva Orden" abre el formulario. Por eso las dos pestañas y el
+// ocSwitchTab propio, calcado de switchTab() pero con sus ids.
 
 function abrirOrdenCarga() {
     cambiarVista('view-orden-carga');
@@ -47,31 +57,53 @@ function abrirOrdenCarga() {
     // (el mismo gestor de Opciones), así que se pueblan desde ENUMS.
     document.querySelectorAll('#form-oc > .form-group-row .enum-select, #form-oc > .form-group .enum-select')
         .forEach(sel => poblarSelect(sel, sel.dataset.enum, sel.value || ''));
-    // Si hay un borrador a medio hacer, se recupera; si no, arranca limpio con
-    // un camión, una CP y un lote, que es el mínimo de cualquier OC.
-    const borrador = ocLeerBorrador();
-    if (borrador) {
-        ocAplicarBorrador(borrador);
-    } else {
-        ocNuevaEnBlanco();
-    }
+    ocSwitchTab('historial');
 }
 
-function ocNuevaEnBlanco() {
+function ocSwitchTab(tab) {
+    document.getElementById('tab-content-historial-oc').classList.toggle('hidden', tab === 'nuevo');
+    document.getElementById('tab-content-nuevo-oc').classList.toggle('hidden', tab !== 'nuevo');
+    // Los filtros son del historial: arriba de un formulario no pintan nada.
+    document.getElementById('oc-filtros').classList.toggle('hidden', tab === 'nuevo');
+    if (tab === 'nuevo') window.scrollTo({ top: 0, behavior: 'smooth' });
+    else ocRenderHistorial();
+}
+
+// Botón "Nueva Orden". Si quedó un borrador a medio escribir de una sesión
+// anterior, se ofrece recuperarlo antes de pisarlo.
+function ocNuevaOrden() {
+    const borrador = ocLeerBorrador();
+    if (borrador && confirm('Quedó una orden a medio cargar.\n\n¿Querés seguir con esa?\n\nAceptar = seguir con la que estaba.\nCancelar = empezar una nueva en blanco.')) {
+        ocIdEditando = borrador.id || null;
+        ocAplicarDatos(borrador);
+    } else {
+        ocLimpiarFormulario();
+    }
+    document.getElementById('oc-form-titulo').textContent = ocIdEditando
+        ? 'Editar Orden de Carga' : 'Crear Nueva Orden de Carga';
+    ocSwitchTab('nuevo');
+}
+
+function ocLimpiarFormulario() {
+    ocIdEditando = null;
     document.getElementById('form-oc').reset();
     document.getElementById('oc-fecha').valueAsDate = new Date();
+    document.getElementById('oc-numero').value = ocProximoNumero();
+    document.getElementById('oc-validacion').classList.add('hidden');
     document.getElementById('wrapper-camiones').innerHTML = '';
     ocSecuencia = 0;
     ocAgregarCamion();
     ocRecalcularTodo();
 }
 
-// Vacía la pantalla y el borrador guardado. Se pide confirmación porque no hay
-// forma de deshacerlo.
-function ocDescartarBorrador() {
-    if (!confirm('¿Descartar esta orden de carga y empezar de cero?\n\nNo se puede deshacer.')) return;
-    try { localStorage.removeItem(OC_STORAGE_KEY); } catch (e) { /* modo privado */ }
-    ocNuevaEnBlanco();
+// El número de orden hoy lo pone una persona a mano, que es justo lo que este
+// módulo viene a sacar. Se propone el siguiente de la serie que ya está
+// guardada, y se puede corregir a mano si hace falta.
+function ocProximoNumero() {
+    const numeros = ocListaOrdenes()
+        .map(o => parseInt(String(o.cabecera['oc-numero'] || '').replace(/\D/g, ''), 10))
+        .filter(n => !isNaN(n));
+    return numeros.length ? String(Math.max.apply(null, numeros) + 1) : '';
 }
 
 // =========================================================================
@@ -506,11 +538,12 @@ function ocAplicarValores(card, claseItem, valores) {
 }
 
 // =========================================================================
-// --- 5. BORRADOR EN EL NAVEGADOR ------------------------------------------
+// --- 5. GUARDADO, HISTORIAL Y BORRADOR ------------------------------------
 // =========================================================================
-// Todavía no hay backend para la OC. Mientras tanto el borrador vive en
-// localStorage, para que cerrar la app sin querer no borre media hora de
-// trabajo. Es el mismo criterio que usa el resto de la app con los enums.
+// Todavía no hay backend para la OC: las órdenes viven en localStorage, igual
+// que los enums. Cuando exista la hoja en el Sheet, lo único que cambia es de
+// dónde salen y a dónde van estas dos funciones (ocListaOrdenes / ocGuardarOrden);
+// el resto de la pantalla no se entera.
 
 const OC_CAMPOS_CABECERA = [
     'oc-numero', 'oc-fecha', 'oc-contrato-fm', 'oc-especie', 'oc-cosecha',
@@ -522,6 +555,8 @@ const OC_CAMPOS_CABECERA = [
     'oc-flete-pagador', 'oc-flete-pagador-cuit',
     'oc-objetivo-kg', 'oc-observaciones'
 ];
+
+// --- 5.1. Pasar la pantalla a un objeto y al revés ------------------------
 
 function ocArmarObjeto() {
     const cabecera = {};
@@ -543,11 +578,166 @@ function ocArmarObjeto() {
         camiones.push({ valores: ocValoresDe(camion, 'oc-camion-item'), cps: cps });
     });
 
-    return { cabecera: cabecera, camiones: camiones, guardado: new Date().toISOString() };
+    return {
+        id: ocIdEditando,
+        cabecera: cabecera,
+        camiones: camiones,
+        totales: ocTotalesActuales(),
+        guardado: new Date().toISOString()
+    };
 }
 
+function ocAplicarDatos(datos) {
+    document.getElementById('form-oc').reset();
+    document.getElementById('oc-validacion').classList.add('hidden');
+    Object.keys(datos.cabecera || {}).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.tagName === 'SELECT') poblarSelect(el, el.dataset.enum, datos.cabecera[id]);
+        else el.value = datos.cabecera[id];
+    });
+    document.getElementById('wrapper-camiones').innerHTML = '';
+    ocSecuencia = 0;
+    (datos.camiones || []).forEach(c => ocAgregarCamion({ valores: c.valores, cps: c.cps }));
+    if (!document.querySelectorAll('#wrapper-camiones .oc-camion').length) ocAgregarCamion();
+    ocRecalcularTodo();
+}
+
+// Los totales que ya pintó ocRecalcularTodo(), para no recorrer todo de nuevo
+// al guardar: el historial los muestra sin tener que abrir la orden.
+function ocTotalesActuales() {
+    return {
+        camiones: document.querySelectorAll('#wrapper-camiones .oc-camion').length,
+        bolsas: document.getElementById('oc-total-bolsas').textContent,
+        kg: document.getElementById('oc-total-kg').textContent
+    };
+}
+
+// --- 5.2. La lista de órdenes --------------------------------------------
+
+function ocListaOrdenes() {
+    try {
+        const crudo = localStorage.getItem(OC_LISTA_KEY);
+        const lista = crudo ? JSON.parse(crudo) : [];
+        return Array.isArray(lista) ? lista : [];
+    } catch (e) { return []; }
+}
+
+function ocEscribirLista(lista) {
+    try {
+        localStorage.setItem(OC_LISTA_KEY, JSON.stringify(lista));
+        return true;
+    } catch (e) {
+        alert('No se pudo guardar en este dispositivo.\n\nPuede ser falta de espacio o el modo privado del navegador.');
+        return false;
+    }
+}
+
+// Guardar exige que la orden esté completa: una OC a la que le falte el
+// chofer o el contrato no sirve para mandarle a planta.
+function ocGuardarOrden() {
+    if (!ocValidar()) {
+        document.getElementById('oc-validacion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+
+    const lista = ocListaOrdenes();
+    const orden = ocArmarObjeto();
+    if (ocIdEditando) {
+        const i = lista.findIndex(o => o.id === ocIdEditando);
+        if (i !== -1) lista[i] = orden; else lista.push(orden);
+    } else {
+        orden.id = 'OC-' + Date.now();
+        ocIdEditando = orden.id;
+        lista.push(orden);
+    }
+    if (!ocEscribirLista(lista)) return;
+
+    // Guardada: el borrador ya no hace falta.
+    try { localStorage.removeItem(OC_STORAGE_KEY); } catch (e) { /* modo privado */ }
+    ocIdEditando = null;
+    alert('Orden de carga guardada.');
+    ocSwitchTab('historial');
+}
+
+function ocEditarOrden(id) {
+    const orden = ocListaOrdenes().find(o => o.id === id);
+    if (!orden) { alert('Esa orden ya no está.'); ocRenderHistorial(); return; }
+    ocIdEditando = id;
+    ocAplicarDatos(orden);
+    document.getElementById('oc-form-titulo').textContent = 'Editar Orden de Carga';
+    ocSwitchTab('nuevo');
+}
+
+function ocEliminarOrden(id) {
+    const orden = ocListaOrdenes().find(o => o.id === id);
+    const numero = orden ? (orden.cabecera['oc-numero'] || '') : '';
+    if (!confirm('¿Borrar la orden de carga ' + (numero ? 'N° ' + numero : '') + '?\n\nNo se puede deshacer.')) return;
+    if (!ocEscribirLista(ocListaOrdenes().filter(o => o.id !== id))) return;
+    ocRenderHistorial();
+}
+
+// --- 5.3. El historial ---------------------------------------------------
+
+// Texto donde busca el filtro rápido: todo lo que se escribió en la orden.
+function ocTextoBuscable(orden) {
+    const partes = Object.keys(orden.cabecera || {}).map(k => orden.cabecera[k]);
+    (orden.camiones || []).forEach(c => {
+        Object.keys(c.valores || {}).forEach(k => partes.push(c.valores[k]));
+        (c.cps || []).forEach(cp => {
+            Object.keys(cp.valores || {}).forEach(k => partes.push(cp.valores[k]));
+            (cp.lotes || []).forEach(l => Object.keys(l).forEach(k => partes.push(l[k])));
+        });
+    });
+    return partes.filter(Boolean).join(' ').toLowerCase();
+}
+
+function ocRenderHistorial() {
+    const desde = document.getElementById('oc-filter-desde').value;
+    const hasta = document.getElementById('oc-filter-hasta').value;
+    const numero = (document.getElementById('oc-filter-numero').value || '').trim().toLowerCase();
+    const busqueda = (document.getElementById('oc-filter-search').value || '').trim().toLowerCase();
+
+    const filtradas = ocListaOrdenes().filter(o => {
+        const fecha = o.cabecera['oc-fecha'] || '';
+        if (desde && fecha && fecha < desde) return false;
+        if (hasta && fecha && fecha > hasta) return false;
+        if (numero && String(o.cabecera['oc-numero'] || '').toLowerCase().indexOf(numero) === -1) return false;
+        if (busqueda && ocTextoBuscable(o).indexOf(busqueda) === -1) return false;
+        return true;
+    }).sort((a, b) => String(b.guardado || '').localeCompare(String(a.guardado || '')));
+
+    const cuerpo = document.getElementById('tabla-oc-body');
+    if (!filtradas.length) {
+        const hayAlgo = ocListaOrdenes().length > 0;
+        cuerpo.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">'
+            + (hayAlgo ? 'Ninguna orden coincide con los filtros.'
+                       : 'Todavía no hay órdenes de carga. Tocá "Nueva Orden" para armar la primera.')
+            + '</td></tr>';
+        return;
+    }
+
+    cuerpo.innerHTML = filtradas.map(o => {
+        const t = o.totales || {};
+        return `<tr>
+            <td>${o.cabecera['oc-fecha'] || '-'}</td>
+            <td><strong>${o.cabecera['oc-numero'] || '-'}</strong></td>
+            <td>${o.cabecera['oc-contrato-fm'] || '-'}</td>
+            <td>${o.cabecera['oc-destino'] || '-'}</td>
+            <td>${t.camiones || 0}</td>
+            <td>${t.kg || '-'}</td>
+            <td>
+                <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.id}')"><i class="fas fa-edit"></i></button>
+                <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.id}')"><i class="fas fa-trash-alt"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// --- 5.4. El borrador de lo que se está escribiendo ----------------------
 // El recálculo corre en cada tecla, pero escribir en localStorage en cada tecla
 // es tirar trabajo: se espera medio segundo de quietud antes de guardar.
+
 let ocTimerGuardado = null;
 function ocGuardarBorrador() {
     clearTimeout(ocTimerGuardado);
@@ -555,6 +745,9 @@ function ocGuardarBorrador() {
 }
 
 function ocGuardarBorradorYa() {
+    // Si el formulario no está a la vista no hay nada que respaldar: evita
+    // pisar el borrador con el formulario vacío al entrar al historial.
+    if (document.getElementById('tab-content-nuevo-oc').classList.contains('hidden')) return;
     try {
         localStorage.setItem(OC_STORAGE_KEY, JSON.stringify(ocArmarObjeto()));
     } catch (e) {
@@ -570,19 +763,6 @@ function ocLeerBorrador() {
         const datos = JSON.parse(crudo);
         return (datos && datos.camiones) ? datos : null;
     } catch (e) { return null; }
-}
-
-function ocAplicarBorrador(datos) {
-    document.getElementById('form-oc').reset();
-    Object.keys(datos.cabecera || {}).forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = datos.cabecera[id];
-    });
-    document.getElementById('wrapper-camiones').innerHTML = '';
-    ocSecuencia = 0;
-    (datos.camiones || []).forEach(c => ocAgregarCamion({ valores: c.valores, cps: c.cps }));
-    if (!document.querySelectorAll('#wrapper-camiones .oc-camion').length) ocAgregarCamion();
-    ocRecalcularTodo();
 }
 
 // =========================================================================
