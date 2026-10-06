@@ -32,7 +32,7 @@ Los datos de AppSheet vienen en formato "visual" y la app los convierte al entra
 
 Sin esto fallaban: el filtro por rango de fechas, el orden "más reciente primero", los inputs numéricos al editar y los porcentajes del PDF.
 
-**Campos normalizados:** `Fecha Analisis`, `Kg`, `Humedad`, `Materia Extraña`, los 4 totales, y todos los calibres/defectos definidos en `CALIDAD_CONFIG` (de cualquier grano — Poroto Mung quedará cubierto automáticamente al habilitarse).
+**Campos normalizados:** `Fecha Analisis`, `Kg`, `Humedad`, `Materia Extraña`, `Peso Muestra (g)`, los 4 totales, y todos los calibres/defectos definidos en `CALIDAD_CONFIG` (de cualquier grano — Poroto Mung quedará cubierto automáticamente al habilitarse).
 
 ## 3. Fotos
 
@@ -120,3 +120,32 @@ Mismo patrón que el detalle de Control de Carga:
 4. Probar los filtros Desde/Hasta y la búsqueda rápida (cliente, lote, contrato).
 5. Abrir un registro con ✏ → el formulario debe cargar todos los porcentajes como números (ej. `8mm = 25.2`).
 6. Descargar el PDF de un registro del Sheet → todas las secciones con sus valores.
+
+
+## Carga en gramos y conversión a porcentaje
+
+El laboratorio **pesa en gramos** (lo habitual son 200 g de muestra), no estima
+porcentajes. Por eso el formulario pide primero **Peso de Muestra Analizada (g)**
+y todos los campos analíticos (calibres, defectos y Materia Extraña) se cargan en
+**gramos**. La app los convierte y **guarda porcentajes** en el Sheet:
+
+```
+Total Muestra Cargada (g) = calibres + defectos + materia extraña
+Total Muestra %           = Total Muestra Cargada ÷ Peso de Muestra × 100   → debe dar 100 %
+cada calibre/defecto %    = gramos ÷ Peso de Muestra × 100
+```
+
+- **Materia Extraña suma dentro de la muestra**: es peso que sale de esos mismos
+  200 g. Antes quedaba fuera de todo total.
+- **Humedad NO suma**: no es una fracción de peso separable, es una medición sobre
+  el total de la muestra.
+- Si el total no cierra en 100 % (±0,5), la tarjeta se marca en rojo y al guardar
+  aparece un aviso con los gramos cargados vs. el peso de muestra.
+
+**Columna nueva a crear en el Sheet: `Peso Muestra (g)`** (número, sin formato de
+porcentaje). El backend escribe por nombre de encabezado: si la columna no existe,
+el dato simplemente se pierde y los controles quedan sin registro del peso usado.
+
+**Controles históricos (AppSheet):** no tienen esa columna. Al editarlos la app
+asume 100 g, con lo cual gramos == porcentaje y el registro vuelve a guardarse
+idéntico a como estaba. No hay que migrar nada.

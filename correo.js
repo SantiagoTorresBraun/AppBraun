@@ -194,6 +194,7 @@ const REPORTES_CORREO = {
                 ['Contrato comercial', item['Contrato Comercial']],
                 ['Muestreo en', item['Muestreo en']],
                 ['Kg', item['Kg'] ? (typeof fmtKg === 'function' ? fmtKg(item['Kg']) : item['Kg']) + ' kg' : ''],
+                ['Muestra analizada', item['Peso Muestra (g)'] ? (typeof formatNumeroAR === 'function' ? formatNumeroAR(item['Peso Muestra (g)'], 2) : item['Peso Muestra (g)']) + ' g' : ''],
                 ['Humedad', pct(item['Humedad'])],
                 ['Materia extraña', pct(item['Materia Extraña'])],
                 ['Total granos buenos', pct(item['Total Granos Buenos'])],

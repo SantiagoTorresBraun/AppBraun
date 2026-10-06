@@ -160,7 +160,7 @@ function construirCamposAnaliticos() {
                 <div class="input-pct-wrap">
                     <input type="text" inputmode="decimal" id="${slugCampoCalidad(nombre)}" class="${cssClase} campo-numero-ar"
                            data-campo="${nombre}" value="0">
-                    <span>%</span>
+                    <span>g</span>
                 </div>`;
             wrapper.appendChild(div);
         });
@@ -168,6 +168,16 @@ function construirCamposAnaliticos() {
     };
     armarGrupo('wrapper-calibres-calidad', cfg.calibres, 'input-calibre-cal');
     armarGrupo('wrapper-defectos-calidad', cfg.defectos, 'input-defecto-cal');
+
+    // El peso de muestra y la materia extraña son inputs fijos del HTML (no se
+    // regeneran), así que se cablean una sola vez: también entran en los totales.
+    ['cal-peso-muestra', 'cal-materia-extrana'].forEach(id => {
+        const inp = document.getElementById(id);
+        if (inp && !inp.dataset.totalesCableado) {
+            inp.addEventListener('input', recalcularTotalesCalidad);
+            inp.dataset.totalesCableado = "1";
+        }
+    });
 }
 
 // --- 5. CAMPOS CALCULADOS (fórmulas del modelo AppSheet) ---
@@ -177,23 +187,38 @@ function leerSumaInputs(selector) {
     return suma;
 }
 
+// El laboratorio pesa en GRAMOS (lo normal son 200 g de muestra). Todos los
+// inputs analíticos están en gramos y se convierten a porcentaje contra el peso
+// de muestra analizada, que es lo que se guarda y lo que ve el cliente en el PDF.
+// Materia Extraña es peso que sale de esa misma muestra, así que suma al total.
 function recalcularTotalesCalidad() {
-    const totalBuenos = leerSumaInputs('.input-calibre-cal');   // 10mm + 9mm + 8mm + 7mm + Bajo zaranda
-    const totalDanios = leerSumaInputs('.input-defecto-cal');   // suma de defectos físicos
-    const totalMuestra = totalBuenos + totalDanios;             // Total Muestra Cargada
+    const pesoMuestra = parseNumeroAR(document.getElementById('cal-peso-muestra').value);
+    const buenosG  = leerSumaInputs('.input-calibre-cal');   // 10mm + 9mm + 8mm + 7mm + Bajo zaranda
+    const daniosG  = leerSumaInputs('.input-defecto-cal');   // suma de defectos físicos
+    const materiaExtranaG = parseNumeroAR(document.getElementById('cal-materia-extrana').value);
+    const totalMuestraG = buenosG + daniosG + materiaExtranaG;   // Total Muestra Cargada (g)
     const kg = parseNumeroAR(document.getElementById('cal-kg').value);
-    // Total Muestra %: porcentaje analizado sobre 100 (control de que la muestra cierre)
-    const totalMuestraPct = totalMuestra;
+
+    // Si todavía no cargaron el peso de muestra no se puede porcentuar: se muestra 0
+    // en vez de dividir por cero, y el submit lo bloquea con un aviso claro.
+    const aPct = g => pesoMuestra > 0 ? (g / pesoMuestra) * 100 : 0;
+    const totalBuenos    = aPct(buenosG);
+    const totalDanios    = aPct(daniosG);
+    const materiaExtrana = aPct(materiaExtranaG);
+    const totalMuestraPct = aPct(totalMuestraG);   // tiene que cerrar en 100%
 
     document.getElementById('total-granos-buenos').textContent = formatNumeroAR(totalBuenos, 2) + " %";
     document.getElementById('total-danios').textContent = formatNumeroAR(totalDanios, 2) + " %";
-    document.getElementById('total-muestra-cargada').textContent = formatNumeroAR(totalMuestra, 2);
+    document.getElementById('total-muestra-cargada').textContent = formatNumeroAR(totalMuestraG, 2) + " g";
     const elPct = document.getElementById('total-muestra-pct');
     elPct.textContent = formatNumeroAR(totalMuestraPct, 2) + " %";
-    // Alerta visual si la muestra no cierra en 100%
-    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', Math.abs(totalMuestraPct - 100) > 0.5 && totalMuestraPct > 0);
+    // Alerta visual si la muestra no cierra en 100% (faltó pesar algo o se cargó de más)
+    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', Math.abs(totalMuestraPct - 100) > 0.5 && totalMuestraG > 0);
 
-    return { totalBuenos, totalDanios, totalMuestra, totalMuestraPct, kg };
+    return {
+        pesoMuestra, buenosG, daniosG, materiaExtranaG, totalMuestraG,
+        totalBuenos, totalDanios, materiaExtrana, totalMuestraPct, kg
+    };
 }
 
 // --- 6. FOTOS (compresión idéntica al módulo de carga) ---
@@ -274,7 +299,8 @@ function construirRegistroCalidad(idParaGuardar) {
         "Kg": parseNumeroAR(document.getElementById('cal-kg').value),
 
         "Humedad": parseNumeroAR(document.getElementById('cal-humedad').value),
-        "Materia Extraña": parseNumeroAR(document.getElementById('cal-materia-extrana').value),
+        // Materia Extraña se carga en gramos pero se guarda en % como el resto del análisis
+        "Materia Extraña": Number(totales.materiaExtrana.toFixed(2)),
         "Insectos Vivos o Muertos": document.querySelector('input[name="cal_insectos"]:checked').value,
         "Olor": document.querySelector('input[name="cal_olor"]:checked').value,
         "observaciones": document.getElementById('cal-observaciones').value,
@@ -282,7 +308,9 @@ function construirRegistroCalidad(idParaGuardar) {
         // Campos calculados (se envían resueltos para que el Sheet no dependa de fórmulas)
         "Total Granos Buenos": Number(totales.totalBuenos.toFixed(2)),
         "Total de Daños": Number(totales.totalDanios.toFixed(2)),
-        "Total Muestra Cargada": Number(totales.totalMuestra.toFixed(2)),
+        // Peso sobre el que se porcentuó todo el análisis (normalmente 200 g)
+        "Peso Muestra (g)": Number(totales.pesoMuestra.toFixed(2)),
+        "Total Muestra Cargada": Number(totales.totalMuestraG.toFixed(2)),
         "Total Muestra %": Number(totales.totalMuestraPct.toFixed(2)),
 
         // Multimedia y archivos
@@ -294,9 +322,15 @@ function construirRegistroCalidad(idParaGuardar) {
         "PDF Control Calidad": ""
     };
 
-    // Variables analíticas dinámicas (calibres y defectos del grano activo)
+    // Variables analíticas dinámicas (calibres y defectos del grano activo).
+    // Se cargan en gramos y se guardan en % sobre el peso de muestra analizada,
+    // para que todo el histórico (incluidos los controles viejos de AppSheet,
+    // que ya venían en %) sea comparable y el PDF del cliente sea correcto.
+    const pesoMuestra = totales.pesoMuestra;
     document.querySelectorAll('.input-calibre-cal, .input-defecto-cal').forEach(inp => {
-        registro[inp.dataset.campo] = parseNumeroAR(inp.value);
+        const gramos = parseNumeroAR(inp.value);
+        const pct = pesoMuestra > 0 ? (gramos / pesoMuestra) * 100 : 0;
+        registro[inp.dataset.campo] = Number(pct.toFixed(2));
     });
 
     return registro;
@@ -312,8 +346,13 @@ document.getElementById('form-calidad').addEventListener('submit', function(e) {
     }
 
     const totales = recalcularTotalesCalidad();
-    if (totales.totalMuestra > 0 && Math.abs(totales.totalMuestraPct - 100) > 0.5) {
-        const seguir = confirm(`Atención: la muestra suma ${formatNumeroAR(totales.totalMuestraPct, 2)}% (calibres + defectos) y no cierra en 100%.\n\n¿Querés guardar igual?`);
+    if (!(totales.pesoMuestra > 0)) {
+        alert("Cargá el \"Peso de Muestra Analizada (g)\" (normalmente 200 g): sin ese dato no se pueden calcular los porcentajes.");
+        document.getElementById('cal-peso-muestra').focus();
+        return;
+    }
+    if (totales.totalMuestraG > 0 && Math.abs(totales.totalMuestraPct - 100) > 0.5) {
+        const seguir = confirm(`Atención: cargaste ${formatNumeroAR(totales.totalMuestraG, 2)} g (calibres + defectos + materia extraña) sobre una muestra de ${formatNumeroAR(totales.pesoMuestra, 2)} g, o sea ${formatNumeroAR(totales.totalMuestraPct, 2)}%.\n\nLa muestra no cierra en 100%. ¿Querés guardar igual?`);
         if (!seguir) return;
     }
 
@@ -407,7 +446,7 @@ function sincronizarCalidadPendientes() {
 // edición y PDF funcionen igual que con los registros creados desde la app.
 
 const CAMPOS_NUMERICOS_CALIDAD = [
-    "Kg", "Humedad", "Materia Extraña",
+    "Kg", "Humedad", "Materia Extraña", "Peso Muestra (g)",
     "Total Granos Buenos", "Total de Daños",
     "Total Muestra Cargada", "Total Muestra %"
 ];
@@ -773,6 +812,8 @@ function abrirDetalleCalidad(dataString) {
         texto('det-cal-cliente', item["Cliente"]);
         texto('det-cal-muestreo', item["Muestreo en"]);
         texto('det-cal-kg', num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR') + ' kg' : '-');
+        const pesoMuestraDet = num(item["Peso Muestra (g)"]);
+        texto('det-cal-peso-muestra', pesoMuestraDet ? formatNumeroAR(pesoMuestraDet, 2) + ' g' : '-');
         texto('det-cal-tipo', item["Tipo"]);
         texto('det-cal-calibre', item["Calibre"]);
         texto('det-cal-envase', item["Envase"]);
@@ -887,14 +928,21 @@ function cargarCalidadParaEditar(base64Data) {
         poblarSelect(document.getElementById('cal-envase'), 'envase', item["Envase"] || "");
         document.getElementById('cal-kg').value = valorPlanoParaEditar(item["Kg"] || 0);
 
-        // Variables analíticas
+        // Variables analíticas: en el Sheet están en %, en el formulario se editan
+        // en gramos, así que hay que convertirlas contra el peso de muestra del
+        // control. Los controles viejos (AppSheet) no tienen esa columna: se asume
+        // 100 g, con lo cual gramos == % y el registro vuelve a guardarse idéntico.
+        const pesoGuardado = Number(item["Peso Muestra (g)"]) > 0 ? Number(item["Peso Muestra (g)"]) : 100;
+        document.getElementById('cal-peso-muestra').value = valorPlanoParaEditar(pesoGuardado);
+        const aGramos = pct => Number((((Number(pct) || 0) / 100) * pesoGuardado).toFixed(2));
+
         document.querySelectorAll('.input-calibre-cal, .input-defecto-cal').forEach(inp => {
-            inp.value = valorPlanoParaEditar(item[inp.dataset.campo] || 0);
+            inp.value = valorPlanoParaEditar(aGramos(item[inp.dataset.campo]));
         });
 
-        // Condición
+        // Condición (Humedad sigue siendo un % directo, no una fracción de peso)
         document.getElementById('cal-humedad').value = valorPlanoParaEditar(item["Humedad"] || 0);
-        document.getElementById('cal-materia-extrana').value = valorPlanoParaEditar(item["Materia Extraña"] || 0);
+        document.getElementById('cal-materia-extrana').value = valorPlanoParaEditar(aGramos(item["Materia Extraña"]));
         const radioInsectos = document.querySelector(`input[name="cal_insectos"][value="${item["Insectos Vivos o Muertos"] || 'NO'}"]`);
         if (radioInsectos) radioInsectos.checked = true;
         const radioOlor = document.querySelector(`input[name="cal_olor"][value="${item["Olor"] || 'NO'}"]`);
@@ -1255,7 +1303,9 @@ async function generarPDFCalidad(base64Data, modo) {
             ["Calibre:", item["Calibre"] || '-'],
             ["Fecha AC:", fechaVisible],
             ["Envase:", item["Envase"] || '-'],
-            ["Kg:", num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-']
+            ["Kg:", num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'],
+            // Deja asentado sobre cuántos gramos se porcentuó el análisis
+            ["Muestra analizada:", num(item["Peso Muestra (g)"]) ? formatNumeroAR(num(item["Peso Muestra (g)"]), 2) + ' g' : '-']
         ];
         let yIzq = yTablas + 13;
         doc.setTextColor(45, 45, 45);

@@ -873,7 +873,17 @@
                     </div>
 
                     <!-- SECCIÓN 2: ANÁLISIS DE CALIBRE -->
-                    <h3><i class="fas fa-ruler-horizontal"></i> Análisis de Calibre (%)</h3>
+                    <!-- Peso de muestra: TODO el análisis se carga en gramos y se
+                         convierte a % contra este valor. Normalmente se analizan 200 g. -->
+                    <h3><i class="fas fa-weight-scale"></i> Muestra Analizada</h3>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="cal-peso-muestra">Peso de Muestra Analizada (g)</label>
+                            <input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-peso-muestra" value="200">
+                        </div>
+                    </div>
+
+                    <h3><i class="fas fa-ruler-horizontal"></i> Análisis de Calibre (g)</h3>
                     <div id="wrapper-calibres-calidad" class="calidad-grid-porcentajes"></div>
                     <div class="calidad-total-card buenos">
                         <span>Total Granos Buenos</span>
@@ -881,16 +891,26 @@
                     </div>
 
                     <!-- SECCIÓN 3: DEFECTOS -->
-                    <h3><i class="fas fa-triangle-exclamation"></i> Defectos Físicos (%)</h3>
+                    <h3><i class="fas fa-triangle-exclamation"></i> Defectos Físicos (g)</h3>
                     <div id="wrapper-defectos-calidad" class="calidad-grid-porcentajes"></div>
                     <div class="calidad-total-card danios">
                         <span>Total de Daños</span>
                         <strong id="total-danios">0.00 %</strong>
                     </div>
 
+                    <!-- Materia Extraña es peso que sale de la misma muestra, así que
+                         suma dentro del total analizado (no es una condición aparte). -->
+                    <h3><i class="fas fa-seedling"></i> Materia Extraña (g)</h3>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="cal-materia-extrana">Materia Extraña (g)</label>
+                            <input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-materia-extrana" value="0">
+                        </div>
+                    </div>
+
                     <div class="calidad-totales-resumen">
                         <div class="calidad-total-card muestra">
-                            <span>Total Muestra Cargada</span>
+                            <span>Total Muestra Cargada (g)</span>
                             <strong id="total-muestra-cargada">0.00</strong>
                         </div>
                         <div class="calidad-total-card muestra-pct">
@@ -903,7 +923,6 @@
                     <h3><i class="fas fa-vial"></i> Condición de la Muestra</h3>
                     <div class="form-group-row">
                         <div class="form-group"><label for="cal-humedad">Humedad (%)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-humedad" value="0"></div>
-                        <div class="form-group"><label for="cal-materia-extrana">Materia Extraña (%)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-materia-extrana" value="0"></div>
                     </div>
                     <div class="checklist-item"><p>Insectos Vivos o Muertos</p>
                         <div class="si-no-toggle">
@@ -1305,6 +1324,7 @@
                         <div class="detalle-item"><label>Cliente</label><div class="detalle-value" id="det-cal-cliente">-</div></div>
                         <div class="detalle-item"><label>Muestreo en</label><div class="detalle-value" id="det-cal-muestreo">-</div></div>
                         <div class="detalle-item"><label>Kg</label><div class="detalle-value" id="det-cal-kg">-</div></div>
+                        <div class="detalle-item"><label>Muestra Analizada</label><div class="detalle-value" id="det-cal-peso-muestra">-</div></div>
                         <div class="detalle-item"><label>Tipo</label><div class="detalle-value" id="det-cal-tipo">-</div></div>
                         <div class="detalle-item"><label>Calibre</label><div class="detalle-value" id="det-cal-calibre">-</div></div>
                         <div class="detalle-item"><label>Envase</label><div class="detalle-value" id="det-cal-envase">-</div></div>
