@@ -5,12 +5,21 @@
 // "mIGRACION" (ID 18iIQlwh_9BT_HBnhdUgSUw2oGHqytkEI-7bv8UvwJ4dx4hbsZQPnD-vU),
 // que está pegado adentro del Sheet BD_BRC.
 //
-// Sincronizado el 14/08/2026.
+// Sincronizado el 06/10/2026.
 //
 // La FUENTE DE VERDAD sigue siendo el editor de Apps Script: este archivo es
 // una copia para poder leer y revisar el código sin entrar al editor. Si se
 // modifica acá, hay que copiarlo al editor y volver a "Implementar → Nueva
 // versión" para que la app en producción lo use.
+//
+// EL ESPEJO SE REEMPLAZA ENTERO, no por partes. Pegar solo los pedazos nuevos
+// es como se desincroniza, y así nació el peor bug que tuvo este backend: una
+// copia vieja y completa conviviendo con la buena (`Sin titulo 4.gs`). Como
+// todos los .gs comparten un único espacio global, ganaba la vieja y anulaba
+// las mejoras. Ver INVENTARIO_APPS_SCRIPT.md.
+//
+// Antes de pisar el editor, conviene copiar lo que hay ahí y compararlo contra
+// este archivo: es lo único que detecta un cambio hecho directo en el editor.
 //
 // Reemplaza a "Codigo-COMPLETO-para-pegar.gs", que quedó desactualizado.
 // ============================================================
