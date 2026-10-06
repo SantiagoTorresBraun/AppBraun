@@ -1,7 +1,7 @@
 # Orden de Carga — modelo de datos y vinculación con Control de Transporte
 
-> Estado: **la orden ya se guarda en el Sheet**. Falta el PDF para planta y el
-> enganche con Control de Transporte.
+> Estado: **la orden se guarda en el Sheet y genera su PDF para planta**.
+> Falta el enganche con Control de Transporte.
 > Fuentes: `Propuesta nuevas vinculaciones.docx` y el Excel real
 > `CN26-063 Orden de Carga 14-7.xlsx` (OC 2056, 14/07).
 > Última actualización: 06/10/2026.
@@ -347,12 +347,44 @@ test_orden_carga.js`. Es la única forma de probar el backend sin desplegarlo.
 > `01_backend_principal.gs` y hacer **Implementar → Nueva versión**. Hasta que
 > eso pase, la app guarda las órdenes en el dispositivo y las deja en la cola.
 
+### El PDF para planta — cuarto incremento
+
+`ocGenerarPDF()` en [orden-carga.js](orden-carga.js) arma el **informe de
+camiones**: lo mismo que hoy se manda como Excel, en el mismo orden.
+
+- Banner rojo con el **N° de orden**, logo, y la cabecera: fecha, contrato,
+  grano, cosecha, totales y objetivo de kg.
+- **Destino** en su propio bloque (destinatario, planta, dirección), y los datos
+  de carta de porte y flete que son iguales para toda la orden.
+- **Un bloque por camión**, con una barra roja y el **dominio en grande**: es lo
+  primero que busca quien está parado al lado del camión. Debajo, transportista
+  y chofer con sus CUIT.
+- Dentro de cada camión, **una franja por carta de porte** (productor, CTTO,
+  CTG, peso neto, observaciones) y la **tabla de lotes** a cargar.
+- Al final, el **total por lote** de toda la orden y el total general.
+- Numeración "OC 2056 · Hoja 2 de 3" en cada hoja: el informe se imprime y se
+  reparte, y una hoja suelta sin número no se sabe de dónde salió.
+
+Reutiliza del reporte de Control de Transporte el logo, el pie de página, la
+tabla con bordes y el corte de hoja: los dos PDF los mira la misma gente el
+mismo día, así que tienen que verse de la misma familia.
+
+Se ofrece al guardar la orden, y queda el botón 📄 en cada fila del historial.
+
+#### Cómo se prueba
+
+[test_orden_carga_pdf.js](test_orden_carga_pdf.js) carga el jsPDF real y los
+helpers de `app.js`, genera el informe de la OC 2056 y después **audita las
+coordenadas del PDF que salió**: que ningún rectángulo ni línea de texto se
+salga de la hoja ni se monte sobre el pie. Ese es el error que no se ve hasta
+que alguien imprime. También prueba una orden sin camiones y una de 12 camiones,
+para verificar el corte de hoja.
+
 ## 9. Lo que sigue
 
-1. **El PDF de la OC** — el informe de camiones que hoy se le manda a planta.
-2. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que
+1. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que
    planta abra la orden por número, elija su camión y arranque el Control de
    Transporte con todo cargado. Depende de cerrar el mapeo campo por campo
    (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 3.1).
-3. Datos maestros (destinos, transportistas, choferes, vehículos, productores)
+2. Datos maestros (destinos, transportistas, choferes, vehículos, productores)
    para elegir en vez de escribir.

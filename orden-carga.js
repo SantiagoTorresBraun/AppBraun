@@ -758,11 +758,17 @@ async function ocGuardarOrden() {
 
     if (navigator.onLine && typeof sincronizarCola === 'function' && typeof colaPorStore === 'function') {
         sincronizarCola(colaPorStore(OC_STORE));
-        alert('Orden de carga guardada. Se está sincronizando con el Sheet.');
-    } else {
-        alert('Orden de carga guardada en este dispositivo.\n\nSe va a subir sola cuando haya señal.');
     }
     ocSwitchTab('historial');
+
+    // El PDF es el informe que se le manda a planta: se ofrece en el momento,
+    // que es cuando hace falta. Si dice que no, queda el botón del historial.
+    const aviso = navigator.onLine
+        ? 'Orden de carga guardada.'
+        : 'Orden de carga guardada en este dispositivo. Se va a subir sola cuando haya señal.';
+    if (confirm(aviso + '\n\n¿Generás el PDF para mandarle a planta?')) {
+        ocGenerarPDF(orden);
+    }
 }
 
 function ocEditarOrden(idOC) {
@@ -886,6 +892,7 @@ async function ocRenderHistorial() {
             <td>${o.Total_Camiones || 0}</td>
             <td>${formatNumeroAR(o.Total_Kg || 0, 0)} kg</td>
             <td>
+                <button type="button" class="btn-accion pdf" title="Descargar el informe para planta" onclick="ocGenerarPDF('${o.Id_OC}')"><i class="fas fa-file-pdf"></i></button>
                 <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.Id_OC}')"><i class="fas fa-edit"></i></button>
                 <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.Id_OC}')"><i class="fas fa-trash-alt"></i></button>
             </td>
@@ -1038,4 +1045,332 @@ function ocValidar() {
     }
     caja.classList.remove('hidden');
     return faltan.length === 0;
+}
+
+// =========================================================================
+// --- 7. EL PDF DE LA ORDEN: EL INFORME DE CAMIONES QUE VA A PLANTA --------
+// =========================================================================
+// Es lo que hoy se manda como Excel. Tiene que decir exactamente lo mismo, en
+// el mismo orden: la cabecera arriba (quién recibe, qué grano, de qué contrato)
+// y después UN BLOQUE POR CAMIÓN con sus cartas de porte y los lotes de cada
+// una. El operario lo lee parado al lado del camión, así que lo que busca
+// —dominio, chofer, qué lotes cargar y cuántas bolsas— va en negrita y grande.
+//
+// Reutiliza de app.js el logo, el pie de página, la tabla con bordes y el corte
+// de hoja: el PDF de la OC y el del Control de Transporte tienen que verse de
+// la misma familia, porque los mira la misma gente el mismo día.
+
+const OC_PDF_MARGEN_X = 14;
+const OC_PDF_ANCHO = 182;        // 196 - 14, igual que el reporte de carga
+const OC_ROJO = [183, 28, 28];
+const OC_GRIS = [40, 40, 40];
+
+// Acepta el id (desde el historial) o la orden ya armada (al guardar). Lo
+// segundo importa: recién guardada, el historial todavía se está refrescando y
+// buscarla por id podía no encontrarla.
+function ocGenerarPDF(ordenOId) {
+    const orden = (typeof ordenOId === 'string') ? ocBuscarOrden(ordenOId) : ordenOId;
+    if (!orden) { alert('No encontré esa orden de carga.'); return; }
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+        let y = ocPdfEncabezado(doc, orden);
+        y = ocPdfCabeceraDatos(doc, orden, y);
+        y = ocPdfCamiones(doc, orden, y);
+        ocPdfResumenLotes(doc, orden, y);
+
+        const totalPaginas = doc.internal.getNumberOfPages();
+        for (let p = 1; p <= totalPaginas; p++) {
+            doc.setPage(p);
+            agregarPiePagina(doc);
+            // Numeración: el informe se imprime y se reparte, y una hoja suelta
+            // sin número no se sabe de qué orden es ni si falta alguna.
+            doc.setTextColor(130, 130, 130);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.text('OC ' + (orden.Nro_OC || '-') + '  ·  Hoja ' + p + ' de ' + totalPaginas,
+                     196, 289, { align: 'right' });
+        }
+
+        doc.save('Orden_de_Carga_' + (orden.Nro_OC || 'Braun') + '.pdf');
+    } catch (err) {
+        console.error('No se pudo generar el PDF de la orden:', err);
+        alert('Ocurrió un inconveniente al generar el PDF de esta orden.');
+    }
+}
+
+// --- Banner rojo con el número de orden ----------------------------------
+function ocPdfEncabezado(doc, orden) {
+    doc.setFillColor(...OC_ROJO);
+    doc.rect(0, 0, 210, 32, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(19);
+    doc.text('Orden de Carga', OC_PDF_MARGEN_X, 17);
+
+    // El número es el dato con el que la planta y la oficina se entienden.
+    doc.setFontSize(12);
+    doc.text('N° ' + (orden.Nro_OC || '-'), OC_PDF_MARGEN_X, 26);
+
+    try {
+        doc.addImage(LOGO_BRAUN_BLANCO, 'PNG', 150, 4.5, 44, 23.6);
+    } catch (logoErr) {
+        console.error('No se pudo insertar el logo:', logoErr);
+    }
+    return 42;
+}
+
+// Una línea "etiqueta: valor". Devuelve la Y siguiente.
+function ocPdfDato(doc, etiqueta, valor, x, y, anchoEtiqueta) {
+    doc.setTextColor(...OC_GRIS);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(etiqueta, x, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(valor || '-'), x + anchoEtiqueta, y);
+    return y + 5;
+}
+
+function ocPdfTitulo(doc, texto, y) {
+    y = pdfNuevaPaginaSiNoEntra(doc, y, 14);
+    doc.setTextColor(...OC_ROJO);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(texto, OC_PDF_MARGEN_X, y);
+    doc.setDrawColor(...OC_ROJO);
+    doc.setLineWidth(0.4);
+    doc.line(OC_PDF_MARGEN_X, y + 1.5, OC_PDF_MARGEN_X + OC_PDF_ANCHO, y + 1.5);
+    return y + 7;
+}
+
+// --- Cabecera: lo que es igual para toda la orden ------------------------
+function ocPdfCabeceraDatos(doc, orden, y) {
+    const col2 = 110;   // segunda columna
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...OC_GRIS);
+
+    let yIzq = y, yDer = y;
+    yIzq = ocPdfDato(doc, 'Fecha:', orden.Fecha, OC_PDF_MARGEN_X, yIzq, 24);
+    yIzq = ocPdfDato(doc, 'Contrato:', orden.Contrato_Encabeza, OC_PDF_MARGEN_X, yIzq, 24);
+    yIzq = ocPdfDato(doc, 'Grano:', orden.Especie, OC_PDF_MARGEN_X, yIzq, 24);
+    yIzq = ocPdfDato(doc, 'Cosecha:', orden.Cosecha, OC_PDF_MARGEN_X, yIzq, 24);
+
+    yDer = ocPdfDato(doc, 'Camiones:', orden.Total_Camiones || 0, col2, yDer, 26);
+    yDer = ocPdfDato(doc, 'Bolsas:', formatNumeroAR(orden.Total_Bolsas || 0, 0), col2, yDer, 26);
+    yDer = ocPdfDato(doc, 'Total kg:', formatNumeroAR(orden.Total_Kg || 0, 0) + ' kg', col2, yDer, 26);
+    if (orden.Objetivo_Kg) {
+        yDer = ocPdfDato(doc, 'Objetivo:', formatNumeroAR(orden.Objetivo_Kg, 0) + ' kg', col2, yDer, 26);
+    }
+
+    y = Math.max(yIzq, yDer) + 3;
+
+    // Destino: es lo que mira quien despacha, así que va en su propio bloque.
+    y = ocPdfTitulo(doc, 'DESTINO', y);
+    const destino = [
+        ['Destinatario', ocPdfConCuit(orden.Destinatario, orden.Destinatario_CUIT)],
+        ['Destino de la mercadería', ocPdfConCuit(orden.Destino, orden.Destino_CUIT)],
+        ['Planta', orden.Destino_Planta],
+        ['Dirección', [orden.Destino_Direccion, orden.Destino_Localidad, orden.Destino_Provincia]
+            .filter(Boolean).join(', ')]
+    ].filter(f => f[1]);
+
+    if (destino.length) {
+        y = ocPdfTablaDosColumnas(doc, destino, y);
+    }
+
+    // Carta de porte y flete: los mismos para toda la orden.
+    const fijos = [
+        ['Titular carta de porte', orden.Titular_CP],
+        ['Remitente comercial productor', orden.Remitente_Productor],
+        ['Remitente comercial venta primaria', orden.Remitente_Venta],
+        ['Intermediario del flete', ocPdfConCuit(orden.Flete_Intermediario, orden.Flete_Intermediario_CUIT)],
+        ['Pagador del flete', ocPdfConCuit(orden.Flete_Pagador, orden.Flete_Pagador_CUIT)]
+    ].filter(f => f[1]);
+
+    if (fijos.length) {
+        y = ocPdfTitulo(doc, 'CARTA DE PORTE Y FLETE', y + 2);
+        y = ocPdfTablaDosColumnas(doc, fijos, y);
+    }
+
+    if (orden.Observaciones) {
+        y = ocPdfTitulo(doc, 'INDICACIONES', y + 2);
+        doc.setTextColor(...OC_GRIS);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const lineas = doc.splitTextToSize(String(orden.Observaciones), OC_PDF_ANCHO);
+        y = pdfNuevaPaginaSiNoEntra(doc, y, lineas.length * 4 + 4);
+        doc.text(lineas, OC_PDF_MARGEN_X, y);
+        y += lineas.length * 4 + 2;
+    }
+
+    return y + 4;
+}
+
+// "ARGENCROPS SA (CUIT 30-...)" — el CUIT entre paréntesis solo si está.
+function ocPdfConCuit(razonSocial, cuit) {
+    if (!razonSocial) return '';
+    return cuit ? razonSocial + '  (CUIT ' + cuit + ')' : String(razonSocial);
+}
+
+function ocPdfTablaDosColumnas(doc, filas, y) {
+    const columnas = [
+        { header: '', width: 62 },
+        { header: '', width: OC_PDF_ANCHO - 62 }
+    ];
+    return dibujarTablaConBordes(doc, OC_PDF_MARGEN_X, y, OC_PDF_ANCHO, columnas, filas,
+        { conHeader: false, fontSize: 8.5, alturaFila: 6 });
+}
+
+// --- Un bloque por camión, con sus CP y los lotes de cada una ------------
+function ocPdfCamiones(doc, orden, y) {
+    const camiones = orden.Camiones || [];
+    if (!camiones.length) return y;
+
+    camiones.forEach((cam, i) => {
+        // El encabezado del camión no puede quedar solo al pie de la hoja: se
+        // reserva lugar para él más la primera carta de porte.
+        y = pdfNuevaPaginaSiNoEntra(doc, y + 2, 46);
+        y = ocPdfBloqueCamion(doc, cam, i + 1, y);
+
+        (cam.CartasPorte || []).forEach((cp, j) => {
+            y = ocPdfBloqueCartaPorte(doc, cp, j + 1, y);
+        });
+    });
+    return y;
+}
+
+function ocPdfBloqueCamion(doc, cam, numero, y) {
+    // Barra roja con el dominio bien grande: es lo primero que se busca.
+    doc.setFillColor(...OC_ROJO);
+    doc.rect(OC_PDF_MARGEN_X, y, OC_PDF_ANCHO, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('CAMIÓN ' + numero, OC_PDF_MARGEN_X + 2.5, y + 5.6);
+
+    const dominios = [cam.dominio_camion, cam.dominio_acoplado].filter(Boolean).join('  /  ');
+    if (dominios) {
+        doc.setFontSize(11);
+        doc.text(dominios, OC_PDF_MARGEN_X + OC_PDF_ANCHO - 2.5, y + 5.6, { align: 'right' });
+    }
+    y += 10;
+
+    const filas = [
+        ['Transportista', ocPdfConCuit(cam.transportista, cam.transportista_cuit)],
+        ['Chofer', ocPdfConCuit(cam.chofer, cam.chofer_cuil)]
+    ].filter(f => f[1]);
+
+    const flete = [cam.km ? formatNumeroAR(cam.km, 0) + ' km' : '',
+                   cam.tarifa ? 'Tarifa ' + formatNumeroAR(cam.tarifa, 2) : ''].filter(Boolean).join('  ·  ');
+    if (flete) filas.push(['Flete', flete]);
+
+    if (filas.length) y = ocPdfTablaDosColumnas(doc, filas, y);
+    return y + 2;
+}
+
+function ocPdfBloqueCartaPorte(doc, cp, numero, y) {
+    const lotes = cp.Lotes || [];
+    // El renglón de la CP y su primer lote tienen que entrar juntos: separarlos
+    // deja "Carta de Porte 2" al pie de una hoja y sus lotes en la siguiente.
+    y = pdfNuevaPaginaSiNoEntra(doc, y, 26);
+
+    // Franja gris clara con los datos de la carta de porte
+    doc.setFillColor(242, 242, 242);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.rect(OC_PDF_MARGEN_X, y, OC_PDF_ANCHO, 11, 'FD');
+
+    doc.setTextColor(...OC_GRIS);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text('CP ' + numero, OC_PDF_MARGEN_X + 2.5, y + 4.5);
+
+    doc.setFont('helvetica', 'normal');
+    const linea1 = [cp.productor ? 'Productor: ' + cp.productor : '',
+                    cp.contrato_com ? 'CTTO: ' + cp.contrato_com : ''].filter(Boolean).join('     ');
+    doc.text(linea1, OC_PDF_MARGEN_X + 16, y + 4.5);
+
+    const linea2 = [cp.ctg ? 'CTG: ' + cp.ctg : 'CTG: (a completar)',
+                    cp.carta_porte ? 'N° CP: ' + cp.carta_porte : '',
+                    cp.observaciones || ''].filter(Boolean).join('     ');
+    doc.text(linea2, OC_PDF_MARGEN_X + 16, y + 8.8);
+
+    if (cp.peso_neto) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.text(formatNumeroAR(cp.peso_neto, 0) + ' kg',
+                 OC_PDF_MARGEN_X + OC_PDF_ANCHO - 2.5, y + 7, { align: 'right' });
+    }
+    y += 11;
+
+    if (!lotes.length) return y + 3;
+
+    // Los lotes: lo que el operario tiene que ir a buscar a la planta.
+    const columnas = [
+        { header: 'Lote BRC', width: 24 },
+        { header: 'Lote Planta', width: 30 },
+        { header: 'Tipo', width: 16 },
+        { header: 'Calibre', width: 24 },
+        { header: 'Bolsas', width: 24 },
+        { header: 'Kg bolsa', width: 24 },
+        { header: 'Total kg', width: OC_PDF_ANCHO - 142 }
+    ];
+    const filas = lotes.map(l => [
+        l.lote_brc, l.lote_planta, l.tipo, l.calibre,
+        formatNumeroAR(l.bolsas || 0, 0),
+        formatNumeroAR(l.kg_bolsa || 0, 0),
+        formatNumeroAR(l.total_kg || 0, 0)
+    ]);
+
+    y = dibujarTablaConBordes(doc, OC_PDF_MARGEN_X, y, OC_PDF_ANCHO, columnas, filas,
+        { fontSize: 8, alturaFila: 6, colorHeaderFill: [120, 120, 120] });
+    return y + 4;
+}
+
+// --- Acumulado por lote: el control de que no se cargue de más -----------
+function ocPdfResumenLotes(doc, orden, y) {
+    const porLote = {};
+    (orden.Camiones || []).forEach(cam => {
+        (cam.CartasPorte || []).forEach(cp => {
+            (cp.Lotes || []).forEach(l => {
+                const brc = String(l.lote_brc || '').trim();
+                if (!brc) return;
+                if (!porLote[brc]) porLote[brc] = { planta: l.lote_planta || '', bolsas: 0, kg: 0 };
+                porLote[brc].bolsas += Number(l.bolsas) || 0;
+                porLote[brc].kg += Number(l.total_kg) || 0;
+            });
+        });
+    });
+
+    const claves = Object.keys(porLote).sort();
+    if (!claves.length) return y;
+
+    y = ocPdfTitulo(doc, 'TOTAL POR LOTE', y + 2);
+
+    const columnas = [
+        { header: 'Lote BRC', width: 36 },
+        { header: 'Lote Planta', width: 46 },
+        { header: 'Bolsas', width: 40 },
+        { header: 'Total kg', width: OC_PDF_ANCHO - 122 }
+    ];
+    const filas = claves.map(k => [
+        k, porLote[k].planta,
+        formatNumeroAR(porLote[k].bolsas, 0),
+        formatNumeroAR(porLote[k].kg, 0)
+    ]);
+    // Última fila: el total de la orden, que es con lo que se cierra contra el
+    // objetivo de kg.
+    filas.push(['TOTAL', '',
+        formatNumeroAR(orden.Total_Bolsas || 0, 0),
+        formatNumeroAR(orden.Total_Kg || 0, 0)]);
+
+    y = dibujarTablaConBordes(doc, OC_PDF_MARGEN_X, y, OC_PDF_ANCHO, columnas, filas,
+        { fontSize: 8.5, alturaFila: 6 });
+
+    return y;
 }
