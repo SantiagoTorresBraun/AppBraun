@@ -139,6 +139,11 @@ function doPost(e) {
     if (accion === "guardar_muestreo")    return guardarMuestreo(data);
     if (accion === "actualizar_muestreo") return actualizarMuestreo(data);
     if (accion === "eliminar_muestreo")   return eliminarMuestreo(data);
+    // ==================== NUEVO: ORDEN DE CARGA ====================
+    // El paso previo al Control de Transporte. Vive en 05_orden_carga.gs.
+    if (accion === "guardar_oc")    return guardarOrdenCarga(data);
+    if (accion === "actualizar_oc") return actualizarOrdenCarga(data);
+    if (accion === "eliminar_oc")   return eliminarOrdenCarga(data);
     // ==================== NUEVO: PRODUCCIÓN (informes de campo) ====================
     // El otro submódulo de Producción: el informe por visita que hoy se manda
     // por WhatsApp. Ver DOCUMENTACION_PRODUCCION_V2.md
@@ -621,6 +626,10 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === "read_informes") {
       return leerInformesCampo();
+    }
+    // ==================== NUEVO: ORDEN DE CARGA ====================
+    if (e && e.parameter && e.parameter.action === "read_oc") {
+      return leerOrdenesCarga();
     }
     // ==========================================================
 

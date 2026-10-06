@@ -4387,3 +4387,17 @@ body.carga-mp .solo-pt { display: none !important; }
     .oc-wrapper-cps, .oc-wrapper-lotes { margin-left: 4px; }
     .oc-lote-fila { flex-wrap: wrap; }
 }
+
+/* Orden que todavía no subió al Sheet: está guardada en este dispositivo. */
+.oc-chip-pendiente {
+    display: inline-block;
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 50px;
+    background: rgba(239, 108, 0, .12);
+    color: #8a4b00;
+    border: 1px solid rgba(239, 108, 0, .25);
+    vertical-align: middle;
+    white-space: nowrap;
+}

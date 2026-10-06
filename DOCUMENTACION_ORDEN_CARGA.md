@@ -1,9 +1,10 @@
 # Orden de Carga — modelo de datos y vinculación con Control de Transporte
 
-> Estado: **primer incremento construido** (pantalla y cálculos). Falta el Sheet, el PDF y el enganche con Control de Transporte.
+> Estado: **la orden ya se guarda en el Sheet**. Falta el PDF para planta y el
+> enganche con Control de Transporte.
 > Fuentes: `Propuesta nuevas vinculaciones.docx` y el Excel real
 > `CN26-063 Orden de Carga 14-7.xlsx` (OC 2056, 14/07).
-> Última actualización: 29/09/2026.
+> Última actualización: 06/10/2026.
 >
 > **Todo lo que quedó sin confirmar está en
 > [PREGUNTAS_PENDIENTES_LUCAS.md](PREGUNTAS_PENDIENTES_LUCAS.md)**, ordenado para
@@ -279,13 +280,79 @@ hoja en el Sheet, lo único que cambia es de dónde salen y a dónde van
 Lo que **todavía no** hace: escribir en el Sheet, generar el PDF de la OC y
 crear el Control de Transporte a partir de ella.
 
+### Persistencia en el Sheet — tercer incremento
+
+Backend nuevo: [05_orden_carga.gs](05_orden_carga.gs), con las rutas despachadas
+desde `01_backend_principal.gs` (`guardar_oc`, `actualizar_oc`, `eliminar_oc` y
+`?action=read_oc`).
+
+**Cuatro hojas, una por nivel.** Se crean solas la primera vez con
+`obtenerHojaConEncabezados()`: no hay que tocar nada a mano en el Sheet.
+
+| Hoja | 1 fila = | Se une por |
+|---|---|---|
+| `Orden_Carga` | una orden | `Id_OC` |
+| `OC_Camion` | un camión | `Id_OC` |
+| `OC_CartaPorte` | una carta de porte | `Id_Camion` + `Id_OC` |
+| `OC_Lote` | un lote de una CP | `Id_CP` + `Id_OC` |
+
+`Id_OC` se repite en las tres hojas hijas aunque ya esté en la madre: así se
+borra una orden entera con un barrido por hoja, y una consulta por orden no
+tiene que ir encadenando tablas.
+
+A diferencia de la hoja `Orden`, que se escribe **por posición** con `appendRow`
+y por eso no se le pueden mover nunca las columnas, estas cuatro se escriben
+desde las listas `COLS_*`. Agregar una columna es agregarla al final de la lista
+que corresponda.
+
+**Guardar es idempotente**, con lock, igual que Carga, Calidad y Ticketera: el
+mismo POST puede llegar dos veces (la cola que reintenta, red inestable, doble
+toque en Guardar) y no duplica nada. **Editar borra y reinserta**, como hacen
+Muestreo e Informes de Campo: una OC se edita muchas veces mientras se arma y
+reinsertar entera evita resolver qué se agregó, qué se sacó y qué se renumeró.
+
+**Leer arma tres índices de una pasada** y después ensambla. El bucle anidado
+(por cada orden sus camiones, por cada camión sus CP, por cada CP sus lotes)
+crece al cubo: es el mismo error que ya se corrigió en el historial de cargas y
+en los informes de campo.
+
+#### En el frontend
+
+El camino es el mismo que el del resto de la app: **se escribe primero en el
+dispositivo y se sincroniza después**.
+
+- Store `ordenes_carga` en IndexedDB (la base sube a la **versión 5**; el nombre
+  `AppBraunDB_v4` **no** cambia, porque cambiarlo crearía una base vacía al lado
+  y dejaría adentro de la vieja todo lo que no subió).
+- Cuarta cola en `cola-sync.js`, con los reintentos, la espera y el panel de
+  revisión que ya existían.
+- El historial muestra lo del Sheet **más** lo que todavía está pendiente acá,
+  con un cartelito *sin subir*.
+- Las órdenes que hayan quedado guardadas con la versión anterior (en
+  `localStorage`) se migran solas y se suben.
+
+Todo envío va como `actualizar_oc`, que borra por `Id_OC` y reinserta. Así el
+mismo camino sirve para crear y para editar, y un reintento no puede duplicar.
+
+#### Cómo se prueba
+
+[test_orden_carga.js](test_orden_carga.js) simula el Sheet y hace el viaje
+completo con los datos de la OC 2056 real: guardar, reintentar, leer, editar,
+convivir con otra orden, borrar y los bordes. Se corre con `node
+test_orden_carga.js`. Es la única forma de probar el backend sin desplegarlo.
+
+> **PARA QUE ESTO FUNCIONE HAY QUE DESPLEGAR.** `01_backend_principal.gs` es una
+> copia para leer: la fuente de verdad es el editor de Apps Script. Hay que
+> crear ahí el archivo `05_orden_carga.gs`, pegar las rutas nuevas en
+> `01_backend_principal.gs` y hacer **Implementar → Nueva versión**. Hasta que
+> eso pase, la app guarda las órdenes en el dispositivo y las deja en la cola.
+
 ## 9. Lo que sigue
 
-1. Cerrar el mapeo campo por campo: cuáles de los 48 campos actuales del
-   formulario de control vienen de la OC y cuáles se completan en planta.
-2. Definir las hojas nuevas del Sheet y agregar `Id_OC` + `N° de camión` al final
-   de la hoja `Orden` (se escribe por posición con `appendRow`, así que las
-   columnas nuevas van al final, como se hizo con `Tipo_Carga`).
-3. El PDF de la OC — el informe de camiones que hoy se le manda a planta.
-4. El enganche: que la planta abra la OC por número, elija su camión y arranque
-   el Control de Transporte con todo cargado.
+1. **El PDF de la OC** — el informe de camiones que hoy se le manda a planta.
+2. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que
+   planta abra la orden por número, elija su camión y arranque el Control de
+   Transporte con todo cargado. Depende de cerrar el mapeo campo por campo
+   (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 3.1).
+3. Datos maestros (destinos, transportistas, choferes, vehículos, productores)
+   para elegir en vez de escribir.

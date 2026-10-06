@@ -179,7 +179,52 @@ salió la fila. Vale `GARBANZO` o `POROTO_MUNG`.
 
 ---
 
-## 6. Resto de las hojas
+## 6. Hojas de Orden de Carga (06/10/2026)
+
+Cuatro hojas, una por nivel. Las crea solas el backend
+([05_orden_carga.gs](05_orden_carga.gs)) la primera vez que se guarda una orden:
+no hay que armarlas a mano.
+
+```
+Orden_Carga           1 fila = 1 orden de carga
+  Id_OC (clave)       Nro_OC es el numero que usa la gente (2056)
+     |
+     +-- OC_Camion            1 fila = 1 camion         (Id_Camion, Id_OC)
+            |
+            +-- OC_CartaPorte  1 fila = 1 CP            (Id_CP, Id_Camion, Id_OC)
+                   |
+                   +-- OC_Lote 1 fila = 1 lote de esa CP (Id_Lote_OC, Id_CP, Id_OC)
+```
+
+**El nivel del medio es la diferencia con `Orden`.** Acá `Producto` y
+`Contrato Comercial` no son hermanos: cada lote sabe a qué carta de porte
+pertenece, porque cada CP declara un peso neto que se compone de lotes
+concretos.
+
+`Id_OC` se repite en las tres hojas hijas aunque ya esté en la madre: así una
+orden se borra con un barrido por hoja, y consultar por orden no obliga a
+encadenar tablas.
+
+**Se leen y escriben POR NOMBRE de columna**, no por posición. A diferencia de
+`Orden`, acá se puede agregar una columna al final de la lista `COLS_*` que
+corresponda y listo.
+
+| Hoja | Columnas |
+|---|---|
+| `Orden_Carga` | Id_OC, Nro_OC, Fecha, Contrato_Encabeza, Especie, Cosecha, Titular_CP, Remitente_Productor, Remitente_Venta, Destinatario(+CUIT), Destino(+CUIT, Planta, Direccion, Localidad, Provincia), Flete_Intermediario(+CUIT), Flete_Pagador(+CUIT), Objetivo_Kg, Observaciones, Total_Camiones, Total_Bolsas, Total_Kg, Estado, usuario_registro, Fecha_Registro |
+| `OC_Camion` | Id_Camion, Id_OC, Nro_Camion, Transportista(+CUIT), Chofer(+CUIL), Dominio_Camion, Dominio_Acoplado, Km, Tarifa |
+| `OC_CartaPorte` | Id_CP, Id_Camion, Id_OC, Nro_CP, Productor, Contrato_Comercial, CTG, Carta_Porte, Peso_Neto, Observaciones_CP |
+| `OC_Lote` | Id_Lote_OC, Id_CP, Id_OC, Nro_Lote, Lote_BRC, Lote_Planta, Tipo, Calibre, Bolsas, Kg_Bolsa, Total_Kg |
+
+> Todavia **no hay vinculo** entre estas hojas y `Orden` (Control de Transporte).
+> El enganche necesita `Id_OC` + `N° de camion` al final de `Orden`, y depende de
+> definir que campos vienen de la OC y cuales carga planta. Ver
+> [DOCUMENTACION_ORDEN_CARGA.md](DOCUMENTACION_ORDEN_CARGA.md) y
+> [PREGUNTAS_PENDIENTES_LUCAS.md](PREGUNTAS_PENDIENTES_LUCAS.md) punto 3.1.
+
+---
+
+## 7. Resto de las hojas
 
 ### `Muestreo` (módulo Producción)
 `Id_Muestreo` · `Fecha` · `Establecimiento` · `Lote` · `Campania` · `Cultivo` · `Variedad` ·
@@ -200,7 +245,7 @@ salió la fila. Vale `GARBANZO` o `POROTO_MUNG`.
 
 ---
 
-## 7. Cómo ve todo esto el Agente de IA
+## 8. Cómo ve todo esto el Agente de IA
 
 El agente no consulta las hojas: consulta **7 datasets** que arma
 [agente.js](agente.js) en el navegador a partir de los datos ya descargados.
@@ -232,7 +277,7 @@ entero. El catálogo se lo avisa al planificador de forma explícita.
 
 ---
 
-## 8. Problemas de datos detectados (26/08/2026)
+## 9. Problemas de datos detectados (26/08/2026)
 
 Salieron al hacer que el agente responda sobre los datos reales. **No son fallas del agente:
 afectan cualquier informe**, lo haga la IA o una tabla dinámica a mano.
@@ -247,7 +292,7 @@ afectan cualquier informe**, lo haga la IA o una tabla dinámica a mano.
 
 ---
 
-## 9. Correos duplicados
+## 10. Correos duplicados
 
 Se movió a su propio archivo: **[DOCUMENTACION_CORREO.md](DOCUMENTACION_CORREO.md)**.
 Ahí están los dos caminos de envío, las tres causas por las que llegaban dos veces
@@ -255,7 +300,7 @@ y qué cubre cada capa de protección.
 
 ---
 
-## 10. Control de Carga MP (Materia Prima) — activado el 28/08/2026
+## 11. Control de Carga MP (Materia Prima) — activado el 28/08/2026
 
 Hasta ahora la tarjeta de Materia Prima del menú decía "Próximamente". Ya está
 habilitada y **comparte las mismas hojas que PT**: se distinguen por la columna
@@ -323,7 +368,7 @@ existían (ver sección 8).
 
 ---
 
-## 11. Campos sacados de la carga de Control de Calidad (28/08/2026)
+## 12. Campos sacados de la carga de Control de Calidad (28/08/2026)
 
 Seis campos salieron del **formulario** de Control de Calidad por no usarse:
 

@@ -1,10 +1,13 @@
 // --- 1. CONFIGURACIÓN BASE DE DATOS LOCAL (IndexedDB) ---
 let db;
+// v5: se suma el store de Orden de Carga.
 // v4: se suman los stores del submódulo "Informes de Campo".
 // Subir el número de versión es lo que dispara onupgradeneeded en los celulares
 // que ya tienen la base creada; sin eso, los stores nuevos no existirían ahí y
 // el submódulo no podría guardar nada.
-const request = indexedDB.open("AppBraunDB_v4", 4);
+// El NOMBRE de la base no cambia (sigue "AppBraunDB_v4"): cambiarlo crearía una
+// base vacía al lado y dejaría adentro de la vieja todo lo que todavía no subió.
+const request = indexedDB.open("AppBraunDB_v4", 5);
 
 request.onupgradeneeded = function(e) {
     db = e.target.result;
@@ -22,6 +25,12 @@ request.onupgradeneeded = function(e) {
     // Cola offline del módulo Producción (muestreo de campo)
     if (!db.objectStoreNames.contains("muestreos")) {
         db.createObjectStore("muestreos", { keyPath: "id", autoIncrement: true });
+    }
+    // Cola offline de Orden de Carga. La orden la arma la oficina, donde casi
+    // siempre hay señal, pero el camino es el mismo que el del resto de la app:
+    // se escribe acá primero y se sincroniza después.
+    if (!db.objectStoreNames.contains("ordenes_carga")) {
+        db.createObjectStore("ordenes_carga", { keyPath: "id", autoIncrement: true });
     }
     // Producción → Informes de Campo. Son DOS stores a propósito:
     // el informe (texto, chico) va por un lado y la media (Blob, pesada) por
@@ -51,6 +60,7 @@ request.onsuccess = function(e) {
     if (navigator.onLine) sincronizarTicketsPendientes();
     sincronizarUsuariosDesdeSheet();
     if (typeof cargarMuestreosDesdeGoogle === 'function') cargarMuestreosDesdeGoogle();
+    if (typeof ocCargarOrdenesDesdeGoogle === 'function') ocCargarOrdenesDesdeGoogle();
     if (typeof sincronizarMuestreosPendientes === 'function' && navigator.onLine) sincronizarMuestreosPendientes();
 };
 request.onerror = function(e) { console.error("Error IndexedDB", e); };

@@ -32,6 +32,7 @@
 // Las órdenes guardadas y el borrador de la que se está escribiendo. Son dos
 // cosas distintas: la lista es lo que se ve en el historial, y el borrador es
 // el respaldo de lo que hay en pantalla ahora mismo, por si se cierra la app.
+// Solo para migrar lo que haya quedado de la version anterior (ver 5.6).
 const OC_LISTA_KEY = 'braun_ordenes_carga';
 const OC_STORAGE_KEY = 'braun_orden_carga_borrador';
 
@@ -58,6 +59,11 @@ function abrirOrdenCarga() {
     document.querySelectorAll('#form-oc > .form-group-row .enum-select, #form-oc > .form-group .enum-select')
         .forEach(sel => poblarSelect(sel, sel.dataset.enum, sel.value || ''));
     ocSwitchTab('historial');
+    // Se baja lo que hay en el Sheet y se vuelve a pintar: así el historial
+    // aparece al instante con lo que ya estaba y se completa cuando llega.
+    ocMigrarOrdenesViejas()
+        .then(ocCargarOrdenesDesdeGoogle)
+        .then(ocRenderHistorial);
 }
 
 function ocSwitchTab(tab) {
@@ -73,14 +79,15 @@ function ocSwitchTab(tab) {
 // anterior, se ofrece recuperarlo antes de pisarlo.
 function ocNuevaOrden() {
     const borrador = ocLeerBorrador();
+    let titulo = 'Crear Nueva Orden de Carga';
     if (borrador && confirm('Quedó una orden a medio cargar.\n\n¿Querés seguir con esa?\n\nAceptar = seguir con la que estaba.\nCancelar = empezar una nueva en blanco.')) {
-        ocIdEditando = borrador.id || null;
+        ocIdEditando = borrador.Id_OC || null;
         ocAplicarDatos(borrador);
+        titulo = 'Continuar Orden de Carga';
     } else {
         ocLimpiarFormulario();
     }
-    document.getElementById('oc-form-titulo').textContent = ocIdEditando
-        ? 'Editar Orden de Carga' : 'Crear Nueva Orden de Carga';
+    document.getElementById('oc-form-titulo').textContent = titulo;
     ocSwitchTab('nuevo');
 }
 
@@ -100,8 +107,8 @@ function ocLimpiarFormulario() {
 // módulo viene a sacar. Se propone el siguiente de la serie que ya está
 // guardada, y se puede corregir a mano si hace falta.
 function ocProximoNumero() {
-    const numeros = ocListaOrdenes()
-        .map(o => parseInt(String(o.cabecera['oc-numero'] || '').replace(/\D/g, ''), 10))
+    const numeros = (ocUltimasListadas || []).concat(ocHistorialRemoto || [])
+        .map(o => parseInt(String(o.Nro_OC || '').replace(/\D/g, ''), 10))
         .filter(n => !isNaN(n));
     return numeros.length ? String(Math.max.apply(null, numeros) + 1) : '';
 }
@@ -538,73 +545,145 @@ function ocAplicarValores(card, claseItem, valores) {
 }
 
 // =========================================================================
-// --- 5. GUARDADO, HISTORIAL Y BORRADOR ------------------------------------
+// --- 5. GUARDADO EN EL SHEET, HISTORIAL Y BORRADOR ------------------------
 // =========================================================================
-// Todavía no hay backend para la OC: las órdenes viven en localStorage, igual
-// que los enums. Cuando exista la hoja en el Sheet, lo único que cambia es de
-// dónde salen y a dónde van estas dos funciones (ocListaOrdenes / ocGuardarOrden);
-// el resto de la pantalla no se entera.
+// Las órdenes se guardan en las hojas Orden_Carga / OC_Camion / OC_CartaPorte /
+// OC_Lote (ver 05_orden_carga.gs). Mismo camino que el resto de la app:
+//
+//   1. se escribe PRIMERO en este dispositivo (IndexedDB, store "ordenes_carga")
+//   2. se sincroniza con el Sheet apenas hay señal
+//   3. el historial muestra lo del Sheet MÁS lo que todavía está pendiente acá
+//
+// El orden importa: si se mandara primero y se guardara después, una orden
+// armada sin señal se perdería. En una oficina eso parece exagerado, pero es el
+// mismo criterio que ya usan Carga, Calidad y Ticketera, y sale gratis.
 
-const OC_CAMPOS_CABECERA = [
-    'oc-numero', 'oc-fecha', 'oc-contrato-fm', 'oc-especie', 'oc-cosecha',
-    'oc-titular-cp', 'oc-remitente-productor', 'oc-remitente-venta',
-    'oc-destinatario', 'oc-destinatario-cuit',
-    'oc-destino', 'oc-destino-cuit', 'oc-destino-planta', 'oc-destino-direccion',
-    'oc-destino-localidad', 'oc-destino-provincia',
-    'oc-flete-intermediario', 'oc-flete-intermediario-cuit',
-    'oc-flete-pagador', 'oc-flete-pagador-cuit',
-    'oc-objetivo-kg', 'oc-observaciones'
-];
+const OC_STORE = 'ordenes_carga';
+
+// Mapa entre los ids del formulario y los nombres de columna de la hoja.
+// En la hoja los encabezados los lee gente, así que no van los guiones del HTML.
+// Los campos de camión, carta de porte y lote NO necesitan mapa: sus
+// data-field ya se llaman igual que lo que espera el backend.
+const OC_MAPA_CABECERA = {
+    'oc-numero': 'Nro_OC',
+    'oc-fecha': 'Fecha',
+    'oc-contrato-fm': 'Contrato_Encabeza',
+    'oc-especie': 'Especie',
+    'oc-cosecha': 'Cosecha',
+    'oc-titular-cp': 'Titular_CP',
+    'oc-remitente-productor': 'Remitente_Productor',
+    'oc-remitente-venta': 'Remitente_Venta',
+    'oc-destinatario': 'Destinatario',
+    'oc-destinatario-cuit': 'Destinatario_CUIT',
+    'oc-destino': 'Destino',
+    'oc-destino-cuit': 'Destino_CUIT',
+    'oc-destino-planta': 'Destino_Planta',
+    'oc-destino-direccion': 'Destino_Direccion',
+    'oc-destino-localidad': 'Destino_Localidad',
+    'oc-destino-provincia': 'Destino_Provincia',
+    'oc-flete-intermediario': 'Flete_Intermediario',
+    'oc-flete-intermediario-cuit': 'Flete_Intermediario_CUIT',
+    'oc-flete-pagador': 'Flete_Pagador',
+    'oc-flete-pagador-cuit': 'Flete_Pagador_CUIT',
+    'oc-objetivo-kg': 'Objetivo_Kg',
+    'oc-observaciones': 'Observaciones'
+};
+
+// Lo que tiene que llegar al Sheet como NÚMERO y no como texto. Los campos con
+// máscara se ven "18.420" y así viajarían como texto: sumarlos en el Sheet no
+// daría nada.
+const OC_CAMPOS_NUMERICOS = ['Objetivo_Kg', 'km', 'tarifa', 'peso_neto',
+    'bolsas', 'kg_bolsa', 'total_kg'];
+
+function ocNumero(valor) {
+    const n = parseNumeroAR(valor);
+    return isNaN(n) ? 0 : n;
+}
+
+// Lo guardado en el Sheet (se baja al entrar al módulo).
+let ocHistorialRemoto = [];
 
 // --- 5.1. Pasar la pantalla a un objeto y al revés ------------------------
 
 function ocArmarObjeto() {
-    const cabecera = {};
-    OC_CAMPOS_CABECERA.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) cabecera[id] = el.value;
-    });
-
-    const camiones = [];
-    document.querySelectorAll('#wrapper-camiones .oc-camion').forEach(camion => {
-        const cps = [];
-        camion.querySelectorAll(':scope .oc-wrapper-cps > .oc-cp').forEach(cp => {
-            const lotes = [];
-            cp.querySelectorAll(':scope .oc-wrapper-lotes > .oc-lote').forEach(lote => {
-                lotes.push(ocValoresDe(lote, 'oc-lote-item'));
-            });
-            cps.push({ valores: ocValoresDe(cp, 'oc-cp-item'), lotes: lotes });
-        });
-        camiones.push({ valores: ocValoresDe(camion, 'oc-camion-item'), cps: cps });
-    });
-
-    return {
-        id: ocIdEditando,
-        cabecera: cabecera,
-        camiones: camiones,
-        totales: ocTotalesActuales(),
-        guardado: new Date().toISOString()
+    const orden = {
+        Id_OC: ocIdEditando || ('OC-' + Date.now()),
+        // Siempre "actualizar": borra por Id_OC (si no está, no hace nada) y
+        // vuelve a insertar. Así el mismo envío sirve para crear y para editar,
+        // y un reintento de la cola no puede duplicar nada.
+        _accion: 'actualizar_oc',
+        usuario_registro: (typeof usuarioRegistroActual === 'function') ? usuarioRegistroActual() : ''
     };
-}
 
-function ocAplicarDatos(datos) {
-    document.getElementById('form-oc').reset();
-    document.getElementById('oc-validacion').classList.add('hidden');
-    Object.keys(datos.cabecera || {}).forEach(id => {
+    Object.keys(OC_MAPA_CABECERA).forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-        if (el.tagName === 'SELECT') poblarSelect(el, el.dataset.enum, datos.cabecera[id]);
-        else el.value = datos.cabecera[id];
+        const clave = OC_MAPA_CABECERA[id];
+        orden[clave] = OC_CAMPOS_NUMERICOS.indexOf(clave) !== -1 ? ocNumero(el.value) : el.value;
     });
+
+    const totales = ocTotalesActuales();
+    orden.Total_Camiones = totales.camiones;
+    orden.Total_Bolsas = ocNumero(totales.bolsas);
+    orden.Total_Kg = ocNumero(totales.kg);
+
+    orden.Camiones = [];
+    document.querySelectorAll('#wrapper-camiones .oc-camion').forEach(camion => {
+        const datosCamion = ocValoresNumerados(camion, 'oc-camion-item');
+        datosCamion.CartasPorte = [];
+
+        camion.querySelectorAll(':scope .oc-wrapper-cps > .oc-cp').forEach(cp => {
+            const datosCp = ocValoresNumerados(cp, 'oc-cp-item');
+            datosCp.Lotes = [];
+            cp.querySelectorAll(':scope .oc-wrapper-lotes > .oc-lote').forEach(lote => {
+                datosCp.Lotes.push(ocValoresNumerados(lote, 'oc-lote-item'));
+            });
+            datosCamion.CartasPorte.push(datosCp);
+        });
+
+        orden.Camiones.push(datosCamion);
+    });
+
+    return orden;
+}
+
+// Como ocValoresDe(), pero convirtiendo a número lo que tiene que viajar
+// como número.
+function ocValoresNumerados(card, claseItem) {
+    const valores = ocValoresDe(card, claseItem);
+    OC_CAMPOS_NUMERICOS.forEach(campo => {
+        if (valores[campo] !== undefined) valores[campo] = ocNumero(valores[campo]);
+    });
+    return valores;
+}
+
+function ocAplicarDatos(orden) {
+    document.getElementById('form-oc').reset();
+    document.getElementById('oc-validacion').classList.add('hidden');
+
+    Object.keys(OC_MAPA_CABECERA).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const valor = orden[OC_MAPA_CABECERA[id]];
+        if (valor === undefined || valor === null) return;
+        if (el.tagName === 'SELECT') poblarSelect(el, el.dataset.enum, valor);
+        else el.value = valor;
+    });
+
     document.getElementById('wrapper-camiones').innerHTML = '';
     ocSecuencia = 0;
-    (datos.camiones || []).forEach(c => ocAgregarCamion({ valores: c.valores, cps: c.cps }));
+    (orden.Camiones || []).forEach(cam => {
+        ocAgregarCamion({
+            valores: cam,
+            cps: (cam.CartasPorte || []).map(cp => ({ valores: cp, lotes: cp.Lotes || [] }))
+        });
+    });
     if (!document.querySelectorAll('#wrapper-camiones .oc-camion').length) ocAgregarCamion();
     ocRecalcularTodo();
 }
 
-// Los totales que ya pintó ocRecalcularTodo(), para no recorrer todo de nuevo
-// al guardar: el historial los muestra sin tener que abrir la orden.
+// Los totales que ya pintó ocRecalcularTodo(), para no recorrer todo de nuevo:
+// el historial los muestra sin tener que abrir la orden.
 function ocTotalesActuales() {
     return {
         camiones: document.querySelectorAll('#wrapper-camiones .oc-camion').length,
@@ -613,130 +692,211 @@ function ocTotalesActuales() {
     };
 }
 
-// --- 5.2. La lista de órdenes --------------------------------------------
+// --- 5.2. Lo pendiente en este dispositivo -------------------------------
 
-function ocListaOrdenes() {
-    try {
-        const crudo = localStorage.getItem(OC_LISTA_KEY);
-        const lista = crudo ? JSON.parse(crudo) : [];
-        return Array.isArray(lista) ? lista : [];
-    } catch (e) { return []; }
+function ocPendientesLocales() {
+    return new Promise(resolve => {
+        if (!db || !db.objectStoreNames.contains(OC_STORE)) { resolve([]); return; }
+        try {
+            const pedido = db.transaction([OC_STORE], 'readonly').objectStore(OC_STORE).getAll();
+            pedido.onsuccess = () => resolve(pedido.result || []);
+            pedido.onerror = () => resolve([]);
+        } catch (e) { resolve([]); }
+    });
 }
 
-function ocEscribirLista(lista) {
-    try {
-        localStorage.setItem(OC_LISTA_KEY, JSON.stringify(lista));
-        return true;
-    } catch (e) {
-        alert('No se pudo guardar en este dispositivo.\n\nPuede ser falta de espacio o el modo privado del navegador.');
-        return false;
-    }
+// Guarda en IndexedDB. Si esa orden ya estaba pendiente acá, se pisa en vez de
+// agregar otra: editar tres veces sin señal tiene que dejar UNA orden, no tres.
+function ocGuardarLocal(orden) {
+    return new Promise((resolve, reject) => {
+        if (!db || !db.objectStoreNames.contains(OC_STORE)) {
+            reject(new Error('La base local todavía no está lista. Esperá un instante y probá de nuevo.'));
+            return;
+        }
+        try {
+            const store = db.transaction([OC_STORE], 'readwrite').objectStore(OC_STORE);
+            const cursor = store.openCursor();
+            let idLocal = null;
+            cursor.onsuccess = e => {
+                const c = e.target.result;
+                if (c) {
+                    if (c.value.Id_OC === orden.Id_OC) idLocal = c.value.id;
+                    c.continue();
+                    return;
+                }
+                const aGuardar = idLocal ? Object.assign({}, orden, { id: idLocal }) : orden;
+                const req = store.put(aGuardar);
+                req.onsuccess = () => resolve(true);
+                req.onerror = () => reject(req.error || new Error('No se pudo guardar en este dispositivo'));
+            };
+            cursor.onerror = () => reject(cursor.error || new Error('No se pudo leer la cola local'));
+        } catch (e) { reject(e); }
+    });
 }
 
-// Guardar exige que la orden esté completa: una OC a la que le falte el
-// chofer o el contrato no sirve para mandarle a planta.
-function ocGuardarOrden() {
+// --- 5.3. Guardar, editar y borrar ---------------------------------------
+
+// Guardar exige que la orden esté completa: una OC a la que le falte el chofer
+// o el contrato no sirve para mandarle a planta.
+async function ocGuardarOrden() {
     if (!ocValidar()) {
         document.getElementById('oc-validacion').scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
 
-    const lista = ocListaOrdenes();
     const orden = ocArmarObjeto();
-    if (ocIdEditando) {
-        const i = lista.findIndex(o => o.id === ocIdEditando);
-        if (i !== -1) lista[i] = orden; else lista.push(orden);
-    } else {
-        orden.id = 'OC-' + Date.now();
-        ocIdEditando = orden.id;
-        lista.push(orden);
+    try {
+        await ocGuardarLocal(orden);
+    } catch (err) {
+        alert('⚠️ No se pudo guardar la orden en este dispositivo.\n\nMotivo: ' + (err.message || err));
+        return;
     }
-    if (!ocEscribirLista(lista)) return;
 
-    // Guardada: el borrador ya no hace falta.
+    // Guardada acá: el borrador ya no hace falta.
     try { localStorage.removeItem(OC_STORAGE_KEY); } catch (e) { /* modo privado */ }
     ocIdEditando = null;
-    alert('Orden de carga guardada.');
+
+    if (navigator.onLine && typeof sincronizarCola === 'function' && typeof colaPorStore === 'function') {
+        sincronizarCola(colaPorStore(OC_STORE));
+        alert('Orden de carga guardada. Se está sincronizando con el Sheet.');
+    } else {
+        alert('Orden de carga guardada en este dispositivo.\n\nSe va a subir sola cuando haya señal.');
+    }
     ocSwitchTab('historial');
 }
 
-function ocEditarOrden(id) {
-    const orden = ocListaOrdenes().find(o => o.id === id);
+function ocEditarOrden(idOC) {
+    const orden = ocBuscarOrden(idOC);
     if (!orden) { alert('Esa orden ya no está.'); ocRenderHistorial(); return; }
-    ocIdEditando = id;
+    ocIdEditando = idOC;
     ocAplicarDatos(orden);
     document.getElementById('oc-form-titulo').textContent = 'Editar Orden de Carga';
     ocSwitchTab('nuevo');
 }
 
-function ocEliminarOrden(id) {
-    const orden = ocListaOrdenes().find(o => o.id === id);
-    const numero = orden ? (orden.cabecera['oc-numero'] || '') : '';
+function ocBuscarOrden(idOC) {
+    if (ocUltimasListadas) {
+        const encontrada = ocUltimasListadas.find(o => o.Id_OC === idOC);
+        if (encontrada) return encontrada;
+    }
+    return ocHistorialRemoto.find(o => o.Id_OC === idOC) || null;
+}
+
+async function ocEliminarOrden(idOC) {
+    const orden = ocBuscarOrden(idOC);
+    const numero = orden ? (orden.Nro_OC || '') : '';
     if (!confirm('¿Borrar la orden de carga ' + (numero ? 'N° ' + numero : '') + '?\n\nNo se puede deshacer.')) return;
-    if (!ocEscribirLista(ocListaOrdenes().filter(o => o.id !== id))) return;
+
+    // Primero lo de este dispositivo: si estaba pendiente de subir, se va con esto.
+    const pendientes = await ocPendientesLocales();
+    const pendiente = pendientes.find(o => o.Id_OC === idOC);
+    if (pendiente && typeof colaBorrar === 'function') await colaBorrar(OC_STORE, pendiente.id);
+
+    // Y si ya había llegado al Sheet, hay que borrarla de allá.
+    const estaEnElSheet = ocHistorialRemoto.some(o => o.Id_OC === idOC);
+    if (estaEnElSheet) {
+        if (!navigator.onLine) {
+            alert('Esa orden ya está en el Sheet y hace falta conexión para borrarla.\n\nProbá de nuevo cuando tengas señal.');
+            ocRenderHistorial();
+            return;
+        }
+        try {
+            await enviarAlBackend({ _accion: 'eliminar_oc', Id_OC: idOC });
+            ocHistorialRemoto = ocHistorialRemoto.filter(o => o.Id_OC !== idOC);
+        } catch (err) {
+            alert('⚠️ No se pudo borrar la orden del Sheet.\n\nMotivo: ' + (err.message || err));
+        }
+    }
     ocRenderHistorial();
 }
 
-// --- 5.3. El historial ---------------------------------------------------
+// --- 5.4. El historial ---------------------------------------------------
 
-// Texto donde busca el filtro rápido: todo lo que se escribió en la orden.
-function ocTextoBuscable(orden) {
-    const partes = Object.keys(orden.cabecera || {}).map(k => orden.cabecera[k]);
-    (orden.camiones || []).forEach(c => {
-        Object.keys(c.valores || {}).forEach(k => partes.push(c.valores[k]));
-        (c.cps || []).forEach(cp => {
-            Object.keys(cp.valores || {}).forEach(k => partes.push(cp.valores[k]));
-            (cp.lotes || []).forEach(l => Object.keys(l).forEach(k => partes.push(l[k])));
-        });
-    });
-    return partes.filter(Boolean).join(' ').toLowerCase();
+function ocCargarOrdenesDesdeGoogle() {
+    if (!navigator.onLine) return Promise.resolve();
+    return fetch(WEB_APP_URL + '?action=read_oc')
+        .then(res => res.json())
+        .then(data => {
+            // Mismo cuidado que en Calidad y Producción (hallazgo 14): una lista
+            // vacía puede ser "no hay órdenes" o "me contestaron otra cosa". Si
+            // no parece lo que pedimos, se conserva lo que había.
+            const pareceOrdenes = Array.isArray(data) && (data.length === 0 || data.some(o => o && o.Id_OC));
+            if (pareceOrdenes) ocHistorialRemoto = data.filter(o => o && o.Id_OC);
+            else console.warn('[orden-carga] El servidor devolvió algo que no son órdenes; se conserva lo que había.');
+        })
+        .catch(err => console.error('No se pudieron cargar las órdenes de carga:', err));
 }
 
-function ocRenderHistorial() {
+// Texto donde busca el filtro rápido: todo lo escrito en la orden.
+function ocTextoBuscable(orden) {
+    const partes = [];
+    Object.keys(orden).forEach(k => {
+        if (k !== 'Camiones' && typeof orden[k] !== 'object') partes.push(orden[k]);
+    });
+    (orden.Camiones || []).forEach(cam => {
+        Object.keys(cam).forEach(k => { if (k !== 'CartasPorte') partes.push(cam[k]); });
+        (cam.CartasPorte || []).forEach(cp => {
+            Object.keys(cp).forEach(k => { if (k !== 'Lotes') partes.push(cp[k]); });
+            (cp.Lotes || []).forEach(l => Object.keys(l).forEach(k => partes.push(l[k])));
+        });
+    });
+    return partes.filter(v => v !== '' && v !== null && v !== undefined).join(' ').toLowerCase();
+}
+
+// Lo que se está mostrando, para que editar y borrar no tengan que buscar de nuevo.
+let ocUltimasListadas = [];
+
+async function ocRenderHistorial() {
+    const pendientes = await ocPendientesLocales();
+    const idsPendientes = new Set(pendientes.map(o => o.Id_OC));
+    // Lo pendiente manda sobre lo del Sheet: es lo último que se escribió.
+    const todas = pendientes.map(o => Object.assign({}, o, { _pendiente: true }))
+        .concat(ocHistorialRemoto.filter(o => !idsPendientes.has(o.Id_OC)));
+
     const desde = document.getElementById('oc-filter-desde').value;
     const hasta = document.getElementById('oc-filter-hasta').value;
     const numero = (document.getElementById('oc-filter-numero').value || '').trim().toLowerCase();
     const busqueda = (document.getElementById('oc-filter-search').value || '').trim().toLowerCase();
 
-    const filtradas = ocListaOrdenes().filter(o => {
-        const fecha = o.cabecera['oc-fecha'] || '';
+    const filtradas = todas.filter(o => {
+        const fecha = o.Fecha || '';
         if (desde && fecha && fecha < desde) return false;
         if (hasta && fecha && fecha > hasta) return false;
-        if (numero && String(o.cabecera['oc-numero'] || '').toLowerCase().indexOf(numero) === -1) return false;
+        if (numero && String(o.Nro_OC || '').toLowerCase().indexOf(numero) === -1) return false;
         if (busqueda && ocTextoBuscable(o).indexOf(busqueda) === -1) return false;
         return true;
-    }).sort((a, b) => String(b.guardado || '').localeCompare(String(a.guardado || '')));
+    }).sort((a, b) => String(b.Fecha || '').localeCompare(String(a.Fecha || '')));
+
+    ocUltimasListadas = filtradas;
 
     const cuerpo = document.getElementById('tabla-oc-body');
     if (!filtradas.length) {
-        const hayAlgo = ocListaOrdenes().length > 0;
         cuerpo.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">'
-            + (hayAlgo ? 'Ninguna orden coincide con los filtros.'
-                       : 'Todavía no hay órdenes de carga. Tocá "Nueva Orden" para armar la primera.')
+            + (todas.length ? 'Ninguna orden coincide con los filtros.'
+                            : 'Todavía no hay órdenes de carga. Tocá "Nueva Orden" para armar la primera.')
             + '</td></tr>';
         return;
     }
 
-    cuerpo.innerHTML = filtradas.map(o => {
-        const t = o.totales || {};
-        return `<tr>
-            <td>${o.cabecera['oc-fecha'] || '-'}</td>
-            <td><strong>${o.cabecera['oc-numero'] || '-'}</strong></td>
-            <td>${o.cabecera['oc-contrato-fm'] || '-'}</td>
-            <td>${o.cabecera['oc-destino'] || '-'}</td>
-            <td>${t.camiones || 0}</td>
-            <td>${t.kg || '-'}</td>
+    cuerpo.innerHTML = filtradas.map(o => `<tr>
+            <td>${o.Fecha || '-'}</td>
+            <td><strong>${o.Nro_OC || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}</td>
+            <td>${o.Contrato_Encabeza || '-'}</td>
+            <td>${o.Destino || '-'}</td>
+            <td>${o.Total_Camiones || 0}</td>
+            <td>${formatNumeroAR(o.Total_Kg || 0, 0)} kg</td>
             <td>
-                <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.id}')"><i class="fas fa-edit"></i></button>
-                <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.id}')"><i class="fas fa-trash-alt"></i></button>
+                <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.Id_OC}')"><i class="fas fa-edit"></i></button>
+                <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.Id_OC}')"><i class="fas fa-trash-alt"></i></button>
             </td>
-        </tr>`;
-    }).join('');
+        </tr>`).join('');
 }
 
-// --- 5.4. El borrador de lo que se está escribiendo ----------------------
+// --- 5.5. El borrador de lo que se está escribiendo ----------------------
 // El recálculo corre en cada tecla, pero escribir en localStorage en cada tecla
 // es tirar trabajo: se espera medio segundo de quietud antes de guardar.
+// Esto NO es la orden guardada: es solo el respaldo de lo que hay en pantalla,
+// por si se cierra la app a la mitad.
 
 let ocTimerGuardado = null;
 function ocGuardarBorrador() {
@@ -761,8 +921,75 @@ function ocLeerBorrador() {
         const crudo = localStorage.getItem(OC_STORAGE_KEY);
         if (!crudo) return null;
         const datos = JSON.parse(crudo);
-        return (datos && datos.camiones) ? datos : null;
+        return (datos && datos.Camiones) ? datos : null;
     } catch (e) { return null; }
+}
+
+
+// --- 5.6. Las órdenes de la versión anterior -----------------------------
+// La primera versión del módulo guardaba las órdenes en localStorage, con otra
+// forma. Se pasan a la cola para que suban al Sheet y se borra la clave vieja.
+// Corre una sola vez: después ya no queda nada que migrar.
+
+async function ocMigrarOrdenesViejas() {
+    let viejas = [];
+    try {
+        const crudo = localStorage.getItem(OC_LISTA_KEY);
+        if (!crudo) return;
+        viejas = JSON.parse(crudo) || [];
+    } catch (e) { return; }
+    if (!Array.isArray(viejas) || !viejas.length) return;
+
+    let migradas = 0;
+    for (const vieja of viejas) {
+        const orden = ocConvertirOrdenVieja(vieja);
+        if (!orden) continue;
+        try { await ocGuardarLocal(orden); migradas++; } catch (e) { /* se reintenta al próximo arranque */ }
+    }
+    if (migradas < viejas.length) return;   // quedó alguna: NO se borra el respaldo
+
+    try { localStorage.removeItem(OC_LISTA_KEY); } catch (e) { }
+    if (migradas && navigator.onLine && typeof sincronizarCola === 'function') {
+        sincronizarCola(colaPorStore(OC_STORE));
+    }
+    console.log('[orden-carga] Órdenes migradas al Sheet: ' + migradas);
+}
+
+function ocConvertirOrdenVieja(vieja) {
+    if (!vieja || !vieja.cabecera) return null;
+    const orden = {
+        Id_OC: vieja.id || ('OC-' + Date.now()),
+        _accion: 'actualizar_oc',
+        usuario_registro: (typeof usuarioRegistroActual === 'function') ? usuarioRegistroActual() : ''
+    };
+    Object.keys(OC_MAPA_CABECERA).forEach(id => {
+        const clave = OC_MAPA_CABECERA[id];
+        const valor = vieja.cabecera[id];
+        if (valor === undefined) return;
+        orden[clave] = OC_CAMPOS_NUMERICOS.indexOf(clave) !== -1 ? ocNumero(valor) : valor;
+    });
+    const t = vieja.totales || {};
+    orden.Total_Camiones = t.camiones || 0;
+    orden.Total_Bolsas = ocNumero(t.bolsas);
+    orden.Total_Kg = ocNumero(t.kg);
+
+    orden.Camiones = (vieja.camiones || []).map(cam => {
+        const datos = ocNumerar(Object.assign({}, cam.valores));
+        datos.CartasPorte = (cam.cps || []).map(cp => {
+            const datosCp = ocNumerar(Object.assign({}, cp.valores));
+            datosCp.Lotes = (cp.lotes || []).map(l => ocNumerar(Object.assign({}, l)));
+            return datosCp;
+        });
+        return datos;
+    });
+    return orden;
+}
+
+function ocNumerar(valores) {
+    OC_CAMPOS_NUMERICOS.forEach(campo => {
+        if (valores[campo] !== undefined) valores[campo] = ocNumero(valores[campo]);
+    });
+    return valores;
 }
 
 // =========================================================================

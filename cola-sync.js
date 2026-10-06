@@ -66,8 +66,27 @@ const COLA_CAMPOS_INTERNOS = [
     '_fallido', '_errorDeDatos'
 ];
 
-// Las tres colas. Producción queda afuera a propósito (ver el encabezado).
+// Las cuatro colas. Producción queda afuera a propósito (ver el encabezado).
 const COLAS = [
+    {
+        store: 'ordenes_carga',
+        etiqueta: 'Orden de Carga',
+        // La acción viaja en cada ítem y NO se fija acá: siempre es
+        // "actualizar_oc", que borra por Id_OC y reinserta. Así el mismo envío
+        // sirve para crear y para editar, y un reintento no duplica nada.
+        accion: null,
+        quitarId: true,            // el id de IndexedDB no va al Sheet
+        idVisible: item => item.Nro_OC ? ('OC ' + item.Nro_OC) : (item.Id_OC || '(sin id)'),
+        fecha: item => item.Fecha || '',
+        despues: function () {
+            // Al subir, la orden sale de la cola local: hay que volver a bajar el
+            // Sheet antes de repintar, o desaparecería del historial hasta recargar.
+            if (typeof ocCargarOrdenesDesdeGoogle !== 'function') return;
+            ocCargarOrdenesDesdeGoogle().then(function () {
+                if (typeof ocRenderHistorial === 'function') ocRenderHistorial();
+            });
+        }
+    },
     {
         store: 'controles_carga',
         etiqueta: 'Control de Transporte',
