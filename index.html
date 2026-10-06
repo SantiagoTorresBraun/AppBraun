@@ -561,7 +561,7 @@
                     <div class="form-group-row">
                         <div class="form-group">
                             <label for="oc-contrato-fm">Contrato que encabeza la OC</label>
-                            <input type="text" id="oc-contrato-fm" placeholder="CN26-000">
+                            <input type="text" id="oc-contrato-fm" list="oc-lista-contratos-fm" placeholder="CN26-000">
                         </div>
                         <div class="form-group">
                             <label for="oc-objetivo-kg">Objetivo de kg <span class="oc-ayuda">opcional</span></label>
@@ -573,17 +573,17 @@
                             <label for="oc-especie">Grano / Especie</label>
                             <select id="oc-especie" class="enum-select" data-enum="producto"></select>
                         </div>
-                        <div class="form-group"><label for="oc-cosecha">Cosecha</label><input type="text" id="oc-cosecha" placeholder="25-26"></div>
+                        <div class="form-group"><label for="oc-cosecha">Cosecha</label><input type="text" id="oc-cosecha" list="oc-lista-cosechas" placeholder="25-26"></div>
                     </div>
 
                     <!-- ===== DESTINO ===== -->
                     <h3>Destino</h3>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="oc-destinatario">Destinatario</label><input type="text" id="oc-destinatario" placeholder="Razón social"></div>
+                        <div class="form-group"><label for="oc-destinatario">Destinatario</label><input type="text" id="oc-destinatario" list="oc-lista-destinatarios" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
                         <div class="form-group"><label for="oc-destinatario-cuit">CUIT destinatario</label><input type="text" class="campo-cuit" id="oc-destinatario-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
                     </div>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="oc-destino">Destino de la mercadería</label><input type="text" id="oc-destino" placeholder="Razón social"></div>
+                        <div class="form-group"><label for="oc-destino">Destino de la mercadería</label><input type="text" id="oc-destino" list="oc-lista-destinos" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
                         <div class="form-group"><label for="oc-destino-cuit">CUIT destino</label><input type="text" class="campo-cuit" id="oc-destino-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
                     </div>
                     <div class="form-group-row">
@@ -598,7 +598,7 @@
                     <!-- ===== CARTA DE PORTE: DATOS FIJOS DE TODA LA OC ===== -->
                     <h3>Datos de Carta de Porte</h3>
                     <p class="oc-nota-seccion">Son los mismos para todas las cartas de porte de esta orden.</p>
-                    <div class="form-group"><label for="oc-titular-cp">Titular de la carta de porte</label><input type="text" id="oc-titular-cp" placeholder="Razón social"></div>
+                    <div class="form-group"><label for="oc-titular-cp">Titular de la carta de porte</label><input type="text" id="oc-titular-cp" list="oc-lista-titulares" placeholder="Razón social"></div>
                     <div class="form-group-row">
                         <div class="form-group"><label for="oc-remitente-productor">Remitente comercial productor</label><input type="text" id="oc-remitente-productor"></div>
                         <div class="form-group"><label for="oc-remitente-venta">Remitente comercial venta primaria</label><input type="text" id="oc-remitente-venta"></div>
@@ -607,11 +607,11 @@
                     <!-- ===== FLETE ===== -->
                     <h3>Flete</h3>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="oc-flete-intermediario">Intermediario del flete</label><input type="text" id="oc-flete-intermediario" placeholder="Razón social"></div>
+                        <div class="form-group"><label for="oc-flete-intermediario">Intermediario del flete</label><input type="text" id="oc-flete-intermediario" list="oc-lista-fletes" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
                         <div class="form-group"><label for="oc-flete-intermediario-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-intermediario-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
                     </div>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="oc-flete-pagador">Pagador del flete</label><input type="text" id="oc-flete-pagador" placeholder="Razón social"></div>
+                        <div class="form-group"><label for="oc-flete-pagador">Pagador del flete</label><input type="text" id="oc-flete-pagador" list="oc-lista-fletes" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
                         <div class="form-group"><label for="oc-flete-pagador-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-pagador-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
                     </div>
 
@@ -649,7 +649,26 @@
                         <input type="text" id="oc-observaciones">
                     </div>
 
-                    <div id="oc-validacion" class="oc-validacion hidden"></div>
+                    <!-- Sugerencias: las arma ocConstruirMaestros() con lo ya cargado
+                     en órdenes anteriores. La primera vez se escribe; de ahí en
+                     más se elige, y los datos que van con eso (CUIT, planta,
+                     acoplado) se completan solos. -->
+                <datalist id="oc-lista-contratos-fm"></datalist>
+                <datalist id="oc-lista-cosechas"></datalist>
+                <datalist id="oc-lista-destinatarios"></datalist>
+                <datalist id="oc-lista-destinos"></datalist>
+                <datalist id="oc-lista-titulares"></datalist>
+                <datalist id="oc-lista-fletes"></datalist>
+                <datalist id="oc-lista-transportistas"></datalist>
+                <datalist id="oc-lista-choferes"></datalist>
+                <datalist id="oc-lista-dominios"></datalist>
+                <datalist id="oc-lista-acoplados"></datalist>
+                <datalist id="oc-lista-productores"></datalist>
+                <datalist id="oc-lista-contratos-com"></datalist>
+                <datalist id="oc-lista-lotes-brc"></datalist>
+                <datalist id="oc-lista-lotes-planta"></datalist>
+
+                <div id="oc-validacion" class="oc-validacion hidden"></div>
 
                     <button type="button" class="btn-primary" style="width:100%; margin-top:18px;" onclick="ocGuardarOrden()">
                         <i class="fas fa-save"></i> Guardar Orden de Carga

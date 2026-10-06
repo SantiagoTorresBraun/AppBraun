@@ -151,16 +151,16 @@ function ocAgregarCamion(opciones) {
         ${ocEncabezadoHtml('Camión', 'ocDuplicarCamion', 'camion')}
         <div class="dynamic-card-body">
             <div class="form-group-row">
-                <div class="form-group"><label>Transportista (razón social)</label><input type="text" class="oc-camion-item" data-field="transportista" placeholder="Razón social del transportista"></div>
+                <div class="form-group"><label>Transportista (razón social)</label><input type="text" class="oc-camion-item" data-field="transportista" list="oc-lista-transportistas" placeholder="Razón social del transportista"></div>
                 <div class="form-group"><label>CUIT transportista</label><input type="text" class="oc-camion-item campo-cuit" data-field="transportista_cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
             </div>
             <div class="form-group-row">
-                <div class="form-group"><label>Chofer (nombre y apellido)</label><input type="text" class="oc-camion-item" data-field="chofer" placeholder="Apellido y nombre"></div>
+                <div class="form-group"><label>Chofer (nombre y apellido)</label><input type="text" class="oc-camion-item" data-field="chofer" list="oc-lista-choferes" placeholder="Apellido y nombre"></div>
                 <div class="form-group"><label>CUIT / CUIL chofer</label><input type="text" class="oc-camion-item campo-cuit" data-field="chofer_cuil" inputmode="numeric" placeholder="20-00000000-0"></div>
             </div>
             <div class="form-group-row">
-                <div class="form-group"><label>Dominio camión</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_camion" placeholder="AA000AA"></div>
-                <div class="form-group"><label>Dominio acoplado</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_acoplado" placeholder="AA000AA"></div>
+                <div class="form-group"><label>Dominio camión</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_camion" list="oc-lista-dominios" placeholder="AA000AA"></div>
+                <div class="form-group"><label>Dominio acoplado</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_acoplado" list="oc-lista-acoplados" placeholder="AA000AA"></div>
             </div>
             <div class="form-group-row">
                 <div class="form-group"><label>Km a recorrer</label><input type="text" inputmode="decimal" class="oc-camion-item campo-numero-ar" data-field="km"></div>
@@ -181,6 +181,9 @@ function ocAgregarCamion(opciones) {
 
     ocAplicarValores(card, 'oc-camion-item', opciones.valores);
     card.querySelectorAll('.oc-camion-item').forEach(el => el.addEventListener('input', ocRecalcularTodo));
+    // Al elegir una sugerencia se completa lo que va con eso (CUIT, acoplado,
+    // lote de planta). Solo rellena lo que está vacío: nunca pisa lo escrito.
+    card.querySelectorAll('.oc-camion-item').forEach(el => el.addEventListener('change', () => ocAutocompletarTarjeta(el)));
 
     // Un camión sin ninguna CP no existe: arranca con una.
     if (opciones.cps && opciones.cps.length) {
@@ -217,8 +220,8 @@ function ocAgregarCp(idWrapper, opciones) {
         ${ocEncabezadoHtml('Carta de Porte', 'ocDuplicarCp', 'cp')}
         <div class="dynamic-card-body">
             <div class="form-group-row">
-                <div class="form-group"><label>Productor</label><input type="text" class="oc-cp-item" data-field="productor" placeholder="Razón social del productor"></div>
-                <div class="form-group"><label>Contrato Comercial (CTTO)</label><input type="text" class="oc-cp-item" data-field="contrato_com" placeholder="CN26-081 B"></div>
+                <div class="form-group"><label>Productor</label><input type="text" class="oc-cp-item" data-field="productor" list="oc-lista-productores" placeholder="Razón social del productor"></div>
+                <div class="form-group"><label>Contrato Comercial (CTTO)</label><input type="text" class="oc-cp-item" data-field="contrato_com" list="oc-lista-contratos-com" placeholder="CN26-081 B"></div>
             </div>
             <div class="form-group-row">
                 <div class="form-group">
@@ -257,6 +260,9 @@ function ocAgregarCp(idWrapper, opciones) {
 
     ocAplicarValores(card, 'oc-cp-item', opciones.valores);
     card.querySelectorAll('.oc-cp-item').forEach(el => el.addEventListener('input', ocRecalcularTodo));
+    // Al elegir una sugerencia se completa lo que va con eso (CUIT, acoplado,
+    // lote de planta). Solo rellena lo que está vacío: nunca pisa lo escrito.
+    card.querySelectorAll('.oc-cp-item').forEach(el => el.addEventListener('change', () => ocAutocompletarTarjeta(el)));
 
     if (opciones.lotes && opciones.lotes.length) {
         opciones.lotes.forEach(valores => ocAgregarLote(idLotes, { valores: valores }));
@@ -292,8 +298,8 @@ function ocAgregarLote(idWrapper, opciones) {
         ${ocEncabezadoHtml('Lote', 'ocDuplicarLote', 'lote')}
         <div class="dynamic-card-body">
             <div class="form-group-row">
-                <div class="form-group"><label>N° Lote BRC</label><input type="text" class="oc-lote-item" data-field="lote_brc" placeholder="0000"></div>
-                <div class="form-group"><label>N° Lote Planta</label><input type="text" class="oc-lote-item" data-field="lote_planta" placeholder="LT-000"></div>
+                <div class="form-group"><label>N° Lote BRC</label><input type="text" class="oc-lote-item" data-field="lote_brc" list="oc-lista-lotes-brc" placeholder="0000"></div>
+                <div class="form-group"><label>N° Lote Planta</label><input type="text" class="oc-lote-item" data-field="lote_planta" list="oc-lista-lotes-planta" placeholder="LT-000"></div>
             </div>
             <div class="form-group-row">
                 <div class="form-group"><label>Tipo</label><select class="oc-lote-item enum-select" data-field="tipo" data-enum="tipoCarga"></select></div>
@@ -311,6 +317,9 @@ function ocAgregarLote(idWrapper, opciones) {
     card.querySelectorAll('.enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
     ocAplicarValores(card, 'oc-lote-item', opciones.valores);
     card.querySelectorAll('.oc-lote-item').forEach(el => el.addEventListener('input', ocRecalcularTodo));
+    // Al elegir una sugerencia se completa lo que va con eso (CUIT, acoplado,
+    // lote de planta). Solo rellena lo que está vacío: nunca pisa lo escrito.
+    card.querySelectorAll('.oc-lote-item').forEach(el => el.addEventListener('change', () => ocAutocompletarTarjeta(el)));
     card.querySelectorAll('select.oc-lote-item').forEach(el => el.addEventListener('change', ocRecalcularTodo));
 
     ocRenumerar(wrapper, 'Lote');
@@ -874,6 +883,9 @@ async function ocRenderHistorial() {
     }).sort((a, b) => String(b.Fecha || '').localeCompare(String(a.Fecha || '')));
 
     ocUltimasListadas = filtradas;
+    // Las sugerencias salen de las órdenes ya cargadas: este es el momento
+    // en que pueden haber cambiado.
+    ocConstruirMaestros(pendientes);
 
     const cuerpo = document.getElementById('tabla-oc-body');
     if (!filtradas.length) {
@@ -1048,7 +1060,171 @@ function ocValidar() {
 }
 
 // =========================================================================
-// --- 7. EL PDF DE LA ORDEN: EL INFORME DE CAMIONES QUE VA A PLANTA --------
+// --- 7. SUGERENCIAS: ELEGIR EN VEZ DE ESCRIBIR ---------------------------
+// =========================================================================
+// El grueso de los errores de una OC no está en la lógica: está en el tipeo de
+// los datos que ya existen —CUIT, dominios, lotes—. Un dígito de más en un CUIT
+// y la carta de porte sale mal.
+//
+// Esto no espera a que haya una tabla de datos maestros en ningún lado: la arma
+// con lo que YA se cargó en órdenes anteriores. La primera vez se escribe; de
+// ahí en más se elige de la lista, y lo que va con ese dato se completa solo:
+//
+//     elegís el transportista  -> viene su CUIT
+//     elegís el chofer         -> viene su CUIL
+//     elegís el dominio        -> vienen acoplado, transportista y chofer
+//     elegís el destino        -> vienen CUIT, planta, dirección, localidad
+//     elegís el lote BRC       -> vienen lote de planta, calibre y kg por bolsa
+//
+// NUNCA pisa lo que ya está escrito: solo rellena los campos vacíos. Si el
+// chofer de hoy es otro, se escribe encima y listo.
+//
+// Cuando exista una tabla de maestros de verdad (ver PREGUNTAS_PENDIENTES_LUCAS,
+// punto 7.1), lo único que cambia es de dónde sale `ocMaestros`.
+
+// Cada clave guarda: valor elegido -> { campo acompañante: valor }
+let ocMaestros = null;
+
+// Se arma de las órdenes del Sheet más las que todavía están pendientes acá.
+// La más reciente gana: si a un chofer le cambió el camión, vale el último.
+function ocConstruirMaestros(pendientes) {
+    const m = {
+        'oc-lista-contratos-fm': {}, 'oc-lista-cosechas': {},
+        'oc-lista-destinatarios': {}, 'oc-lista-destinos': {},
+        'oc-lista-titulares': {}, 'oc-lista-fletes': {},
+        'oc-lista-transportistas': {}, 'oc-lista-choferes': {},
+        'oc-lista-dominios': {}, 'oc-lista-acoplados': {},
+        'oc-lista-productores': {}, 'oc-lista-contratos-com': {},
+        'oc-lista-lotes-brc': {}, 'oc-lista-lotes-planta': {}
+    };
+
+    const anotar = (lista, valor, acompanan) => {
+        const clave = String(valor || '').trim();
+        if (!clave) return;
+        const limpio = {};
+        Object.keys(acompanan || {}).forEach(k => {
+            const v = acompanan[k];
+            if (v !== undefined && v !== null && String(v).trim() !== '') limpio[k] = v;
+        });
+        m[lista][clave] = limpio;
+    };
+
+    // Las más viejas primero, para que al repetirse gane la última.
+    const todas = (ocHistorialRemoto || []).slice().reverse().concat(pendientes || []);
+
+    todas.forEach(o => {
+        anotar('oc-lista-contratos-fm', o.Contrato_Encabeza, {});
+        anotar('oc-lista-cosechas', o.Cosecha, {});
+        anotar('oc-lista-titulares', o.Titular_CP, {});
+        anotar('oc-lista-destinatarios', o.Destinatario, { 'oc-destinatario-cuit': o.Destinatario_CUIT });
+        anotar('oc-lista-destinos', o.Destino, {
+            'oc-destino-cuit': o.Destino_CUIT,
+            'oc-destino-planta': o.Destino_Planta,
+            'oc-destino-direccion': o.Destino_Direccion,
+            'oc-destino-localidad': o.Destino_Localidad,
+            'oc-destino-provincia': o.Destino_Provincia
+        });
+        // Los dos fletes comparten lista: suele ser la misma gente.
+        anotar('oc-lista-fletes', o.Flete_Intermediario, { cuit: o.Flete_Intermediario_CUIT });
+        anotar('oc-lista-fletes', o.Flete_Pagador, { cuit: o.Flete_Pagador_CUIT });
+
+        (o.Camiones || []).forEach(cam => {
+            anotar('oc-lista-transportistas', cam.transportista, { transportista_cuit: cam.transportista_cuit });
+            anotar('oc-lista-choferes', cam.chofer, { chofer_cuil: cam.chofer_cuil });
+            // El dominio es la mejor clave del camión: trae todo lo demás.
+            anotar('oc-lista-dominios', cam.dominio_camion, {
+                dominio_acoplado: cam.dominio_acoplado,
+                transportista: cam.transportista,
+                transportista_cuit: cam.transportista_cuit,
+                chofer: cam.chofer,
+                chofer_cuil: cam.chofer_cuil
+            });
+            anotar('oc-lista-acoplados', cam.dominio_acoplado, {});
+
+            (cam.CartasPorte || []).forEach(cp => {
+                anotar('oc-lista-productores', cp.productor, {});
+                anotar('oc-lista-contratos-com', cp.contrato_com, { productor: cp.productor });
+
+                (cp.Lotes || []).forEach(l => {
+                    anotar('oc-lista-lotes-brc', l.lote_brc, {
+                        lote_planta: l.lote_planta,
+                        tipo: l.tipo,
+                        calibre: l.calibre,
+                        kg_bolsa: l.kg_bolsa
+                    });
+                    anotar('oc-lista-lotes-planta', l.lote_planta, {});
+                });
+            });
+        });
+    });
+
+    ocMaestros = m;
+    ocPintarSugerencias();
+}
+
+// Vuelca cada lista en su <datalist>. Ordenadas, para que buscar sea rápido.
+function ocPintarSugerencias() {
+    if (!ocMaestros) return;
+    Object.keys(ocMaestros).forEach(id => {
+        const lista = document.getElementById(id);
+        if (!lista) return;
+        const valores = Object.keys(ocMaestros[id]).sort(
+            (a, b) => a.localeCompare(b, 'es', { numeric: true }));
+        lista.innerHTML = valores
+            .map(v => '<option value="' + String(v).replace(/"/g, '&quot;') + '"></option>')
+            .join('');
+    });
+}
+
+// Completa un campo solo si está vacío: lo escrito a mano nunca se pisa.
+function ocCompletarSiVacio(el, valor) {
+    if (!el || valor === undefined || valor === null || String(valor).trim() === '') return false;
+    if (String(el.value).trim() !== '') return false;
+    el.value = valor;
+    return true;
+}
+
+// --- Cabecera ------------------------------------------------------------
+function ocAutocompletarCabecera(input) {
+    if (!ocMaestros || !input) return;
+    const lista = input.getAttribute('list');
+    const datos = ocMaestros[lista] && ocMaestros[lista][String(input.value).trim()];
+    if (!datos) return;
+
+    Object.keys(datos).forEach(clave => {
+        // La lista de fletes guarda 'cuit' a secas, porque la comparten el
+        // intermediario y el pagador: cada uno completa el suyo.
+        const id = (clave === 'cuit') ? input.id + '-cuit' : clave;
+        ocCompletarSiVacio(document.getElementById(id), datos[clave]);
+    });
+    ocRecalcularTodo();
+}
+
+// --- Tarjetas (camión, carta de porte, lote) -----------------------------
+function ocAutocompletarTarjeta(input) {
+    if (!ocMaestros || !input) return;
+    const lista = input.getAttribute('list');
+    if (!lista) return;
+    const datos = ocMaestros[lista] && ocMaestros[lista][String(input.value).trim()];
+    if (!datos) return;
+
+    const card = input.closest('.dynamic-item-card');
+    if (!card) return;
+
+    Object.keys(datos).forEach(campo => {
+        const destino = card.querySelector(':scope > .dynamic-card-body [data-field="' + campo + '"]');
+        if (!destino) return;
+        if (destino.tagName === 'SELECT') {
+            if (!destino.value) poblarSelect(destino, destino.dataset.enum, datos[campo]);
+        } else {
+            ocCompletarSiVacio(destino, datos[campo]);
+        }
+    });
+    ocRecalcularTodo();
+}
+
+// =========================================================================
+// --- 8. EL PDF DE LA ORDEN: EL INFORME DE CAMIONES QUE VA A PLANTA --------
 // =========================================================================
 // Es lo que hoy se manda como Excel. Tiene que decir exactamente lo mismo, en
 // el mismo orden: la cabecera arriba (quién recibe, qué grano, de qué contrato)

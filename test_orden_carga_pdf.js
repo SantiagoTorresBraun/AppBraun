@@ -60,7 +60,7 @@ const LOGO_BRAUN_BLANCO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAA
 // --- El codigo bajo prueba ----------------------------------------------
 // Se corta en la seccion 7: el resto de orden-carga.js toca el DOM.
 const oc = fs.readFileSync(path.join(RAIZ, 'orden-carga.js'), 'utf8');
-const desde = oc.indexOf('// --- 7. EL PDF DE LA ORDEN');
+const desde = oc.indexOf('// --- 8. EL PDF DE LA ORDEN');
 if (desde === -1) { console.log('>>> no encontre la seccion del PDF'); process.exit(1); }
 eval(oc.slice(oc.lastIndexOf('// ====', desde)));
 

@@ -28,6 +28,7 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v15: sugerencias en la Orden de Carga (index.html y orden-carga.js).
 // v14: el PDF de la Orden de Carga (orden-carga.js cambio).
 // v13: la Orden de Carga se guarda en el Sheet (app.js, cola-sync.js y
 // orden-carga.js cambiaron).
@@ -37,7 +38,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v14';
+const VERSION = 'v15';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

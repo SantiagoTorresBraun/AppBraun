@@ -1,7 +1,8 @@
 # Orden de Carga — modelo de datos y vinculación con Control de Transporte
 
-> Estado: **la orden se guarda en el Sheet y genera su PDF para planta**.
-> Falta el enganche con Control de Transporte.
+> Estado: **la orden se guarda en el Sheet, genera su PDF para planta y los
+> datos se eligen en vez de escribirse**. Falta el enganche con Control de
+> Transporte.
 > Fuentes: `Propuesta nuevas vinculaciones.docx` y el Excel real
 > `CN26-063 Orden de Carga 14-7.xlsx` (OC 2056, 14/07).
 > Última actualización: 06/10/2026.
@@ -380,11 +381,47 @@ salga de la hoja ni se monte sobre el pie. Ese es el error que no se ve hasta
 que alguien imprime. También prueba una orden sin camiones y una de 12 camiones,
 para verificar el corte de hoja.
 
+### Elegir en vez de escribir — quinto incremento
+
+El grueso de los errores de una OC no está en la lógica: está en el tipeo de los
+datos que ya existen. Un dígito de más en un CUIT y la carta de porte sale mal.
+
+**No espera a que haya una tabla de datos maestros**: la arma con lo que ya se
+cargó en órdenes anteriores. La primera vez se escribe; de ahí en más se elige
+de la lista, y lo que va con ese dato se completa solo:
+
+| Elegís | Se completa solo |
+|---|---|
+| el **dominio** del camión | acoplado, transportista + CUIT, chofer + CUIL |
+| el **transportista** | su CUIT |
+| el **chofer** | su CUIL |
+| el **destino** | CUIT, N° de planta, dirección, localidad, provincia |
+| el **destinatario** | su CUIT |
+| el **lote BRC** | lote de planta, tipo, calibre y kg por bolsa |
+| el **contrato comercial** | el productor |
+
+Son 14 listas en total, que incluyen además contratos, cosechas, titulares de
+carta de porte, fletes, productores y acoplados.
+
+**Nunca pisa lo escrito a mano**: solo rellena campos vacíos. Si el chofer de hoy
+es otro, se escribe encima y listo. Y si un dato cambió (al camión le cambió el
+acoplado), gana lo de la orden más reciente.
+
+Se rearman cada vez que se repinta el historial, que es cuando pueden haber
+cambiado. Cuando exista una tabla de maestros de verdad (ver
+`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 7.1), lo único que cambia es de dónde
+sale `ocMaestros`.
+
+Probado en [test_orden_carga_sugerencias.js](test_orden_carga_sugerencias.js),
+que simula el DOM y verifica las tres cosas que importan: que las listas se
+armen bien y sin repetidos, que al elegir se complete lo que corresponde, y que
+lo escrito a mano se respete.
+
 ## 9. Lo que sigue
 
 1. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que
    planta abra la orden por número, elija su camión y arranque el Control de
    Transporte con todo cargado. Depende de cerrar el mapeo campo por campo
    (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 3.1).
-2. Datos maestros (destinos, transportistas, choferes, vehículos, productores)
-   para elegir en vez de escribir.
+2. Datos maestros de verdad, si existen en algún lado: hoy las listas se arman
+   solas con lo ya cargado (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 7.1).
