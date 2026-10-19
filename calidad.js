@@ -36,8 +36,38 @@ const CALIDAD_CONFIG = {
     }
 };
 
+// --- 1-B. TIPOS DE CONTROL (ver DISEÑO_CALIDAD_COSECHA_FM.md) ---
+// Los dos tipos se guardan en la MISMA hoja de cada grano; la columna
+// "Tipo de Control" dice de cuál es cada fila.
+const TIPOS_CONTROL_CALIDAD = {
+    "COSECHA":       { nombre: "Control de Cosecha",       corto: "Cosecha",       ruta: "cosecha" },
+    "FLUJO DE MASA": { nombre: "Control de Flujo de Masa", corto: "Flujo de Masa", ruta: "flujo-de-masa" }
+};
+// Los controles viejos (AppSheet) no tienen tipo: se decidió que todos cuenten
+// como Flujo de Masa. No se reescribe el Sheet; el tipo queda grabado recién
+// cuando alguien edita el control y lo guarda.
+const TIPO_CONTROL_HISTORICO = "FLUJO DE MASA";
+
+function tipoControlDe(item) {
+    const tipo = String((item && item["Tipo de Control"]) || '').trim().toUpperCase();
+    return TIPOS_CONTROL_CALIDAD[tipo] ? tipo : TIPO_CONTROL_HISTORICO;
+}
+
 // --- 2. ESTADO DEL MÓDULO ---
 let granoActual = "GARBANZO";
+let tipoControlActual = "COSECHA";
+
+// Vista del historial: "carpetas" (agrupado por contrato, como pide la
+// propuesta) o "lista" (el historial plano de siempre). Se recuerda por
+// dispositivo. contratoCalidadAbierto: null = viendo las carpetas; "" = la
+// carpeta "Sin contrato"; cualquier otro texto = ese contrato.
+const CALIDAD_VISTA_KEY = "braun_calidad_vista_historial";
+let vistaHistorialCalidad = (function () {
+    try { return localStorage.getItem(CALIDAD_VISTA_KEY) === "lista" ? "lista" : "carpetas"; }
+    catch (e) { return "carpetas"; }
+})();
+let contratoCalidadAbierto = null;
+let carpetasCalidadPintadas = [];   // lo que se ve, para abrir por índice
 let historialCalidad = [];          // registros ya sincronizados (vienen del Sheet)
 let idCalidadEnEdicion = null;      // Id_Calidad en edición (null = registro nuevo)
 const fotosCalidad = { "imagen 1": "", "imagen 2": "", "imagen 3": "", "imagen 4": "" };
@@ -47,23 +77,38 @@ function nombreGranoActual() {
     return (CALIDAD_CONFIG[granoActual] || {}).nombre || "";
 }
 
+function nombreTipoControlActual() {
+    return TIPOS_CONTROL_CALIDAD[tipoControlActual].nombre;
+}
+
+// Título del header de la app con el módulo abierto ("Cosecha · Garbanzo")
+function tituloModuloCalidad() {
+    return `${TIPOS_CONTROL_CALIDAD[tipoControlActual].corto} · ${nombreGranoActual()}`;
+}
+
 // Nombre legible del grano de UN registro (no del que está abierto en pantalla).
 // Lo usa correo.js para armar el asunto y el cuerpo del mail.
 function nombreGranoCalidad(granoKey) {
     return (CALIDAD_CONFIG[granoKey] || CALIDAD_CONFIG[granoActual] || {}).nombre || String(granoKey || "");
 }
 
-// --- 3. RUTEO INTERNO (#/control-calidad/garbanzo) ---
+// --- 3. RUTEO INTERNO (#/control-calidad/cosecha/garbanzo) ---
 function actualizarHashCalidad() {
     const cfg = CALIDAD_CONFIG[granoActual];
-    if (cfg) history.replaceState(null, "", `#/control-calidad/${cfg.ruta}`);
+    if (cfg) history.replaceState(null, "", `#/control-calidad/${TIPOS_CONTROL_CALIDAD[tipoControlActual].ruta}/${cfg.ruta}`);
 }
 
 function abrirCalidadDesdeHash() {
-    const match = (location.hash || "").match(/^#\/control-calidad\/([a-z-]+)/);
+    // Formato actual: #/control-calidad/<tipo>/<grano>
+    // Formato viejo:  #/control-calidad/<grano>  (links guardados) → Flujo de Masa
+    const match = (location.hash || "").match(/^#\/control-calidad\/([a-z-]+)(?:\/([a-z-]+))?/);
     if (!match) return false;
-    const granoKey = Object.keys(CALIDAD_CONFIG).find(k => CALIDAD_CONFIG[k].ruta === match[1]);
+    let tipoKey = Object.keys(TIPOS_CONTROL_CALIDAD).find(k => TIPOS_CONTROL_CALIDAD[k].ruta === match[1]);
+    let rutaGrano = match[2];
+    if (!tipoKey) { tipoKey = TIPO_CONTROL_HISTORICO; rutaGrano = match[1]; }
+    const granoKey = Object.keys(CALIDAD_CONFIG).find(k => CALIDAD_CONFIG[k].ruta === rutaGrano);
     if (granoKey && CALIDAD_CONFIG[granoKey].habilitado) {
+        tipoControlActual = tipoKey;
         abrirModuloCalidad(granoKey);
         return true;
     }
@@ -71,6 +116,40 @@ function abrirCalidadDesdeHash() {
 }
 
 // --- 4. NAVEGACIÓN Y ARMADO DE PANTALLA ---
+// Paso 1: Cosecha o Flujo de Masa. Paso 2: el grano (abrirModuloCalidad).
+function elegirTipoControlCalidad(tipoKey) {
+    if (!TIPOS_CONTROL_CALIDAD[tipoKey]) return;
+    tipoControlActual = tipoKey;
+    document.getElementById('lbl-tipo-control-grano').textContent = nombreTipoControlActual();
+    cambiarVista('view-submenu-calidad-grano');
+}
+
+// Muestra solo los campos del tipo de control abierto. Los campos obligatorios
+// del bloque oculto dejan de serlo: si no, el navegador frena el guardado por
+// un campo que el operario ni ve.
+function aplicarTipoControlFormulario() {
+    document.querySelectorAll('.cal-bloque-tipo').forEach(bloque => {
+        const visible = bloque.dataset.tipoControl === tipoControlActual;
+        bloque.classList.toggle('hidden', !visible);
+        bloque.querySelectorAll('[data-requerido-tipo]').forEach(inp => { inp.required = visible; });
+    });
+    document.getElementById('lbl-tipo-control-actual').textContent = nombreTipoControlActual();
+    document.getElementById('lbl-tipo-control-form').textContent = nombreTipoControlActual();
+    document.getElementById('th-cal-referencia').textContent = etiquetaReferenciaCalidad();
+}
+
+function etiquetaReferenciaCalidad() {
+    return tipoControlActual === "COSECHA" ? "Contrato / Campo" : "Contrato / Proceso / Lote";
+}
+
+// Sugerencias de Campo / Establecimiento con lo ya cargado en otros controles
+function actualizarSugerenciasCamposCalidad() {
+    const lista = document.getElementById('cal-lista-campos');
+    if (!lista) return;
+    const campos = [...new Set(historialCalidad.map(r => String(r["Campo / Establecimiento"] || '').trim()).filter(Boolean))].sort();
+    lista.innerHTML = campos.map(c => `<option value="${escapeHtml(c)}">`).join('');
+}
+
 function abrirModuloCalidad(granoKey) {
     const cfg = CALIDAD_CONFIG[granoKey];
     if (!cfg) return;
@@ -80,6 +159,7 @@ function abrirModuloCalidad(granoKey) {
     }
 
     granoActual = granoKey;
+    contratoCalidadAbierto = null;
     document.getElementById('lbl-grano-actual').textContent = cfg.nombre;
     document.getElementById('lbl-grano-form').textContent = cfg.nombre;
 
@@ -96,6 +176,12 @@ function switchTabCalidad(tabName) {
     if (tabName === 'nuevo') {
         historial.classList.add('hidden');
         nuevo.classList.remove('hidden');
+        // Si se toca "Nuevo Control" adentro de una carpeta, el control es de
+        // ese contrato: se completa solo (si no se está editando otro).
+        if (!idCalidadEnEdicion && contratoCalidadAbierto) {
+            const campo = document.getElementById(tipoControlActual === "COSECHA" ? 'cal-contrato-prod' : 'cal-contrato-fm');
+            if (campo && !campo.value.trim()) campo.value = contratoCalidadAbierto;
+        }
     } else {
         nuevo.classList.add('hidden');
         historial.classList.remove('hidden');
@@ -117,6 +203,14 @@ function resetFormularioCalidad() {
 
     // Reconstruir inputs analíticos según el grano activo
     construirCamposAnaliticos();
+    aplicarTipoControlFormulario();
+    actualizarSugerenciasCamposCalidad();
+
+    // "Muestreo en" arranca en el lugar típico del tipo (si sigue en la lista)
+    const muestreoPorDefecto = tipoControlActual === "COSECHA" ? "Campo" : "Planta";
+    if ((ENUMS.muestreo || []).includes(muestreoPorDefecto)) {
+        poblarSelect(document.getElementById('cal-muestreo'), 'muestreo', muestreoPorDefecto);
+    }
 
     // Limpiar fotos
     Object.keys(fotosCalidad).forEach(k => fotosCalidad[k] = "");
@@ -280,22 +374,19 @@ function construirRegistroCalidad(idParaGuardar) {
         // Auditoría: email del operario logueado que crea/modifica el control
         "usuario_registro": usuarioRegistroActual(),
         "Grano": granoActual,
+        "Tipo de Control": tipoControlActual,
         "Fecha Analisis": document.getElementById('cal-fecha').value,
         "Cliente": document.getElementById('cal-cliente').value,
         "Muestreo en": document.getElementById('cal-muestreo').value,
-        "N° Lote Cliente/Planta": document.getElementById('cal-lote-cliente').value,
-        "N° Lote BRC": document.getElementById('cal-lote-brc').value,
-        "N° Proceso": document.getElementById('cal-proceso').value,
-        "N° Lote": document.getElementById('cal-lote').value,
-        // Contrato Producción, Contrato Comercial, Contrato FM, Variedad, N° CTG
-        // y Tipo salieron del formulario: no se usaban al cargar un control.
+        // Contrato Comercial, Variedad, N° CTG y Tipo salieron del formulario:
+        // no se usaban al cargar un control. Tampoco se mandan los campos del
+        // OTRO tipo de control (ver más abajo).
         //
         // No se mandan como "" a propósito, se OMITEN. El backend distingue las
         // dos cosas: al ACTUALIZAR saltea las claves que no llegan (`undefined`)
         // y deja la celda como está, así editar un control viejo no le borra los
-        // contratos que ya tenía. Mandar "" sí los borraría.
+        // datos que ya tenía. Mandar "" sí los borraría.
         "Calibre": document.getElementById('cal-calibre').value,
-        "Envase": document.getElementById('cal-envase').value,
         "Kg": parseNumeroAR(document.getElementById('cal-kg').value),
 
         "Humedad": parseNumeroAR(document.getElementById('cal-humedad').value),
@@ -321,6 +412,28 @@ function construirRegistroCalidad(idParaGuardar) {
         "Archivo2": 0,
         "PDF Control Calidad": ""
     };
+
+    // Campos propios del tipo de control. "N° Lote Cliente" (Cosecha) e
+    // "ID Planta" (Flujo de Masa) son la misma columna del Sheet.
+    const valor = id => document.getElementById(id).value.trim();
+    if (tipoControlActual === "COSECHA") {
+        Object.assign(registro, {
+            "Contrato Produccion": valor('cal-contrato-prod'),
+            "Campo / Establecimiento": valor('cal-campo'),
+            "N° Lote Cliente/Planta": valor('cal-lote-cliente-cosecha'),
+            "Rinde/ha": parseNumeroAR(document.getElementById('cal-rinde').value)
+        });
+    } else {
+        Object.assign(registro, {
+            "Contrato FM": valor('cal-contrato-fm'),
+            "Planta": document.getElementById('cal-planta').value,
+            "N° Proceso": valor('cal-proceso'),
+            "N° Lote Cliente/Planta": valor('cal-lote-cliente'),
+            "N° Lote BRC": valor('cal-lote-brc'),
+            "N° Lote": valor('cal-lote'),
+            "Envase": document.getElementById('cal-envase').value
+        });
+    }
 
     // Variables analíticas dinámicas (calibres y defectos del grano activo).
     // Se cargan en gramos y se guardan en % sobre el peso de muestra analizada,
@@ -446,7 +559,7 @@ function sincronizarCalidadPendientes() {
 // edición y PDF funcionen igual que con los registros creados desde la app.
 
 const CAMPOS_NUMERICOS_CALIDAD = [
-    "Kg", "Humedad", "Materia Extraña", "Peso Muestra (g)",
+    "Kg", "Rinde/ha", "Humedad", "Materia Extraña", "Peso Muestra (g)",
     "Total Granos Buenos", "Total de Daños",
     "Total Muestra Cargada", "Total Muestra %"
 ];
@@ -713,8 +826,9 @@ async function filtrarYRenderizarCalidad() {
     const remotos = historialCalidad.filter(r => !idsLocales.has(r["Id_Calidad"]));
     const lista = locales.concat(remotos);
 
-    const filtrados = lista.filter(item => {
+    let filtrados = lista.filter(item => {
         if ((item["Grano"] || "GARBANZO") !== granoActual) return false;
+        if (tipoControlDe(item) !== tipoControlActual) return false;
         const fecha = item["Fecha Analisis"] || '';
         if (fechaDesde && fecha && fecha < fechaDesde) return false;
         if (fechaHasta && fecha && fecha > fechaHasta) return false;
@@ -722,7 +836,8 @@ async function filtrarYRenderizarCalidad() {
             const buscable = [
                 item["Cliente"], item["Variedad"], item["N° Lote"], item["N° Lote BRC"],
                 item["N° Lote Cliente/Planta"], item["Contrato Comercial"],
-                item["Contrato Produccion"], item["N° Proceso"]
+                item["Contrato Produccion"], item["Contrato FM"], item["N° Proceso"],
+                item["Campo / Establecimiento"], item["Planta"]
             ].join(' ').toLowerCase();
             if (!buscable.includes(txt)) return false;
         }
@@ -730,6 +845,18 @@ async function filtrarYRenderizarCalidad() {
     });
 
     filtrados.sort((a, b) => (b["Fecha Analisis"] || '').localeCompare(a["Fecha Analisis"] || ''));
+
+    // Vista por contrato: sin carpeta abierta se muestran las carpetas; con
+    // una abierta, la tabla de siempre pero solo con sus controles. Los
+    // filtros de arriba (fechas, búsqueda) valen para las dos cosas.
+    pintarBarraVistaCalidad();
+    if (vistaHistorialCalidad === "carpetas") {
+        if (contratoCalidadAbierto === null) {
+            pintarCarpetasCalidad(filtrados);
+            return;
+        }
+        filtrados = filtrados.filter(item => contratoCalidadDe(item) === contratoCalidadAbierto);
+    }
 
     // Si la tabla YA tenía filas y ahora queda vacía, algo se perdió por el
     // camino. Se deja el rastro con el stack para saber quién la vacío: es la
@@ -766,13 +893,18 @@ async function filtrarYRenderizarCalidad() {
         const etiquetaPendiente = item._pendienteSync
             ? `<br><span class="badge-pendiente" title="Todavía no se sincronizó con el servidor"><i class="fas fa-clock"></i> Pendiente</span>`
             : '';
-        const loteVariedad = [item["N° Lote"], item["Variedad"]].filter(Boolean).join(' / ') || '-';
+        // Referencia según el tipo; los controles viejos sin contrato muestran lote / variedad
+        const referencia = (tipoControlActual === "COSECHA"
+                ? [item["Contrato Produccion"], item["Campo / Establecimiento"]]
+                : [item["Contrato FM"], item["N° Proceso"], item["N° Lote Cliente/Planta"]]
+            ).filter(Boolean).join(' / ')
+            || [item["N° Lote"], item["Variedad"]].filter(Boolean).join(' / ') || '-';
 
         tr.innerHTML = `
             <td data-label="Foto" class="td-thumb">${miniatura}</td>
             <td data-label="Fecha" class="td-fecha">${item["Fecha Analisis"] || '-'}<span class="reg-num-movil">#${item["Id_Calidad"] || ''}</span></td>
             <td data-label="Cliente"><b>${escapeHtml(item["Cliente"] || '-')}</b>${etiquetaPendiente}</td>
-            <td data-label="Lote / Variedad">${escapeHtml(loteVariedad)}</td>
+            <td data-label="${etiquetaReferenciaCalidad()}">${escapeHtml(referencia)}</td>
             <td data-label="Kg">${item["Kg"] || 0} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarCalidadParaEditar('${dataString}')" title="Editar control">
@@ -791,6 +923,107 @@ async function filtrarYRenderizarCalidad() {
     });
 }
 
+// --- 9-B. VISTA POR CONTRATO ("CARPETAS") ---
+// Cada contrato es una carpeta con todos sus controles: Cosecha se agrupa por
+// Contrato de Producción y Flujo de Masa por Contrato FM. Los controles sin
+// contrato (los viejos de AppSheet, en general) van a "Sin contrato".
+
+function contratoCalidadDe(item) {
+    const campo = tipoControlDe(item) === "COSECHA" ? "Contrato Produccion" : "Contrato FM";
+    return String(item[campo] || '').trim();
+}
+
+function cambiarVistaHistorialCalidad(vista) {
+    vistaHistorialCalidad = vista === "lista" ? "lista" : "carpetas";
+    contratoCalidadAbierto = null;
+    try { localStorage.setItem(CALIDAD_VISTA_KEY, vistaHistorialCalidad); } catch (e) { /* sin storage */ }
+    filtrarYRenderizarCalidad();
+}
+
+function abrirCarpetaCalidad(indice) {
+    const carpeta = carpetasCalidadPintadas[indice];
+    if (!carpeta) return;
+    contratoCalidadAbierto = carpeta.contrato;
+    filtrarYRenderizarCalidad();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cerrarCarpetaCalidad() {
+    contratoCalidadAbierto = null;
+    filtrarYRenderizarCalidad();
+}
+
+// Botones de vista, la "miga" de la carpeta abierta y qué se ve (carpetas o tabla)
+function pintarBarraVistaCalidad() {
+    const enCarpetas = vistaHistorialCalidad === "carpetas";
+    const carpetaAbierta = enCarpetas && contratoCalidadAbierto !== null;
+    document.getElementById('btn-cal-vista-carpetas').classList.toggle('activo', enCarpetas);
+    document.getElementById('btn-cal-vista-lista').classList.toggle('activo', !enCarpetas);
+    document.getElementById('cal-carpeta-abierta').classList.toggle('hidden', !carpetaAbierta);
+    document.getElementById('cal-carpeta-nombre').textContent = carpetaAbierta
+        ? (contratoCalidadAbierto || 'Sin contrato') : '';
+    document.getElementById('cal-carpetas').classList.toggle('hidden', !enCarpetas || carpetaAbierta);
+    document.getElementById('cal-tabla-wrapper').classList.toggle('hidden', enCarpetas && !carpetaAbierta);
+}
+
+function pintarCarpetasCalidad(controles) {
+    const caja = document.getElementById('cal-carpetas');
+    const porContrato = {};
+    controles.forEach(item => {
+        const contrato = contratoCalidadDe(item);
+        (porContrato[contrato] = porContrato[contrato] || []).push(item);
+    });
+
+    const unicos = (lista, campo) => [...new Set(lista.map(i => String(i[campo] || '').trim()).filter(Boolean))];
+    carpetasCalidadPintadas = Object.keys(porContrato).map(contrato => {
+        const items = porContrato[contrato];   // ya vienen del más nuevo al más viejo
+        const fechas = items.map(i => i["Fecha Analisis"]).filter(Boolean).sort();
+        return {
+            contrato,
+            items,
+            desde: fechas[0] || '',
+            hasta: fechas[fechas.length - 1] || '',
+            clientes: unicos(items, "Cliente"),
+            lugares: unicos(items, tipoControlActual === "COSECHA" ? "Campo / Establecimiento" : "Planta"),
+            kg: items.reduce((t, i) => t + (Number(i["Kg"]) || 0), 0),
+            pendientes: items.filter(i => i._pendienteSync).length
+        };
+    });
+    // El contrato con actividad más reciente primero; "Sin contrato" al final
+    carpetasCalidadPintadas.sort((a, b) => {
+        if (!a.contrato !== !b.contrato) return a.contrato ? -1 : 1;
+        return b.hasta.localeCompare(a.hasta);
+    });
+
+    if (!carpetasCalidadPintadas.length) {
+        caja.innerHTML = '<p class="cal-carpetas-vacio">No hay controles registrados.</p>';
+        return;
+    }
+
+    const fecha = f => {
+        const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : (f || '-');
+    };
+    const resumen = lista => lista.length <= 2 ? lista.join(', ') : `${lista.slice(0, 2).join(', ')} y ${lista.length - 2} más`;
+    const etiquetaLugar = tipoControlActual === "COSECHA" ? "Campo" : "Planta";
+
+    caja.innerHTML = carpetasCalidadPintadas.map((c, i) => {
+        const n = c.items.length;
+        const periodo = c.desde === c.hasta ? fecha(c.hasta) : `${fecha(c.desde)} al ${fecha(c.hasta)}`;
+        return `
+            <button type="button" class="cal-carpeta${c.contrato ? '' : ' sin-contrato'}" onclick="abrirCarpetaCalidad(${i})">
+                <div class="cal-carpeta-cab">
+                    <span class="cal-carpeta-nombre"><i class="fas fa-folder"></i> ${escapeHtml(c.contrato || 'Sin contrato')}</span>
+                    <span class="cal-carpeta-cantidad">${n} control${n === 1 ? '' : 'es'}</span>
+                </div>
+                ${c.clientes.length ? `<div class="cal-carpeta-dato">Cliente: <b>${escapeHtml(resumen(c.clientes))}</b></div>` : ''}
+                ${c.lugares.length ? `<div class="cal-carpeta-dato">${etiquetaLugar}: <b>${escapeHtml(resumen(c.lugares))}</b></div>` : ''}
+                <div class="cal-carpeta-dato">${periodo}${c.kg ? ` · <b>${formatNumeroAR(c.kg, 0)} kg</b>` : ''}</div>
+                ${c.pendientes ? `<div class="cal-carpeta-dato"><span class="badge-pendiente"><i class="fas fa-clock"></i> ${c.pendientes} sin subir</span></div>` : ''}
+            </button>`;
+    }).join('');
+}
+
 // --- 10-A. VISTA DETALLE (SOLO LECTURA, mismo patrón que Control de Carga) ---
 let calidadDetalleActual = null;
 
@@ -806,8 +1039,12 @@ function abrirDetalleCalidad(dataString) {
         };
 
         document.getElementById('det-cal-titulo-grano').textContent = cfg.nombre;
+        const tipoItem = tipoControlDe(item);
+        const esCosecha = tipoItem === "COSECHA";
 
         // Información general
+        texto('det-cal-tipo-control', TIPOS_CONTROL_CALIDAD[tipoItem].nombre +
+            (item["Tipo de Control"] ? '' : ' (control anterior, sin tipo grabado)'));
         texto('det-cal-fecha', item["Fecha Analisis"]);
         texto('det-cal-cliente', item["Cliente"]);
         texto('det-cal-muestreo', item["Muestreo en"]);
@@ -828,6 +1065,22 @@ function abrirDetalleCalidad(dataString) {
         texto('det-cal-contrato-com', item["Contrato Comercial"]);
         texto('det-cal-contrato-fm', item["Contrato FM"]);
         texto('det-cal-proceso', item["N° Proceso"]);
+        texto('det-cal-campo', item["Campo / Establecimiento"]);
+        texto('det-cal-rinde', num(item["Rinde/ha"]) ? formatNumeroAR(num(item["Rinde/ha"]), 2) + ' kg/ha' : '-');
+        texto('det-cal-planta', item["Planta"]);
+        document.getElementById('det-cal-lote-cliente-label').textContent = esCosecha ? 'N° Lote Cliente' : 'ID Planta (partida del lote)';
+
+        // Se ocultan los datos que no corresponden al tipo, salvo que el control
+        // los tenga cargados (los viejos pueden tener de todo).
+        const soloDe = {
+            "COSECHA": ['det-cal-campo', 'det-cal-rinde', 'det-cal-contrato-prod'],
+            "FLUJO DE MASA": ['det-cal-planta', 'det-cal-proceso', 'det-cal-contrato-fm', 'det-cal-envase', 'det-cal-lote-brc', 'det-cal-lote']
+        };
+        Object.keys(soloDe).forEach(tipo => soloDe[tipo].forEach(id => {
+            const el = document.getElementById(id);
+            const ocultar = tipo !== tipoItem && el.textContent === '-';
+            el.closest('.detalle-item').classList.toggle('hidden', ocultar);
+        }));
 
         // Analítica: calibres, defectos y condición (con totales recalculados)
         const fila = (nombre, valor) => `<div class="detalle-verificacion"><span>${escapeHtml(String(nombre))}</span><span class="valor">${valor}</span></div>`;
@@ -907,6 +1160,7 @@ function cargarCalidadParaEditar(base64Data) {
         const item = JSON.parse(decodeURIComponent(escape(atob(base64Data))));
 
         granoActual = item["Grano"] || granoActual;
+        tipoControlActual = tipoControlDe(item);
         document.getElementById('lbl-grano-actual').textContent = nombreGranoActual();
         document.getElementById('lbl-grano-form').textContent = nombreGranoActual();
         resetFormularioCalidad();
@@ -917,6 +1171,13 @@ function cargarCalidadParaEditar(base64Data) {
         document.getElementById('cal-fecha').value = item["Fecha Analisis"] || "";
         poblarSelect(document.getElementById('cal-cliente'), 'cliente', item["Cliente"] || "");
         poblarSelect(document.getElementById('cal-muestreo'), 'muestreo', item["Muestreo en"] || "");
+        // Campos de los dos tipos: solo se ve y se guarda el bloque del tipo del control
+        document.getElementById('cal-contrato-prod').value = item["Contrato Produccion"] || "";
+        document.getElementById('cal-campo').value = item["Campo / Establecimiento"] || "";
+        document.getElementById('cal-lote-cliente-cosecha').value = item["N° Lote Cliente/Planta"] || "";
+        document.getElementById('cal-rinde').value = valorPlanoParaEditar(item["Rinde/ha"] || 0);
+        document.getElementById('cal-contrato-fm').value = item["Contrato FM"] || "";
+        poblarSelect(document.getElementById('cal-planta'), 'plantaCalidad', item["Planta"] || "");
         document.getElementById('cal-lote-cliente').value = item["N° Lote Cliente/Planta"] || "";
         document.getElementById('cal-lote-brc').value = item["N° Lote BRC"] || "";
         document.getElementById('cal-proceso').value = item["N° Proceso"] || "";
@@ -1284,8 +1545,12 @@ async function generarPDFCalidad(base64Data, modo) {
             doc.text(String(valor || '-'), margen + doc.getTextWidth(etiqueta) + 3, y);
             y += 8;
         };
+        // El título no cambia ("Reporte de Calidad"); lo que cambia según el
+        // tipo de control son los datos de identificación del lote.
+        const esCosecha = tipoControlDe(item) === "COSECHA";
         lineaDato("Cliente:", item["Cliente"]);
-        lineaDato("N° Proceso:", item["N° Proceso"]);
+        if (esCosecha) lineaDato("Campo:", item["Campo / Establecimiento"]);
+        else lineaDato("N° Proceso:", item["N° Proceso"]);
         const yTablas = y + 3;
 
         // ---- Tabla izquierda: "Condición del Lote" ----
@@ -1297,15 +1562,29 @@ async function generarPDFCalidad(base64Data, modo) {
         doc.setFont(undefined, 'bold');
         doc.text("Condición del Lote:", xIzq + wIzq / 2, yTablas + 4.8, { align: 'center' });
 
-        const filasLote = [
+        const filaKg = ["Kg:", num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'];
+        // Deja asentado sobre cuántos gramos se porcentuó el análisis
+        const filaMuestra = ["Muestra analizada:", num(item["Peso Muestra (g)"]) ? formatNumeroAR(num(item["Peso Muestra (g)"]), 2) + ' g' : '-'];
+        const filasLote = esCosecha ? [
+            ["Contrato Prod.:", item["Contrato Produccion"] || '-'],
+            ["N° Lote Cliente:", item["N° Lote Cliente/Planta"] || '-'],
+            ["Calibre:", item["Calibre"] || '-'],
+            ["Fecha AC:", fechaVisible],
+            filaKg,
+            ["Rinde:", num(item["Rinde/ha"]) ? formatNumeroAR(num(item["Rinde/ha"]), 2) + ' kg/ha' : '-'],
+            filaMuestra
+        ] : [
+            // Los controles viejos no tienen Contrato FM ni Planta: esas filas
+            // solo aparecen si hay dato, así el reporte de siempre queda igual.
+            ...(item["Contrato FM"] ? [["Contrato FM:", item["Contrato FM"]]] : []),
+            ...(item["Planta"] ? [["Planta:", item["Planta"]]] : []),
             ["N° Lote:", item["N° Lote"] || (((item["Tipo"] || '') + (item["N° Lote BRC"] || '')) || '-')],
-            ["N° Lote Cliente/Planta", item["N° Lote Cliente/Planta"] || '-'],
+            ["ID Planta:", item["N° Lote Cliente/Planta"] || '-'],
             ["Calibre:", item["Calibre"] || '-'],
             ["Fecha AC:", fechaVisible],
             ["Envase:", item["Envase"] || '-'],
-            ["Kg:", num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'],
-            // Deja asentado sobre cuántos gramos se porcentuó el análisis
-            ["Muestra analizada:", num(item["Peso Muestra (g)"]) ? formatNumeroAR(num(item["Peso Muestra (g)"]), 2) + ' g' : '-']
+            filaKg,
+            filaMuestra
         ];
         let yIzq = yTablas + 13;
         doc.setTextColor(45, 45, 45);
@@ -1592,6 +1871,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Exponer las funciones usadas desde el HTML
 window.abrirModuloCalidad = abrirModuloCalidad;
+window.elegirTipoControlCalidad = elegirTipoControlCalidad;
+window.cambiarVistaHistorialCalidad = cambiarVistaHistorialCalidad;
+window.abrirCarpetaCalidad = abrirCarpetaCalidad;
+window.cerrarCarpetaCalidad = cerrarCarpetaCalidad;
+window.tituloModuloCalidad = tituloModuloCalidad;
 window.switchTabCalidad = switchTabCalidad;
 window.cancelarEdicionCalidad = cancelarEdicionCalidad;
 window.cargarCalidadParaEditar = cargarCalidadParaEditar;

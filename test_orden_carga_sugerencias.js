@@ -61,7 +61,7 @@ if (ini === -1 || fin === -1) { console.log('>>> no encontre la seccion de suger
 eval(oc.slice(oc.lastIndexOf('// ====', ini), oc.lastIndexOf('// ====', fin)));
 
 // --- Las listas y los campos de la cabecera ------------------------------
-['oc-lista-contratos-fm', 'oc-lista-cosechas', 'oc-lista-destinatarios', 'oc-lista-destinos',
+['oc-lista-cosechas', 'oc-lista-destinatarios', 'oc-lista-destinos',
  'oc-lista-titulares', 'oc-lista-fletes', 'oc-lista-transportistas', 'oc-lista-choferes',
  'oc-lista-dominios', 'oc-lista-acoplados', 'oc-lista-productores', 'oc-lista-contratos-com',
  'oc-lista-lotes-brc', 'oc-lista-lotes-planta']
@@ -76,10 +76,6 @@ const destino = campoCabecera('oc-destino', 'oc-lista-destinos');
 campoCabecera('oc-destino-cuit'); campoCabecera('oc-destino-planta');
 campoCabecera('oc-destino-direccion'); campoCabecera('oc-destino-localidad');
 campoCabecera('oc-destino-provincia');
-const fleteInt = campoCabecera('oc-flete-intermediario', 'oc-lista-fletes');
-campoCabecera('oc-flete-intermediario-cuit');
-const fletePag = campoCabecera('oc-flete-pagador', 'oc-lista-fletes');
-campoCabecera('oc-flete-pagador-cuit');
 
 // --- Dos ordenes ya cargadas --------------------------------------------
 const ORDENES = [
@@ -94,14 +90,17 @@ const ORDENES = [
         CartasPorte: [{ productor: 'Productor 1', contrato_com: 'CN26-081 B',
           Lotes: [{ lote_brc: '4380', lote_planta: 'LT-556 A', tipo: 'PT', calibre: '3.5mm', kg_bolsa: 25 }] }] }
     ] },
-  // Mas nueva: al chofer A le cambio el acoplado. Tiene que ganar esta.
-  { Nro_OC: '2057', Contrato_Encabeza: 'CN26-070', Cosecha: '25-26',
+  // Mas nueva y en el formato del 16/10/2026: campaña y flete en el camion,
+  // CUIT del remitente en la CP. Al chofer A le cambio el acoplado: gana esta.
+  { Nro_OC: '2057',
     Destino: 'Planta Sur', Destino_CUIT: '30-55555555-5',
     Camiones: [
       { transportista: 'Transporte A', transportista_cuit: '30-33333333-3',
         chofer: 'Chofer A', chofer_cuil: '20-44444444-4',
         dominio_camion: 'AA000AA', dominio_acoplado: 'ZZ999ZZ',
-        CartasPorte: [{ productor: 'Productor 2', contrato_com: 'CN26-081 C', Lotes: [] }] }
+        especie: 'Garbanzo', cosecha: '26-27', flete: 'Sí',
+        flete_intermediario: 'Intermediaria SA', flete_intermediario_cuit: '30-66666666-6',
+        CartasPorte: [{ productor: 'Productor 2', productor_cuit: '30-77777777-7', contrato_com: 'CN26-081 C', Lotes: [] }] }
     ] }
 ];
 // ocConstruirMaestros espera las remotas de la mas nueva a la mas vieja.
@@ -125,7 +124,8 @@ chequear('dominios', opciones('oc-lista-dominios'), ['AA000AA']);
 chequear('productores', opciones('oc-lista-productores'), ['Productor 1', 'Productor 2']);
 chequear('contratos comerciales', opciones('oc-lista-contratos-com'), ['CN26-081 B', 'CN26-081 C']);
 chequear('lotes BRC', opciones('oc-lista-lotes-brc'), ['4380']);
-chequear('cosechas (sin repetir)', opciones('oc-lista-cosechas'), ['25-26']);
+chequear('cosechas (de la cabecera vieja y de los camiones)', opciones('oc-lista-cosechas'), ['25-26', '26-27']);
+chequear('fletes (de la cabecera vieja y de los camiones)', opciones('oc-lista-fletes'), ['Fletes SRL', 'Intermediaria SA']);
 
 console.log('\n--- 2. LA CABECERA SE COMPLETA SOLA ---');
 destino.value = 'Planta Norte';
@@ -143,14 +143,34 @@ porId['oc-destino-cuit'].value = '';
 ocAutocompletarCabecera(destino);
 chequear('vacio si se completa con el nuevo', porId['oc-destino-cuit'].value, '30-55555555-5');
 
-console.log('\n--- 4. LOS DOS FLETES COMPARTEN LISTA PERO NO CAMPO ---');
-fleteInt.value = 'Fletes SRL';
-ocAutocompletarCabecera(fleteInt);
-chequear('el intermediario completa SU cuit', porId['oc-flete-intermediario-cuit'].value, '30-22222222-2');
-chequear('el del pagador queda vacio', porId['oc-flete-pagador-cuit'].value, '');
-fletePag.value = 'Fletes SRL';
-ocAutocompletarCabecera(fletePag);
-chequear('el pagador completa el suyo', porId['oc-flete-pagador-cuit'].value, '30-22222222-2');
+console.log('\n--- 4. FLETE DEL CAMION: LOS DOS COMPARTEN LISTA PERO NO CAMPO ---');
+const tFlete = new Elemento('div', { class: 'dynamic-item-card' });
+const cFlete = tFlete.agregar(new Elemento('div', { class: 'dynamic-card-body' }));
+const fleteInt = cFlete.agregar(new Elemento('input', { 'data-field': 'flete_intermediario', list: 'oc-lista-fletes' }));
+const fleteIntCuit = cFlete.agregar(new Elemento('input', { 'data-field': 'flete_intermediario_cuit' }));
+const fletePag = cFlete.agregar(new Elemento('input', { 'data-field': 'flete_pagador', list: 'oc-lista-fletes' }));
+const fletePagCuit = cFlete.agregar(new Elemento('input', { 'data-field': 'flete_pagador_cuit' }));
+fleteInt.value = 'Intermediaria SA';
+ocAutocompletarTarjeta(fleteInt);
+chequear('el intermediario completa SU cuit', fleteIntCuit.value, '30-66666666-6');
+chequear('el del pagador queda vacio', fletePagCuit.value, '');
+fletePag.value = 'Fletes SRL';   // viene de una orden vieja (cabecera)
+ocAutocompletarTarjeta(fletePag);
+chequear('el pagador completa el suyo', fletePagCuit.value, '30-22222222-2');
+
+console.log('\n--- 4-B. EL REMITENTE Y EL CONTRATO TRAEN EL CUIT ---');
+const tCp = new Elemento('div', { class: 'dynamic-item-card' });
+const cCp = tCp.agregar(new Elemento('div', { class: 'dynamic-card-body' }));
+const contrato = cCp.agregar(new Elemento('input', { 'data-field': 'contrato_com', list: 'oc-lista-contratos-com' }));
+const productor = cCp.agregar(new Elemento('input', { 'data-field': 'productor', list: 'oc-lista-productores' }));
+const productorCuit = cCp.agregar(new Elemento('input', { 'data-field': 'productor_cuit' }));
+contrato.value = 'CN26-081 C';
+ocAutocompletarTarjeta(contrato);
+chequear('el contrato trae el remitente', productor.value, 'Productor 2');
+chequear('y su CUIT', productorCuit.value, '30-77777777-7');
+productor.value = 'Productor 2'; productorCuit.value = '';
+ocAutocompletarTarjeta(productor);
+chequear('elegir el remitente trae su CUIT', productorCuit.value, '30-77777777-7');
 
 console.log('\n--- 5. EL DOMINIO TRAE TODO EL CAMION ---');
 const tarjeta = new Elemento('div', { class: 'dynamic-item-card' });

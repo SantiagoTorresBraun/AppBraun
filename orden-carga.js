@@ -9,9 +9,11 @@
 //  El modelo sale del Excel real (CN26-063, OC 2056) y tiene CUATRO niveles,
 //  uno más que la hoja `Orden` de hoy:
 //
-//      OC          cabecera: especie, cosecha, destino, destinatario, fletes
-//       └ CAMIÓN   transportista + CUIT, chofer + CUIL, dominios, km, tarifa
-//          └ CP    productor, CTG, peso neto, CTTO comercial
+//      OC          cabecera: N° y fecha (automáticos), destino, titular CP + CUIT
+//       └ CAMIÓN   grano, campaña, transportista + CUIT, chofer + CUIL,
+//                  dominios, pagador del flete + CUIT, km, tarifa,
+//                  intermediario de flete (sí/no + razón social y CUIT)
+//          └ CP    remitente comercial productor + CUIT, CTTO, CTG, peso neto
 //             └ LOTE   lote BRC, lote planta, bolsas, kg/bolsa, calibre
 //
 //  El nivel que falta hoy es el del medio: en el Sheet, `Producto` y
@@ -63,7 +65,8 @@ function abrirOrdenCarga() {
     // aparece al instante con lo que ya estaba y se completa cuando llega.
     ocMigrarOrdenesViejas()
         .then(ocCargarOrdenesDesdeGoogle)
-        .then(ocRenderHistorial);
+        .then(ocRenderHistorial)
+        .then(ocRefrescarNumeroSiEsNueva);
 }
 
 function ocSwitchTab(tab) {
@@ -96,6 +99,7 @@ function ocLimpiarFormulario() {
     document.getElementById('form-oc').reset();
     document.getElementById('oc-fecha').valueAsDate = new Date();
     document.getElementById('oc-numero').value = ocProximoNumero();
+    ocPrepararNumeroYFecha();
     document.getElementById('oc-validacion').classList.add('hidden');
     document.getElementById('wrapper-camiones').innerHTML = '';
     ocSecuencia = 0;
@@ -103,14 +107,43 @@ function ocLimpiarFormulario() {
     ocRecalcularTodo();
 }
 
-// El número de orden hoy lo pone una persona a mano, que es justo lo que este
-// módulo viene a sacar. Se propone el siguiente de la serie que ya está
-// guardada, y se puede corregir a mano si hace falta.
+// El número de orden lo pone la app: el siguiente de la serie ya guardada. No
+// se edita (decisión del 16/10/2026), así no hay números repetidos ni
+// salteados. Se cuentan TODAS las órdenes conocidas, no solo las que pasan los
+// filtros del historial.
 function ocProximoNumero() {
-    const numeros = (ocUltimasListadas || []).concat(ocHistorialRemoto || [])
+    const numeros = (ocPendientesConocidas || []).concat(ocHistorialRemoto || [])
         .map(o => parseInt(String(o.Nro_OC || '').replace(/\D/g, ''), 10))
         .filter(n => !isNaN(n));
     return numeros.length ? String(Math.max.apply(null, numeros) + 1) : '';
+}
+
+// Número y fecha van bloqueados. Única excepción: la PRIMERA orden de todas,
+// cuando todavía no hay serie de la cual seguir. Ahí se deja escribir el número
+// inicial una vez; de ahí en más la app sigue sola.
+function ocPrepararNumeroYFecha() {
+    const numero = document.getElementById('oc-numero');
+    const ayuda = document.getElementById('oc-numero-ayuda');
+    const sinSerie = !numero.value && !ocIdEditando;
+    numero.readOnly = !sinSerie;
+    numero.classList.toggle('campo-calculado', !sinSerie);
+    numero.placeholder = sinSerie ? 'Primera orden: escribí el número inicial' : '';
+    if (ayuda) ayuda.textContent = sinSerie ? 'primera orden de la serie' : 'automático';
+}
+
+// El historial puede llegar del Sheet DESPUÉS de abrir una orden nueva (sobre
+// todo la primera vez que se entra). Si la orden en pantalla es nueva, se
+// vuelve a calcular el número con lo que llegó.
+function ocRefrescarNumeroSiEsNueva() {
+    if (ocIdEditando) return;
+    if (document.getElementById('tab-content-nuevo-oc').classList.contains('hidden')) return;
+    const numero = document.getElementById('oc-numero');
+    const proximo = ocProximoNumero();
+    if (proximo && (numero.readOnly || !numero.value)) {
+        numero.value = proximo;
+        ocPrepararNumeroYFecha();
+        ocRecalcularTodo();
+    }
 }
 
 // =========================================================================
@@ -151,6 +184,10 @@ function ocAgregarCamion(opciones) {
         ${ocEncabezadoHtml('Camión', 'ocDuplicarCamion', 'camion')}
         <div class="dynamic-card-body">
             <div class="form-group-row">
+                <div class="form-group"><label>Grano / Especie</label><select class="oc-camion-item enum-select" data-field="especie" data-enum="producto"></select></div>
+                <div class="form-group"><label>Campaña</label><input type="text" class="oc-camion-item" data-field="cosecha" list="oc-lista-cosechas" placeholder="25-26"></div>
+            </div>
+            <div class="form-group-row">
                 <div class="form-group"><label>Transportista (razón social)</label><input type="text" class="oc-camion-item" data-field="transportista" list="oc-lista-transportistas" placeholder="Razón social del transportista"></div>
                 <div class="form-group"><label>CUIT transportista</label><input type="text" class="oc-camion-item campo-cuit" data-field="transportista_cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
             </div>
@@ -162,9 +199,32 @@ function ocAgregarCamion(opciones) {
                 <div class="form-group"><label>Dominio camión</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_camion" list="oc-lista-dominios" placeholder="AA000AA"></div>
                 <div class="form-group"><label>Dominio acoplado</label><input type="text" class="oc-camion-item campo-dominio" data-field="dominio_acoplado" list="oc-lista-acoplados" placeholder="AA000AA"></div>
             </div>
+            <!-- Flete, como sale en la carta de porte (sección A y E): el pagador,
+                 los km y la tarifa están siempre; el intermediario puede no
+                 estar (la CPE de ejemplo no lo tiene). El campo se sigue
+                 llamando "flete" en los datos: Sí = hay intermediario. -->
             <div class="form-group-row">
-                <div class="form-group"><label>Km a recorrer</label><input type="text" inputmode="decimal" class="oc-camion-item campo-numero-ar" data-field="km"></div>
-                <div class="form-group"><label>Tarifa</label><input type="text" inputmode="decimal" class="oc-camion-item campo-numero-ar" data-field="tarifa"></div>
+                <div class="form-group"><label>Pagador del flete</label><input type="text" class="oc-camion-item" data-field="flete_pagador" list="oc-lista-fletes" placeholder="Razón social"></div>
+                <div class="form-group"><label>CUIT pagador</label><input type="text" class="oc-camion-item campo-cuit" data-field="flete_pagador_cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
+            </div>
+            <div class="form-group-row">
+                <div class="form-group"><label>Km a recorrer <span class="oc-ayuda">opcional</span></label><input type="text" inputmode="decimal" class="oc-camion-item campo-numero-ar" data-field="km"></div>
+                <div class="form-group"><label>Tarifa <span class="oc-ayuda">opcional</span></label><input type="text" inputmode="decimal" class="oc-camion-item campo-numero-ar" data-field="tarifa"></div>
+            </div>
+            <div class="form-group-row">
+                <div class="form-group">
+                    <label>¿Hay intermediario de flete?</label>
+                    <select class="oc-camion-item oc-flete-select" data-field="flete">
+                        <option value="No">No</option>
+                        <option value="Sí">Sí</option>
+                    </select>
+                </div>
+            </div>
+            <div class="oc-flete-detalle hidden">
+                <div class="form-group-row">
+                    <div class="form-group"><label>Intermediario del flete</label><input type="text" class="oc-camion-item" data-field="flete_intermediario" list="oc-lista-fletes" placeholder="Razón social"></div>
+                    <div class="form-group"><label>CUIT intermediario</label><input type="text" class="oc-camion-item campo-cuit" data-field="flete_intermediario_cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
+                </div>
             </div>
 
             <div class="section-dynamic-header oc-sub-header">
@@ -179,7 +239,11 @@ function ocAgregarCamion(opciones) {
     `;
     wrapper.appendChild(card);
 
+    card.querySelectorAll(':scope > .dynamic-card-body .enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
     ocAplicarValores(card, 'oc-camion-item', opciones.valores);
+    ocMostrarFlete(card);
+    card.querySelector('.oc-flete-select').addEventListener('change', () => { ocMostrarFlete(card); ocRecalcularTodo(); });
+    card.querySelector('[data-field="especie"]').addEventListener('change', ocRecalcularTodo);
     card.querySelectorAll('.oc-camion-item').forEach(el => el.addEventListener('input', ocRecalcularTodo));
     // Al elegir una sugerencia se completa lo que va con eso (CUIT, acoplado,
     // lote de planta). Solo rellena lo que está vacío: nunca pisa lo escrito.
@@ -196,6 +260,14 @@ function ocAgregarCamion(opciones) {
     ocRecalcularTodo();
     if (opciones.enfocar) ocEnfocarTarjeta(wrapper, card, 'transportista');
     return card;
+}
+
+// El intermediario del flete solo se ve si lo hay. Si se pasa a "No", lo
+// escrito queda en pantalla (por si fue un toque de más), pero no se guarda ni
+// sale en el PDF: ver ocArmarObjeto().
+function ocMostrarFlete(card) {
+    const conFlete = card.querySelector('.oc-flete-select').value === 'Sí';
+    card.querySelector('.oc-flete-detalle').classList.toggle('hidden', !conFlete);
 }
 
 // En la práctica el mismo camión hace varios viajes, o vuelve a aparecer con
@@ -220,16 +292,20 @@ function ocAgregarCp(idWrapper, opciones) {
         ${ocEncabezadoHtml('Carta de Porte', 'ocDuplicarCp', 'cp')}
         <div class="dynamic-card-body">
             <div class="form-group-row">
-                <div class="form-group"><label>Productor</label><input type="text" class="oc-cp-item" data-field="productor" list="oc-lista-productores" placeholder="Razón social del productor"></div>
-                <div class="form-group"><label>Contrato Comercial (CTTO)</label><input type="text" class="oc-cp-item" data-field="contrato_com" list="oc-lista-contratos-com" placeholder="CN26-081 B"></div>
+                <div class="form-group"><label>Remitente comercial productor</label><input type="text" class="oc-cp-item" data-field="productor" list="oc-lista-productores" placeholder="Razón social"></div>
+                <div class="form-group"><label>CUIT remitente</label><input type="text" class="oc-cp-item campo-cuit" data-field="productor_cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
             </div>
             <div class="form-group-row">
+                <div class="form-group"><label>Contrato Comercial (CTTO)</label><input type="text" class="oc-cp-item" data-field="contrato_com" list="oc-lista-contratos-com" placeholder="CN26-081 B"></div>
                 <div class="form-group">
                     <label>CTG <span class="oc-ayuda">11 dígitos</span></label>
                     <input type="text" class="oc-cp-item campo-ctg" data-field="ctg" inputmode="numeric" maxlength="11" placeholder="11 dígitos">
                 </div>
-                <div class="form-group"><label>N° Carta de Porte</label><input type="text" class="oc-cp-item" data-field="carta_porte"></div>
             </div>
+            <!-- El N° de carta de porte lo carga PLANTA en el Control de
+                 Transporte (PREGUNTAS_PENDIENTES_LUCAS 3.1). No se pide acá, pero
+                 se conserva oculto para no borrarlo al editar una orden vieja. -->
+            <input type="hidden" class="oc-cp-item" data-field="carta_porte">
             <div class="form-group-row">
                 <div class="form-group">
                     <label>Peso neto declarado</label>
@@ -418,22 +494,8 @@ function ocPintarTotales(totalOc, bolsasOc, porLote) {
     document.getElementById('oc-total-bolsas').textContent = formatNumeroAR(bolsasOc, 0);
     document.getElementById('oc-total-camiones').textContent = document.querySelectorAll('#wrapper-camiones .oc-camion').length;
 
-    // Objetivo de kg: la OC 2056 cierra en 75.000 exactos, así que se arma
-    // contra un número y conviene ver cuánto falta.
-    const objetivo = parseNumeroAR(document.getElementById('oc-objetivo-kg').value);
-    const cajaFalta = document.getElementById('oc-falta');
-    if (objetivo > 0) {
-        const falta = objetivo - totalOc;
-        cajaFalta.classList.remove('hidden');
-        cajaFalta.textContent = falta === 0
-            ? 'Completo: ' + formatNumeroAR(objetivo, 0) + ' kg'
-            : (falta > 0 ? 'Faltan ' + formatNumeroAR(falta, 0) + ' kg'
-                         : 'Se pasó por ' + formatNumeroAR(-falta, 0) + ' kg');
-        cajaFalta.classList.toggle('oc-ok', falta === 0);
-        cajaFalta.classList.toggle('oc-excedido', falta < 0);
-    } else {
-        cajaFalta.classList.add('hidden');
-    }
+    // Ya no hay "objetivo de kg": se sacó el 16/10/2026. La orden se arma por
+    // bolsas y los kilos reales los da la balanza.
 
     // El acumulado por lote es lo que después permite avisar "estás cargando
     // más bolsas de las que tiene el lote", cuando tengamos el stock.
@@ -472,8 +534,8 @@ function ocResumenTarjeta(card, nivel) {
                   ocValorCampo(card, 'ctg') ? 'CTG ' + ocValorCampo(card, 'ctg') : '',
                   card.querySelector('.oc-total-cp').textContent];
     } else {
-        partes = [ocValorCampo(card, 'dominio_camion'), ocValorCampo(card, 'chofer'),
-                  ocValorCampo(card, 'transportista'), card.querySelector('.oc-total-camion').textContent];
+        partes = [ocValorCampo(card, 'dominio_camion'), ocValorCampo(card, 'especie'),
+                  ocValorCampo(card, 'chofer'), card.querySelector('.oc-total-camion').textContent];
     }
     resumen.textContent = partes.filter(Boolean).join(' · ') || 'Sin completar';
 }
@@ -548,7 +610,9 @@ function ocAplicarValores(card, claseItem, valores) {
     card.querySelectorAll(':scope > .dynamic-card-body .' + claseItem).forEach(el => {
         const valor = valores[el.dataset.field];
         if (valor === undefined) return;
-        if (el.tagName === 'SELECT') poblarSelect(el, el.dataset.enum, valor);
+        // Los selects con lista editable se pueblan desde ENUMS; los fijos (el
+        // "¿Lleva flete?") ya traen sus opciones y solo se elige.
+        if (el.tagName === 'SELECT' && el.dataset.enum) poblarSelect(el, el.dataset.enum, valor);
         else el.value = valor;
     });
 }
@@ -576,12 +640,8 @@ const OC_STORE = 'ordenes_carga';
 const OC_MAPA_CABECERA = {
     'oc-numero': 'Nro_OC',
     'oc-fecha': 'Fecha',
-    'oc-contrato-fm': 'Contrato_Encabeza',
-    'oc-especie': 'Especie',
-    'oc-cosecha': 'Cosecha',
     'oc-titular-cp': 'Titular_CP',
-    'oc-remitente-productor': 'Remitente_Productor',
-    'oc-remitente-venta': 'Remitente_Venta',
+    'oc-titular-cp-cuit': 'Titular_CP_CUIT',
     'oc-destinatario': 'Destinatario',
     'oc-destinatario-cuit': 'Destinatario_CUIT',
     'oc-destino': 'Destino',
@@ -590,18 +650,17 @@ const OC_MAPA_CABECERA = {
     'oc-destino-direccion': 'Destino_Direccion',
     'oc-destino-localidad': 'Destino_Localidad',
     'oc-destino-provincia': 'Destino_Provincia',
-    'oc-flete-intermediario': 'Flete_Intermediario',
-    'oc-flete-intermediario-cuit': 'Flete_Intermediario_CUIT',
-    'oc-flete-pagador': 'Flete_Pagador',
-    'oc-flete-pagador-cuit': 'Flete_Pagador_CUIT',
-    'oc-objetivo-kg': 'Objetivo_Kg',
     'oc-observaciones': 'Observaciones'
 };
+// Se sacaron de la cabecera el 16/10/2026: Contrato_Encabeza, Objetivo_Kg y
+// Remitente_Venta (no van), y Especie, Cosecha, Remitente_Productor y los
+// fletes (pasaron al camión o a la carta de porte). Las órdenes viejas que los
+// tienen se adaptan al abrirlas: ver ocAdaptarOrdenVieja().
 
 // Lo que tiene que llegar al Sheet como NÚMERO y no como texto. Los campos con
 // máscara se ven "18.420" y así viajarían como texto: sumarlos en el Sheet no
 // daría nada.
-const OC_CAMPOS_NUMERICOS = ['Objetivo_Kg', 'km', 'tarifa', 'peso_neto',
+const OC_CAMPOS_NUMERICOS = ['km', 'tarifa', 'peso_neto',
     'bolsas', 'kg_bolsa', 'total_kg'];
 
 function ocNumero(valor) {
@@ -639,6 +698,13 @@ function ocArmarObjeto() {
     orden.Camiones = [];
     document.querySelectorAll('#wrapper-camiones .oc-camion').forEach(camion => {
         const datosCamion = ocValoresNumerados(camion, 'oc-camion-item');
+        // Sin intermediario no viaja el intermediario, aunque haya quedado
+        // algo escrito en pantalla de antes de pasarlo a "No". El pagador, los
+        // km y la tarifa van siempre.
+        if (datosCamion.flete !== 'Sí') {
+            datosCamion.flete_intermediario = '';
+            datosCamion.flete_intermediario_cuit = '';
+        }
         datosCamion.CartasPorte = [];
 
         camion.querySelectorAll(':scope .oc-wrapper-cps > .oc-cp').forEach(cp => {
@@ -666,7 +732,36 @@ function ocValoresNumerados(card, claseItem) {
     return valores;
 }
 
+// Las órdenes armadas antes del 16/10/2026 tienen grano, campaña y flete en la
+// cabecera. Se copian a cada camión que no los tenga, así al abrirlas (o
+// imprimirlas) se ven igual que una nueva, y al volver a guardarlas ya quedan
+// en el formato nuevo. No modifica la orden recibida: devuelve una copia.
+function ocAdaptarOrdenVieja(orden) {
+    const copia = JSON.parse(JSON.stringify(orden || {}));
+    (copia.Camiones || []).forEach(cam => {
+        if (!cam.especie && copia.Especie) cam.especie = copia.Especie;
+        if (!cam.cosecha && copia.Cosecha) cam.cosecha = copia.Cosecha;
+        if (!cam.flete_pagador && copia.Flete_Pagador) {
+            cam.flete_pagador = copia.Flete_Pagador;
+            cam.flete_pagador_cuit = copia.Flete_Pagador_CUIT || '';
+        }
+        if (!cam.flete && copia.Flete_Intermediario) {
+            cam.flete = 'Sí';
+            cam.flete_intermediario = copia.Flete_Intermediario;
+            cam.flete_intermediario_cuit = copia.Flete_Intermediario_CUIT || '';
+        }
+    });
+    return copia;
+}
+
+// Los granos de una orden, para el historial ("Garbanzo, Poroto Mung").
+function ocGranosDe(orden) {
+    const granos = (orden.Camiones || []).map(c => c.especie).concat(orden.Especie ? [orden.Especie] : []);
+    return Array.from(new Set(granos.filter(Boolean))).join(', ');
+}
+
 function ocAplicarDatos(orden) {
+    orden = ocAdaptarOrdenVieja(orden);
     document.getElementById('form-oc').reset();
     document.getElementById('oc-validacion').classList.add('hidden');
 
@@ -688,6 +783,7 @@ function ocAplicarDatos(orden) {
         });
     });
     if (!document.querySelectorAll('#wrapper-camiones .oc-camion').length) ocAgregarCamion();
+    ocPrepararNumeroYFecha();
     ocRecalcularTodo();
 }
 
@@ -754,6 +850,26 @@ async function ocGuardarOrden() {
     }
 
     const orden = ocArmarObjeto();
+
+    // Si mientras se armaba esta orden se guardó otra con el mismo número (otra
+    // persona, otro dispositivo), la NUEVA toma el siguiente libre. Una orden
+    // que ya existía conserva siempre el suyo.
+    const yaExistia = (ocHistorialRemoto || []).concat(ocPendientesConocidas || [])
+        .some(o => o.Id_OC === orden.Id_OC);
+    const repetido = (ocHistorialRemoto || []).concat(ocPendientesConocidas || [])
+        .some(o => o.Id_OC !== orden.Id_OC && String(o.Nro_OC) === String(orden.Nro_OC));
+    if (!yaExistia && repetido) {
+        const anterior = orden.Nro_OC;
+        orden.Nro_OC = ocProximoNumero();
+        document.getElementById('oc-numero').value = orden.Nro_OC;
+        ocRecalcularTodo();
+        // Las Observaciones CP llevan el número: se rearman con el nuevo
+        const actualizada = ocArmarObjeto();
+        actualizada.Id_OC = orden.Id_OC;
+        Object.assign(orden, actualizada);
+        alert('El N° ' + anterior + ' ya lo tomó otra orden mientras armabas esta.\n\nEsta orden queda como N° ' + orden.Nro_OC + '.');
+    }
+
     try {
         await ocGuardarLocal(orden);
     } catch (err) {
@@ -860,9 +976,12 @@ function ocTextoBuscable(orden) {
 
 // Lo que se está mostrando, para que editar y borrar no tengan que buscar de nuevo.
 let ocUltimasListadas = [];
+// Todas las pendientes de este dispositivo, sin filtrar: las usa la numeración.
+let ocPendientesConocidas = [];
 
 async function ocRenderHistorial() {
     const pendientes = await ocPendientesLocales();
+    ocPendientesConocidas = pendientes;
     const idsPendientes = new Set(pendientes.map(o => o.Id_OC));
     // Lo pendiente manda sobre lo del Sheet: es lo último que se escribió.
     const todas = pendientes.map(o => Object.assign({}, o, { _pendiente: true }))
@@ -899,7 +1018,7 @@ async function ocRenderHistorial() {
     cuerpo.innerHTML = filtradas.map(o => `<tr>
             <td>${o.Fecha || '-'}</td>
             <td><strong>${o.Nro_OC || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}</td>
-            <td>${o.Contrato_Encabeza || '-'}</td>
+            <td>${ocGranosDe(o) || '-'}</td>
             <td>${o.Destino || '-'}</td>
             <td>${o.Total_Camiones || 0}</td>
             <td>${formatNumeroAR(o.Total_Kg || 0, 0)} kg</td>
@@ -1021,17 +1140,22 @@ function ocNumerar(valores) {
 function ocValidar() {
     const faltan = [];
     if (!(document.getElementById('oc-numero').value || '').trim()) faltan.push('el N° de orden de carga');
-    if (!(document.getElementById('oc-especie').value || '').trim()) faltan.push('el grano / especie');
     if (!(document.getElementById('oc-destino').value || '').trim()) faltan.push('el destino de la mercadería');
 
     document.querySelectorAll('#wrapper-camiones .oc-camion').forEach((camion, i) => {
         const n = i + 1;
+        if (!ocValorCampo(camion, 'especie')) faltan.push(`el grano del camión #${n}`);
         if (!ocValorCampo(camion, 'dominio_camion')) faltan.push(`el dominio del camión #${n}`);
         if (!ocValorCampo(camion, 'chofer')) faltan.push(`el chofer del camión #${n}`);
+        if (ocValorCampo(camion, 'flete') === 'Sí') {
+            if (!ocValorCampo(camion, 'flete_intermediario')) faltan.push(`el intermediario del flete del camión #${n}`);
+            if (!ocValorCampo(camion, 'flete_intermediario_cuit')) faltan.push(`el CUIT del intermediario del flete del camión #${n}`);
+        }
 
         camion.querySelectorAll(':scope .oc-wrapper-cps > .oc-cp').forEach((cp, j) => {
             const m = j + 1;
-            if (!ocValorCampo(cp, 'productor')) faltan.push(`el productor de la CP #${m} del camión #${n}`);
+            if (!ocValorCampo(cp, 'productor')) faltan.push(`el remitente comercial productor de la CP #${m} del camión #${n}`);
+            if (!ocValorCampo(cp, 'productor_cuit')) faltan.push(`el CUIT del remitente de la CP #${m} del camión #${n}`);
             if (!ocValorCampo(cp, 'contrato_com')) faltan.push(`el contrato de la CP #${m} del camión #${n}`);
             const ctg = ocValorCampo(cp, 'ctg');
             if (ctg && ctg.replace(/\D/g, '').length !== 11) {
@@ -1089,7 +1213,7 @@ let ocMaestros = null;
 // La más reciente gana: si a un chofer le cambió el camión, vale el último.
 function ocConstruirMaestros(pendientes) {
     const m = {
-        'oc-lista-contratos-fm': {}, 'oc-lista-cosechas': {},
+        'oc-lista-cosechas': {},
         'oc-lista-destinatarios': {}, 'oc-lista-destinos': {},
         'oc-lista-titulares': {}, 'oc-lista-fletes': {},
         'oc-lista-transportistas': {}, 'oc-lista-choferes': {},
@@ -1113,9 +1237,8 @@ function ocConstruirMaestros(pendientes) {
     const todas = (ocHistorialRemoto || []).slice().reverse().concat(pendientes || []);
 
     todas.forEach(o => {
-        anotar('oc-lista-contratos-fm', o.Contrato_Encabeza, {});
         anotar('oc-lista-cosechas', o.Cosecha, {});
-        anotar('oc-lista-titulares', o.Titular_CP, {});
+        anotar('oc-lista-titulares', o.Titular_CP, { 'oc-titular-cp-cuit': o.Titular_CP_CUIT });
         anotar('oc-lista-destinatarios', o.Destinatario, { 'oc-destinatario-cuit': o.Destinatario_CUIT });
         anotar('oc-lista-destinos', o.Destino, {
             'oc-destino-cuit': o.Destino_CUIT,
@@ -1124,11 +1247,15 @@ function ocConstruirMaestros(pendientes) {
             'oc-destino-localidad': o.Destino_Localidad,
             'oc-destino-provincia': o.Destino_Provincia
         });
-        // Los dos fletes comparten lista: suele ser la misma gente.
+        // Los dos fletes comparten lista: suele ser la misma gente. Las órdenes
+        // viejas los tienen en la cabecera; las nuevas, en cada camión.
         anotar('oc-lista-fletes', o.Flete_Intermediario, { cuit: o.Flete_Intermediario_CUIT });
         anotar('oc-lista-fletes', o.Flete_Pagador, { cuit: o.Flete_Pagador_CUIT });
 
         (o.Camiones || []).forEach(cam => {
+            anotar('oc-lista-cosechas', cam.cosecha, {});
+            anotar('oc-lista-fletes', cam.flete_intermediario, { cuit: cam.flete_intermediario_cuit });
+            anotar('oc-lista-fletes', cam.flete_pagador, { cuit: cam.flete_pagador_cuit });
             anotar('oc-lista-transportistas', cam.transportista, { transportista_cuit: cam.transportista_cuit });
             anotar('oc-lista-choferes', cam.chofer, { chofer_cuil: cam.chofer_cuil });
             // El dominio es la mejor clave del camión: trae todo lo demás.
@@ -1142,8 +1269,8 @@ function ocConstruirMaestros(pendientes) {
             anotar('oc-lista-acoplados', cam.dominio_acoplado, {});
 
             (cam.CartasPorte || []).forEach(cp => {
-                anotar('oc-lista-productores', cp.productor, {});
-                anotar('oc-lista-contratos-com', cp.contrato_com, { productor: cp.productor });
+                anotar('oc-lista-productores', cp.productor, { productor_cuit: cp.productor_cuit });
+                anotar('oc-lista-contratos-com', cp.contrato_com, { productor: cp.productor, productor_cuit: cp.productor_cuit });
 
                 (cp.Lotes || []).forEach(l => {
                     anotar('oc-lista-lotes-brc', l.lote_brc, {
@@ -1211,13 +1338,16 @@ function ocAutocompletarTarjeta(input) {
     const card = input.closest('.dynamic-item-card');
     if (!card) return;
 
-    Object.keys(datos).forEach(campo => {
+    Object.keys(datos).forEach(clave => {
+        // La lista de fletes guarda 'cuit' a secas (la comparten intermediario
+        // y pagador): cada uno completa el suyo, flete_xxx -> flete_xxx_cuit.
+        const campo = (clave === 'cuit') ? input.dataset.field + '_cuit' : clave;
         const destino = card.querySelector(':scope > .dynamic-card-body [data-field="' + campo + '"]');
         if (!destino) return;
         if (destino.tagName === 'SELECT') {
-            if (!destino.value) poblarSelect(destino, destino.dataset.enum, datos[campo]);
+            if (!destino.value) poblarSelect(destino, destino.dataset.enum, datos[clave]);
         } else {
-            ocCompletarSiVacio(destino, datos[campo]);
+            ocCompletarSiVacio(destino, datos[clave]);
         }
     });
     ocRecalcularTodo();
@@ -1245,8 +1375,10 @@ const OC_GRIS = [40, 40, 40];
 // segundo importa: recién guardada, el historial todavía se está refrescando y
 // buscarla por id podía no encontrarla.
 function ocGenerarPDF(ordenOId) {
-    const orden = (typeof ordenOId === 'string') ? ocBuscarOrden(ordenOId) : ordenOId;
-    if (!orden) { alert('No encontré esa orden de carga.'); return; }
+    const encontrada = (typeof ordenOId === 'string') ? ocBuscarOrden(ordenOId) : ordenOId;
+    if (!encontrada) { alert('No encontré esa orden de carga.'); return; }
+    // Las órdenes viejas tienen grano y flete en la cabecera: se pasan al camión
+    const orden = ocAdaptarOrdenVieja(encontrada);
 
     try {
         const { jsPDF } = window.jspdf;
@@ -1331,17 +1463,13 @@ function ocPdfCabeceraDatos(doc, orden, y) {
     doc.setTextColor(...OC_GRIS);
 
     let yIzq = y, yDer = y;
+    // Grano y campaña van por camión; acá solo el resumen de lo que lleva la orden
     yIzq = ocPdfDato(doc, 'Fecha:', orden.Fecha, OC_PDF_MARGEN_X, yIzq, 24);
-    yIzq = ocPdfDato(doc, 'Contrato:', orden.Contrato_Encabeza, OC_PDF_MARGEN_X, yIzq, 24);
-    yIzq = ocPdfDato(doc, 'Grano:', orden.Especie, OC_PDF_MARGEN_X, yIzq, 24);
-    yIzq = ocPdfDato(doc, 'Cosecha:', orden.Cosecha, OC_PDF_MARGEN_X, yIzq, 24);
+    yIzq = ocPdfDato(doc, 'Grano:', ocGranosDe(orden), OC_PDF_MARGEN_X, yIzq, 24);
 
     yDer = ocPdfDato(doc, 'Camiones:', orden.Total_Camiones || 0, col2, yDer, 26);
     yDer = ocPdfDato(doc, 'Bolsas:', formatNumeroAR(orden.Total_Bolsas || 0, 0), col2, yDer, 26);
     yDer = ocPdfDato(doc, 'Total kg:', formatNumeroAR(orden.Total_Kg || 0, 0) + ' kg', col2, yDer, 26);
-    if (orden.Objetivo_Kg) {
-        yDer = ocPdfDato(doc, 'Objetivo:', formatNumeroAR(orden.Objetivo_Kg, 0) + ' kg', col2, yDer, 26);
-    }
 
     y = Math.max(yIzq, yDer) + 3;
 
@@ -1359,22 +1487,15 @@ function ocPdfCabeceraDatos(doc, orden, y) {
         y = ocPdfTablaDosColumnas(doc, destino, y);
     }
 
-    // Carta de porte y flete: los mismos para toda la orden.
-    const fijos = [
-        ['Titular carta de porte', orden.Titular_CP],
-        ['Remitente comercial productor', orden.Remitente_Productor],
-        ['Remitente comercial venta primaria', orden.Remitente_Venta],
-        ['Intermediario del flete', ocPdfConCuit(orden.Flete_Intermediario, orden.Flete_Intermediario_CUIT)],
-        ['Pagador del flete', ocPdfConCuit(orden.Flete_Pagador, orden.Flete_Pagador_CUIT)]
-    ].filter(f => f[1]);
-
-    if (fijos.length) {
-        y = ocPdfTitulo(doc, 'CARTA DE PORTE Y FLETE', y + 2);
-        y = ocPdfTablaDosColumnas(doc, fijos, y);
+    // Lo de la carta de porte que es igual para toda la orden. El remitente
+    // comercial productor va en cada CP y el flete en cada camión.
+    if (orden.Titular_CP) {
+        y = ocPdfTitulo(doc, 'CARTA DE PORTE', y + 8);
+        y = ocPdfTablaDosColumnas(doc, [['Titular carta de porte', ocPdfConCuit(orden.Titular_CP, orden.Titular_CP_CUIT)]], y);
     }
 
     if (orden.Observaciones) {
-        y = ocPdfTitulo(doc, 'INDICACIONES', y + 2);
+        y = ocPdfTitulo(doc, 'INDICACIONES', y + 8);
         doc.setTextColor(...OC_GRIS);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
@@ -1385,6 +1506,14 @@ function ocPdfCabeceraDatos(doc, orden, y) {
     }
 
     return y + 4;
+}
+
+// Corta un texto al ancho dado (en mm, con la fuente actual) agregando "…".
+function ocPdfRecortar(doc, texto, ancho) {
+    texto = String(texto || '');
+    if (doc.getTextWidth(texto) <= ancho) return texto;
+    while (texto.length > 1 && doc.getTextWidth(texto + '…') > ancho) texto = texto.slice(0, -1);
+    return texto.trimEnd() + '…';
 }
 
 // "ARGENCROPS SA (CUIT 30-...)" — el CUIT entre paréntesis solo si está.
@@ -1437,13 +1566,18 @@ function ocPdfBloqueCamion(doc, cam, numero, y) {
     y += 10;
 
     const filas = [
+        ['Grano / Campaña', [cam.especie, cam.cosecha].filter(Boolean).join('  ·  ')],
         ['Transportista', ocPdfConCuit(cam.transportista, cam.transportista_cuit)],
         ['Chofer', ocPdfConCuit(cam.chofer, cam.chofer_cuil)]
     ].filter(f => f[1]);
 
-    const flete = [cam.km ? formatNumeroAR(cam.km, 0) + ' km' : '',
-                   cam.tarifa ? 'Tarifa ' + formatNumeroAR(cam.tarifa, 2) : ''].filter(Boolean).join('  ·  ');
-    if (flete) filas.push(['Flete', flete]);
+    if (cam.flete_pagador) filas.push(['Pagador del flete', ocPdfConCuit(cam.flete_pagador, cam.flete_pagador_cuit)]);
+    if (cam.flete === 'Sí' && cam.flete_intermediario) {
+        filas.push(['Intermediario del flete', ocPdfConCuit(cam.flete_intermediario, cam.flete_intermediario_cuit)]);
+    }
+    const kmTarifa = [cam.km ? formatNumeroAR(cam.km, 0) + ' km' : '',
+                      cam.tarifa ? 'Tarifa ' + formatNumeroAR(cam.tarifa, 2) : ''].filter(Boolean).join('  ·  ');
+    if (kmTarifa) filas.push(['Km / Tarifa', kmTarifa]);
 
     if (filas.length) y = ocPdfTablaDosColumnas(doc, filas, y);
     return y + 2;
@@ -1467,14 +1601,20 @@ function ocPdfBloqueCartaPorte(doc, cp, numero, y) {
     doc.text('CP ' + numero, OC_PDF_MARGEN_X + 2.5, y + 4.5);
 
     doc.setFont('helvetica', 'normal');
-    const linea1 = [cp.productor ? 'Productor: ' + cp.productor : '',
-                    cp.contrato_com ? 'CTTO: ' + cp.contrato_com : ''].filter(Boolean).join('     ');
-    doc.text(linea1, OC_PDF_MARGEN_X + 16, y + 4.5);
+    // Renglón 1: el remitente comercial productor con su CUIT, solo. Con una
+    // razón social larga no entra nada más al lado, y si no entra se corta con
+    // "…" en vez de pasar al renglón de abajo y pisarlo. A la derecha queda
+    // lugar para los kg.
+    const anchoTexto = OC_PDF_ANCHO - 16 - 30;
+    const linea1 = cp.productor ? 'Rte. com. productor: ' + ocPdfConCuit(cp.productor, cp.productor_cuit) : '';
+    doc.text(ocPdfRecortar(doc, linea1, anchoTexto), OC_PDF_MARGEN_X + 16, y + 4.5);
 
-    const linea2 = [cp.ctg ? 'CTG: ' + cp.ctg : 'CTG: (a completar)',
-                    cp.carta_porte ? 'N° CP: ' + cp.carta_porte : '',
+    // Renglón 2: contrato, CTG y observaciones. El N° de carta de porte no va:
+    // lo carga planta después.
+    const linea2 = [cp.contrato_com ? 'CTTO: ' + cp.contrato_com : '',
+                    cp.ctg ? 'CTG: ' + cp.ctg : 'CTG: (a completar)',
                     cp.observaciones || ''].filter(Boolean).join('     ');
-    doc.text(linea2, OC_PDF_MARGEN_X + 16, y + 8.8);
+    doc.text(ocPdfRecortar(doc, linea2, anchoTexto), OC_PDF_MARGEN_X + 16, y + 8.8);
 
     if (cp.peso_neto) {
         doc.setFont('helvetica', 'bold');
@@ -1539,8 +1679,7 @@ function ocPdfResumenLotes(doc, orden, y) {
         formatNumeroAR(porLote[k].bolsas, 0),
         formatNumeroAR(porLote[k].kg, 0)
     ]);
-    // Última fila: el total de la orden, que es con lo que se cierra contra el
-    // objetivo de kg.
+    // Última fila: el total de la orden.
     filas.push(['TOTAL', '',
         formatNumeroAR(orden.Total_Bolsas || 0, 0),
         formatNumeroAR(orden.Total_Kg || 0, 0)]);

@@ -49,18 +49,28 @@ var COLS_OC = ["Id_OC", "Nro_OC", "Fecha", "Contrato_Encabeza", "Especie", "Cose
   "Flete_Pagador", "Flete_Pagador_CUIT",
   "Objetivo_Kg", "Observaciones",
   "Total_Camiones", "Total_Bolsas", "Total_Kg",
-  "Estado", "usuario_registro", "Fecha_Registro"];
+  "Estado", "usuario_registro", "Fecha_Registro",
+  // 16/10/2026: el titular de la CP va con CUIT, como en la carta de porte
+  "Titular_CP_CUIT"];
 
+// Las columnas nuevas van SIEMPRE al final: las filas se escriben por posición
+// desde esta lista, y las hojas que ya existen reciben los encabezados que les
+// falten (ver obtenerHojaOC).
+//   16/10/2026: el grano, la campaña y el flete pasaron de la cabecera al camión.
 var COLS_OC_CAMION = ["Id_Camion", "Id_OC", "Nro_Camion",
   "Transportista", "Transportista_CUIT", "Chofer", "Chofer_CUIL",
-  "Dominio_Camion", "Dominio_Acoplado", "Km", "Tarifa"];
+  "Dominio_Camion", "Dominio_Acoplado", "Km", "Tarifa",
+  "Especie", "Cosecha", "Flete",
+  "Flete_Intermediario", "Flete_Intermediario_CUIT",
+  "Flete_Pagador", "Flete_Pagador_CUIT"];
 
 // Id_OC se repite en las hojas hijas aunque ya esté en la madre: así se puede
 // borrar una orden entera con un solo barrido por hoja, y una consulta por
 // orden no tiene que ir encadenando tablas.
+//   16/10/2026: "Productor" es el remitente comercial productor; suma su CUIT.
 var COLS_OC_CP = ["Id_CP", "Id_Camion", "Id_OC", "Nro_CP",
   "Productor", "Contrato_Comercial", "CTG", "Carta_Porte",
-  "Peso_Neto", "Observaciones_CP"];
+  "Peso_Neto", "Observaciones_CP", "Productor_CUIT"];
 
 var COLS_OC_LOTE = ["Id_Lote_OC", "Id_CP", "Id_OC", "Nro_Lote",
   "Lote_BRC", "Lote_Planta", "Tipo", "Calibre",
@@ -81,7 +91,7 @@ var COLS_OC_LOTE = ["Id_Lote_OC", "Id_CP", "Id_OC", "Nro_Lote",
 // cualquiera escriba, y terminan insertando los dos. Así se duplicó una carga
 // real en su momento (BC-1787247191230, 3 filas para una sola carga).
 function guardarOrdenCarga(data) {
-  var hojaOC = obtenerHojaConEncabezados(NOMBRE_HOJA_OC, COLS_OC);
+  var hojaOC = obtenerHojaOC(NOMBRE_HOJA_OC, COLS_OC);
 
   var lock = LockService.getScriptLock();
   var conLock = false;
@@ -107,9 +117,9 @@ function guardarOrdenCarga(data) {
 // appendRow y no hay que tener a los demás pedidos esperando. Solo llega acá el
 // pedido que realmente insertó la orden.
 function guardarHijosDeLaOC(data) {
-  var hojaCam  = obtenerHojaConEncabezados(NOMBRE_HOJA_OC_CAMION, COLS_OC_CAMION);
-  var hojaCp   = obtenerHojaConEncabezados(NOMBRE_HOJA_OC_CP, COLS_OC_CP);
-  var hojaLote = obtenerHojaConEncabezados(NOMBRE_HOJA_OC_LOTE, COLS_OC_LOTE);
+  var hojaCam  = obtenerHojaOC(NOMBRE_HOJA_OC_CAMION, COLS_OC_CAMION);
+  var hojaCp   = obtenerHojaOC(NOMBRE_HOJA_OC_CP, COLS_OC_CP);
+  var hojaLote = obtenerHojaOC(NOMBRE_HOJA_OC_LOTE, COLS_OC_LOTE);
 
   var camiones = data.Camiones || [];
   for (var i = 0; i < camiones.length; i++) {
@@ -127,7 +137,14 @@ function guardarHijosDeLaOC(data) {
       Dominio_Camion: cam.dominio_camion,
       Dominio_Acoplado: cam.dominio_acoplado,
       Km: cam.km,
-      Tarifa: cam.tarifa
+      Tarifa: cam.tarifa,
+      Especie: cam.especie,
+      Cosecha: cam.cosecha,
+      Flete: cam.flete,
+      Flete_Intermediario: cam.flete_intermediario,
+      Flete_Intermediario_CUIT: cam.flete_intermediario_cuit,
+      Flete_Pagador: cam.flete_pagador,
+      Flete_Pagador_CUIT: cam.flete_pagador_cuit
     }));
 
     var cps = cam.CartasPorte || [];
@@ -145,7 +162,8 @@ function guardarHijosDeLaOC(data) {
         CTG: cp.ctg,
         Carta_Porte: cp.carta_porte,
         Peso_Neto: cp.peso_neto,
-        Observaciones_CP: cp.observaciones
+        Observaciones_CP: cp.observaciones,
+        Productor_CUIT: cp.productor_cuit
       }));
 
       var lotes = cp.Lotes || [];
@@ -202,8 +220,24 @@ function cabeceraOCaFila(data) {
     Total_Kg: data.Total_Kg || 0,
     Estado: data.Estado || "Generada",
     usuario_registro: data.usuario_registro || "",
-    Fecha_Registro: new Date()
+    Fecha_Registro: new Date(),
+    Titular_CP_CUIT: data.Titular_CP_CUIT || ""
   };
+}
+
+// Como obtenerHojaConEncabezados(), pero además completa los encabezados que
+// le falten a una hoja que ya existía. Sin esto, una columna agregada a COLS_*
+// se escribiría en una celda sin título y al leer (que es por nombre) no se
+// encontraría nunca. Solo agrega al final: nunca mueve ni renombra nada.
+function obtenerHojaOC(nombre, columnas) {
+  var hoja = obtenerHojaConEncabezados(nombre, columnas);
+  var ultima = hoja.getLastColumn();
+  var actuales = ultima > 0 ? hoja.getRange(1, 1, 1, ultima).getDisplayValues()[0] : [];
+  if (actuales.length < columnas.length) {
+    var faltan = columnas.slice(actuales.length);
+    hoja.getRange(1, actuales.length + 1, 1, faltan.length).setValues([faltan]);
+  }
+  return hoja;
 }
 
 // Arma el array de la fila en el orden de los encabezados. Así agregar una
@@ -300,6 +334,7 @@ function leerOrdenesCarga() {
     cpsPorCamion[idCamionDeLaCp].push({
       Id_CP: idCp,
       productor: filasCp[c][colCp["Productor"]],
+      productor_cuit: valorPorNombre(filasCp[c], colCp, "Productor_CUIT"),
       contrato_com: filasCp[c][colCp["Contrato_Comercial"]],
       ctg: filasCp[c][colCp["CTG"]],
       carta_porte: filasCp[c][colCp["Carta_Porte"]],
@@ -326,6 +361,13 @@ function leerOrdenesCarga() {
       dominio_acoplado: filasCam[m][colCam["Dominio_Acoplado"]],
       km: filasCam[m][colCam["Km"]],
       tarifa: filasCam[m][colCam["Tarifa"]],
+      especie: valorPorNombre(filasCam[m], colCam, "Especie"),
+      cosecha: valorPorNombre(filasCam[m], colCam, "Cosecha"),
+      flete: valorPorNombre(filasCam[m], colCam, "Flete"),
+      flete_intermediario: valorPorNombre(filasCam[m], colCam, "Flete_Intermediario"),
+      flete_intermediario_cuit: valorPorNombre(filasCam[m], colCam, "Flete_Intermediario_CUIT"),
+      flete_pagador: valorPorNombre(filasCam[m], colCam, "Flete_Pagador"),
+      flete_pagador_cuit: valorPorNombre(filasCam[m], colCam, "Flete_Pagador_CUIT"),
       CartasPorte: cpsPorCamion[idCamion] || []
     });
   }
@@ -344,6 +386,7 @@ function leerOrdenesCarga() {
       Especie: fila[colOC["Especie"]],
       Cosecha: fila[colOC["Cosecha"]],
       Titular_CP: fila[colOC["Titular_CP"]],
+      Titular_CP_CUIT: valorPorNombre(fila, colOC, "Titular_CP_CUIT"),
       Remitente_Productor: fila[colOC["Remitente_Productor"]],
       Remitente_Venta: fila[colOC["Remitente_Venta"]],
       Destinatario: fila[colOC["Destinatario"]],
@@ -370,6 +413,13 @@ function leerOrdenesCarga() {
   }
 
   return respuestaJsonCalidad(salida.reverse()); // más recientes primero
+}
+
+// Las columnas agregadas después pueden no existir todavía en una hoja que
+// nunca recibió una orden nueva: ahí se devuelve "" en vez de undefined.
+function valorPorNombre(fila, indice, nombre) {
+  var c = indice[nombre];
+  return (c === undefined || fila[c] === undefined || fila[c] === null) ? "" : fila[c];
 }
 
 function filasDeHoja(ss, nombre) {

@@ -28,7 +28,12 @@ if (!global.jspdf || !global.jspdf.jsPDF) { console.log('>>> no se pudo cargar j
 
 // --- Helpers reales de app.js (se extraen por nombre, sin ejecutar el resto) ---
 const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
-function extraerFuncion(nombre) {
+// `fuente` es opcional (por defecto app.js). Se chequea el tipo porque
+// .map(extraerFuncion) le pasa el índice como segundo argumento.
+function extraerFuncion(nombre, fuente) {
+  return extraerDe(typeof fuente === 'string' ? fuente : app, nombre);
+}
+function extraerDe(app, nombre) {
   const i = app.indexOf('function ' + nombre + '(');
   if (i === -1) throw new Error('no encontre ' + nombre);
   // El cuerpo arranca en la primera llave DESPUES de cerrar los parentesis de
@@ -63,12 +68,15 @@ const oc = fs.readFileSync(path.join(RAIZ, 'orden-carga.js'), 'utf8');
 const desde = oc.indexOf('// --- 8. EL PDF DE LA ORDEN');
 if (desde === -1) { console.log('>>> no encontre la seccion del PDF'); process.exit(1); }
 eval(oc.slice(oc.lastIndexOf('// ====', desde)));
+// Viven en la seccion 5 pero el PDF las usa: adaptan las ordenes viejas
+// (grano y flete en la cabecera) y arman el resumen de granos.
+eval(['ocAdaptarOrdenVieja', 'ocGranosDe'].map(n => extraerFuncion(n, oc)).join(String.fromCharCode(10)));
 
 // --- La OC 2056, tal como la devuelve el backend -------------------------
 const OC = {
   Id_OC: 'OC-1', Nro_OC: '2056', Fecha: '2026-07-14',
   Contrato_Encabeza: 'CN26-063', Especie: 'Poroto Mung', Cosecha: '25-26',
-  Titular_CP: 'Titular SA',
+  Titular_CP: 'Titular SA', Titular_CP_CUIT: '30708622717',
   Destinatario: 'Destinatario SA', Destinatario_CUIT: '30-00000000-0',
   Destino: 'Planta Destino SA', Destino_CUIT: '30-11111111-1',
   Destino_Planta: '12058', Destino_Direccion: 'Calle 10 N 1',
@@ -113,6 +121,21 @@ const OC = {
   ]
 };
 
+// La misma orden en el formato NUEVO (16/10/2026): grano, campaña y flete por
+// camión, CUIT del remitente en cada CP, sin contrato que encabeza ni objetivo.
+const OC_NUEVA = JSON.parse(JSON.stringify(OC));
+['Contrato_Encabeza', 'Especie', 'Cosecha', 'Objetivo_Kg', 'Flete_Intermediario',
+ 'Flete_Intermediario_CUIT', 'Flete_Pagador', 'Flete_Pagador_CUIT'].forEach(k => delete OC_NUEVA[k]);
+OC_NUEVA.Camiones[0] = Object.assign(OC_NUEVA.Camiones[0], { especie: 'Poroto Mung', cosecha: '25-26', flete: 'Sí',
+  flete_intermediario: 'Fletes Intermediarios del Litoral SRL', flete_intermediario_cuit: '30-22222222-2',
+  flete_pagador: 'Destinatario SA', flete_pagador_cuit: '30-00000000-0' });
+// Como la CPE real de ejemplo: pagador, km y tarifa SIN intermediario
+OC_NUEVA.Camiones[1] = Object.assign(OC_NUEVA.Camiones[1], { especie: 'Garbanzo', cosecha: '25-26', flete: 'No',
+  flete_pagador: 'RONALB S R L', flete_pagador_cuit: '30641047208', km: 400, tarifa: 1 });
+OC_NUEVA.Camiones.forEach(c => c.CartasPorte.forEach(cp => {
+  cp.productor = 'Agropecuaria Los Productores del Oeste SA'; cp.productor_cuit = '30-55555555-5';
+}));
+
 let fallos = 0;
 function chequear(nombre, cond, detalle) {
   if (!cond) fallos++;
@@ -155,10 +178,31 @@ if (guardado) {
   // El texto del PDF tiene que contener lo que la planta necesita leer
   const crudo = fs.readFileSync(salida, 'latin1');
   const textoPlano = docFinal.internal.pages.flat().join(' ');
-  [['el numero de orden', '2056'], ['el contrato', 'CN26-063'],
+  [['el numero de orden', '2056'],
    ['el dominio del camion 1', 'AA000AA'], ['el dominio del camion 2', 'BB000BB'],
-   ['un lote de planta', 'LT-556'], ['el CTTO de una CP', 'CN26-081']]
+   ['un lote de planta', 'LT-556'], ['el CTTO de una CP', 'CN26-081'],
+   // Orden vieja: grano y flete estaban en la cabecera y se pasan al camión
+   ['el grano (de la cabecera vieja)', 'Poroto Mung'], ['el flete (de la cabecera vieja)', 'Transporte SRL']]
     .forEach(([q, v]) => chequear('aparece ' + q + ' (' + v + ')', textoPlano.indexOf(v) !== -1, 'no esta en el PDF'));
+  // Lo que se sacó el 16/10/2026
+  chequear('ya NO aparece el contrato que encabeza (CN26-063)', textoPlano.indexOf('CN26-063') === -1, 'sigue apareciendo');
+  chequear('ya NO aparece el objetivo de kg', textoPlano.indexOf('Objetivo') === -1, 'sigue apareciendo');
+}
+
+console.log('\n--- PDF DE UNA ORDEN EN EL FORMATO NUEVO ---');
+guardado = null;
+try { ocGenerarPDF(OC_NUEVA); } catch (e) { console.log('  EXCEPCION: ' + (e && e.stack ? e.stack : e)); fallos++; }
+if (guardado) {
+  const t = docFinal.internal.pages.flat().join(' ');
+  [['el grano de cada camion', 'Garbanzo'], ['la campaña', '25-26'],
+   ['el intermediario del flete', 'Fletes Intermediarios del Litoral SRL'], ['el CUIT del intermediario', '30-22222222-2'],
+   ['el remitente comercial productor', 'Agropecuaria Los Productores del Oeste SA'], ['el CUIT del remitente', '30-55555555-5']]
+    .forEach(([q, v]) => chequear('aparece ' + q + ' (' + v + ')', t.indexOf(v) !== -1, 'no esta en el PDF'));
+  chequear('el camion 2 (sin intermediario) no muestra intermediario', (t.match(/Intermediario del flete/g) || []).length === 1, 'aparece mas de una vez');
+  chequear('pero si muestra su pagador del flete (sin intermediario)', t.indexOf('RONALB S R L') !== -1, 'no esta');
+  chequear('y sus km', t.indexOf('400 km') !== -1, 'no esta');
+  chequear('el titular de la CP va con CUIT', t.indexOf('30708622717') !== -1, 'no esta');
+  fs.writeFileSync(path.join(__dirname, 'orden_2056.pdf'), Buffer.from(docFinal.output('arraybuffer')));
 }
 
 // --- Bordes --------------------------------------------------------------
@@ -187,9 +231,10 @@ console.log('\n' + (fallos === 0 ? '>>> TODO OK' : '>>> ' + fallos + ' FALLA(S)'
 // Sin poder renderizar, se revisan las coordenadas del propio PDF: que ningun
 // rectangulo ni ninguna linea de texto se salga de la hoja ni se monte sobre
 // el pie de pagina. Es el error que no se ve hasta que alguien imprime.
-console.log('\n--- MAQUETA (coordenadas del PDF) ---');
+for (const [nombreOrden, ordenAuditada] of [['orden vieja', OC], ['orden nueva, nombres largos', OC_NUEVA]]) {
+console.log('\n--- MAQUETA (coordenadas del PDF): ' + nombreOrden + ' ---');
 guardado = null;
-ocGenerarPDF(OC);
+ocGenerarPDF(ordenAuditada);
 const K = 72 / 25.4;                 // mm -> puntos
 const ALTO = 297 * K, ANCHO = 210 * K;
 const X_MIN = 10 * K, X_MAX = 200 * K;
@@ -226,5 +271,6 @@ docFinal.internal.pages.forEach((pagina, nro) => {
 chequear('nada se sale por los costados', fueraX.length === 0, fueraX.slice(0, 4).join(' | '));
 chequear('nada se sale por arriba o abajo', fueraY.length === 0, fueraY.slice(0, 4).join(' | '));
 chequear('nada se monta sobre el pie de pagina', sobreElPie.length === 0, sobreElPie.slice(0, 4).join(' | '));
+}
 console.log('\n' + (fallos === 0 ? '>>> TODO OK' : '>>> ' + fallos + ' FALLA(S)'));
 process.exit(fallos === 0 ? 0 : 1);

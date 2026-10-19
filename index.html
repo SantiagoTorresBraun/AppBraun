@@ -511,7 +511,7 @@
                             <tr>
                                 <th>Fecha</th>
                                 <th>N° OC</th>
-                                <th>Contrato</th>
+                                <th>Grano</th>
                                 <th>Destino</th>
                                 <th>Camiones</th>
                                 <th>Kg</th>
@@ -528,12 +528,11 @@
             <!-- ===== TAB: NUEVA / EDITAR ORDEN ===== -->
             <div id="tab-content-nuevo-oc" class="tab-content hidden nuevo-registro-section">
 
-                <!-- Totales siempre a la vista: la OC se arma contra un número de kg -->
+                <!-- Totales siempre a la vista mientras se arma la orden -->
                 <div class="oc-barra-totales">
                     <div class="oc-total-item"><span class="oc-total-label">Camiones</span><span class="oc-total-valor" id="oc-total-camiones">0</span></div>
                     <div class="oc-total-item"><span class="oc-total-label">Bolsas</span><span class="oc-total-valor" id="oc-total-bolsas">0</span></div>
                     <div class="oc-total-item"><span class="oc-total-label">Total</span><span class="oc-total-valor" id="oc-total-kg">0 kg</span></div>
-                    <div class="oc-total-item oc-falta hidden" id="oc-falta"></div>
                 </div>
 
                 <div class="oc-nota-estado">
@@ -544,36 +543,22 @@
 
                 <div class="form-header-nuevo">
                     <h3 id="oc-form-titulo">Crear Nueva Orden de Carga</h3>
-                    <p class="form-subtitle">Empezá por el número de orden y los datos del destino</p>
+                    <p class="form-subtitle">El número y la fecha los pone la app. Empezá por el destino.</p>
                 </div>
 
                 <form id="form-oc" onsubmit="return false;">
 
                     <!-- ===== CABECERA DE LA OC ===== -->
+                    <!-- Número y fecha los pone la app y no se editan (ver ocPrepararNumeroYFecha).
+                         El grano, la campaña y el flete van en cada CAMIÓN: una
+                         misma orden puede llevar mercadería distinta. -->
                     <h3>Datos de la Orden</h3>
                     <div class="form-group-row">
                         <div class="form-group">
-                            <label for="oc-numero">N° de Orden de Carga</label>
-                            <input type="text" id="oc-numero" placeholder="2056" oninput="ocRecalcularTodo()" required>
+                            <label for="oc-numero">N° de Orden de Carga <span class="oc-ayuda" id="oc-numero-ayuda">automático</span></label>
+                            <input type="text" id="oc-numero" class="campo-calculado" readonly oninput="ocRecalcularTodo()" required>
                         </div>
-                        <div class="form-group"><label for="oc-fecha">Fecha</label><input type="date" id="oc-fecha" required></div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="oc-contrato-fm">Contrato que encabeza la OC</label>
-                            <input type="text" id="oc-contrato-fm" list="oc-lista-contratos-fm" placeholder="CN26-000">
-                        </div>
-                        <div class="form-group">
-                            <label for="oc-objetivo-kg">Objetivo de kg <span class="oc-ayuda">opcional</span></label>
-                            <input type="text" inputmode="decimal" class="campo-numero-ar" id="oc-objetivo-kg" placeholder="75000" oninput="ocRecalcularTodo()">
-                        </div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="oc-especie">Grano / Especie</label>
-                            <select id="oc-especie" class="enum-select" data-enum="producto"></select>
-                        </div>
-                        <div class="form-group"><label for="oc-cosecha">Cosecha</label><input type="text" id="oc-cosecha" list="oc-lista-cosechas" placeholder="25-26"></div>
+                        <div class="form-group"><label for="oc-fecha">Fecha <span class="oc-ayuda">automática</span></label><input type="date" id="oc-fecha" class="campo-calculado" readonly required></div>
                     </div>
 
                     <!-- ===== DESTINO ===== -->
@@ -597,22 +582,10 @@
 
                     <!-- ===== CARTA DE PORTE: DATOS FIJOS DE TODA LA OC ===== -->
                     <h3>Datos de Carta de Porte</h3>
-                    <p class="oc-nota-seccion">Son los mismos para todas las cartas de porte de esta orden.</p>
-                    <div class="form-group"><label for="oc-titular-cp">Titular de la carta de porte</label><input type="text" id="oc-titular-cp" list="oc-lista-titulares" placeholder="Razón social"></div>
+                    <p class="oc-nota-seccion">Es el mismo para todas las cartas de porte de esta orden. El remitente comercial productor va en cada carta de porte, y el flete en cada camión.</p>
                     <div class="form-group-row">
-                        <div class="form-group"><label for="oc-remitente-productor">Remitente comercial productor</label><input type="text" id="oc-remitente-productor"></div>
-                        <div class="form-group"><label for="oc-remitente-venta">Remitente comercial venta primaria</label><input type="text" id="oc-remitente-venta"></div>
-                    </div>
-
-                    <!-- ===== FLETE ===== -->
-                    <h3>Flete</h3>
-                    <div class="form-group-row">
-                        <div class="form-group"><label for="oc-flete-intermediario">Intermediario del flete</label><input type="text" id="oc-flete-intermediario" list="oc-lista-fletes" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
-                        <div class="form-group"><label for="oc-flete-intermediario-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-intermediario-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group"><label for="oc-flete-pagador">Pagador del flete</label><input type="text" id="oc-flete-pagador" list="oc-lista-fletes" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
-                        <div class="form-group"><label for="oc-flete-pagador-cuit">CUIT</label><input type="text" class="campo-cuit" id="oc-flete-pagador-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
+                        <div class="form-group"><label for="oc-titular-cp">Titular de la carta de porte</label><input type="text" id="oc-titular-cp" list="oc-lista-titulares" onchange="ocAutocompletarCabecera(this)" placeholder="Razón social"></div>
+                        <div class="form-group"><label for="oc-titular-cp-cuit">CUIT titular</label><input type="text" class="campo-cuit" id="oc-titular-cp-cuit" inputmode="numeric" placeholder="30-00000000-0"></div>
                     </div>
 
                     <!-- ===== CAMIONES ===== -->
@@ -653,7 +626,6 @@
                      en órdenes anteriores. La primera vez se escribe; de ahí en
                      más se elige, y los datos que van con eso (CUIT, planta,
                      acoplado) se completan solos. -->
-                <datalist id="oc-lista-contratos-fm"></datalist>
                 <datalist id="oc-lista-cosechas"></datalist>
                 <datalist id="oc-lista-destinatarios"></datalist>
                 <datalist id="oc-lista-destinos"></datalist>
@@ -685,13 +657,97 @@
     </section>
 
     <!-- ========================================================================= -->
-    <!-- --- VISTA: SUBMENÚ CONTROL DE CALIDAD (selección de grano) --- -->
+    <!-- --- VISTA: SUBMENÚ CONTROL DE CALIDAD (paso 1: tipo de control) --- -->
+    <!-- Cosecha = controles en campo, por Contrato de Producción.
+         Flujo de Masa = controles en planta, por Contrato FM.
+         Ver DISEÑO_CALIDAD_COSECHA_FM.md -->
     <!-- ========================================================================= -->
     <section id="view-submenu-calidad" class="view hidden">
         <div class="container submenu-container">
             <div class="submenu-header">
+                <h2 class="submenu-title">Tipo de Control de Calidad</h2>
+                <p class="submenu-subtitle">Elegí dónde se hizo el control</p>
+            </div>
+
+            <div class="menu-grid premium-grid">
+                <!-- Control de Cosecha -->
+                <div class="menu-card active" onclick="elegirTipoControlCalidad('COSECHA')">
+                    <div class="card-header">
+                        <div class="card-icon quality-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Surcos del campo -->
+                                <path d="M4 40 L44 40" stroke="#A71D1D" stroke-width="2.4" stroke-linecap="round"/>
+                                <path d="M8 34 L40 34" stroke="#A71D1D" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+                                <!-- Plantas -->
+                                <g stroke="#5E8C4A" stroke-width="2" stroke-linecap="round">
+                                    <line x1="14" y1="34" x2="14" y2="18"/>
+                                    <line x1="24" y1="34" x2="24" y2="14"/>
+                                    <line x1="34" y1="34" x2="34" y2="18"/>
+                                </g>
+                                <g fill="#5E8C4A">
+                                    <path d="M14 22 q-5 -1 -6 -6 q5 1 6 6"/>
+                                    <path d="M24 18 q5 -1 6 -6 q-5 1 -6 6"/>
+                                    <path d="M34 22 q-5 -1 -6 -6 q5 1 6 6"/>
+                                </g>
+                                <!-- Granos -->
+                                <g fill="#E0A32E">
+                                    <circle cx="14" cy="16" r="2.4"/>
+                                    <circle cx="24" cy="12" r="2.6"/>
+                                    <circle cx="34" cy="16" r="2.4"/>
+                                </g>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Control de Cosecha</h3>
+                            <span class="card-badge active-badge">En campo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Controles en campo durante la cosecha, por Contrato de Producción</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+
+                <!-- Control de Flujo de Masa -->
+                <div class="menu-card active" onclick="elegirTipoControlCalidad('FLUJO DE MASA')">
+                    <div class="card-header">
+                        <div class="card-icon quality-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Planta de proceso -->
+                                <path d="M6 40 V22 L16 16 V22 L26 16 V22 L36 16 V40 Z" fill="#A71D1D" fill-opacity=".14" stroke="#A71D1D" stroke-width="2.2" stroke-linejoin="round"/>
+                                <rect x="37" y="8" width="5" height="32" fill="#A71D1D" fill-opacity=".14" stroke="#A71D1D" stroke-width="2"/>
+                                <line x1="4" y1="40" x2="44" y2="40" stroke="#A71D1D" stroke-width="2.4" stroke-linecap="round"/>
+                                <!-- Bolsa con grano -->
+                                <rect x="12" y="28" width="9" height="12" rx="2" fill="#E0A32E"/>
+                                <rect x="23" y="28" width="9" height="12" rx="2" fill="#E0A32E" opacity=".75"/>
+                            </svg>
+                        </div>
+                        <div class="card-title-section">
+                            <h3 class="card-title">Control de Flujo de Masa</h3>
+                            <span class="card-badge active-badge">En planta</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-description">Controles en planta durante el proceso, por Contrato de Flujo de Masa</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-arrow"><i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- --- VISTA: SUBMENÚ CONTROL DE CALIDAD (paso 2: grano) --- -->
+    <!-- ========================================================================= -->
+    <section id="view-submenu-calidad-grano" class="view hidden">
+        <div class="container submenu-container">
+            <div class="submenu-header">
                 <h2 class="submenu-title">Selecciona el Grano a Analizar</h2>
-                <p class="submenu-subtitle">Elige el tipo de grano para el control de calidad</p>
+                <p class="submenu-subtitle"><span id="lbl-tipo-control-grano">Control de Cosecha</span> — elegí el grano</p>
             </div>
 
             <div class="menu-grid premium-grid">
@@ -778,7 +834,7 @@
         <div class="modulo-carga-header">
             <div class="header-content">
                 <div class="header-title-section">
-                    <h2>Historial de Controles — <span id="lbl-grano-actual">Garbanzo</span></h2>
+                    <h2><span id="lbl-tipo-control-actual">Control de Cosecha</span> — <span id="lbl-grano-actual">Garbanzo</span></h2>
                     <p class="header-subtitle">Consulta y gestiona tus análisis de calidad</p>
                 </div>
                 <button class="btn-nuevo-registro-floating" onclick="switchTabCalidad('nuevo')">
@@ -809,14 +865,28 @@
 
             <!-- HISTORIAL -->
             <div id="tab-content-historial-calidad" class="tab-content historial-section">
-                <div class="table-responsive">
+                <!-- Vista por contrato: cada contrato es una "carpeta" con sus
+                     controles (Cosecha → Contrato de Producción, Flujo de Masa →
+                     Contrato FM). "Lista" es el historial plano de siempre. -->
+                <div class="cal-vista-barra">
+                    <div class="cal-vista-toggle" role="group" aria-label="Cómo ver el historial">
+                        <button type="button" id="btn-cal-vista-carpetas" onclick="cambiarVistaHistorialCalidad('carpetas')"><i class="fas fa-folder"></i> Por contrato</button>
+                        <button type="button" id="btn-cal-vista-lista" onclick="cambiarVistaHistorialCalidad('lista')"><i class="fas fa-list"></i> Lista</button>
+                    </div>
+                    <div id="cal-carpeta-abierta" class="cal-carpeta-abierta hidden">
+                        <button type="button" class="cal-carpeta-volver" onclick="cerrarCarpetaCalidad()"><i class="fas fa-arrow-left"></i> Contratos</button>
+                        <span class="cal-carpeta-titulo"><i class="fas fa-folder-open"></i> <span id="cal-carpeta-nombre"></span></span>
+                    </div>
+                </div>
+                <div id="cal-carpetas" class="cal-carpetas hidden"></div>
+                <div class="table-responsive" id="cal-tabla-wrapper">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th>Foto</th>
                                 <th>Fecha</th>
                                 <th>Cliente</th>
-                                <th>Lote / Variedad</th>
+                                <th id="th-cal-referencia">Contrato / Lote</th>
                                 <th>Kg</th>
                                 <th>Acciones</th>
                             </tr>
@@ -831,7 +901,7 @@
             <!-- FORMULARIO NUEVO CONTROL (OCULTO POR DEFECTO) -->
             <div id="tab-content-nuevo-calidad" class="tab-content hidden nuevo-registro-section">
                 <div class="form-header-nuevo">
-                    <h3>Nuevo Control de Calidad — <span id="lbl-grano-form">Garbanzo</span></h3>
+                    <h3>Nuevo <span id="lbl-tipo-control-form">Control de Cosecha</span> — <span id="lbl-grano-form">Garbanzo</span></h3>
                     <p class="form-subtitle">Completá el análisis por secciones</p>
                 </div>
 
@@ -858,18 +928,6 @@
                                 <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
                             </div>
                         </div>
-                        <div class="form-group"><label for="cal-lote-cliente">N° Lote Cliente/Planta</label><input type="text" id="cal-lote-cliente"></div>
-                    </div>
-                    <!-- Se sacaron de la carga por no usarse: Contrato Producción,
-                         Contrato Comercial, Contrato FM, Variedad, N° CTG y Tipo.
-                         Los registros viejos conservan esos datos en el Sheet y se
-                         siguen viendo en el detalle y en el buscador del historial. -->
-                    <div class="form-group-row">
-                        <div class="form-group"><label for="cal-lote-brc">N° Lote BRC</label><input type="text" id="cal-lote-brc"></div>
-                        <div class="form-group"><label for="cal-proceso">N° Proceso</label><input type="text" id="cal-proceso"></div>
-                    </div>
-                    <div class="form-group-row">
-                        <div class="form-group"><label for="cal-lote">N° Lote</label><input type="text" id="cal-lote"></div>
                         <div class="form-group">
                             <label for="cal-calibre">Calibre</label>
                             <div class="enum-row">
@@ -880,15 +938,62 @@
                         </div>
                     </div>
                     <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="cal-envase">Envase</label>
-                            <div class="enum-row">
-                                <select id="cal-envase" class="enum-select" data-enum="envase"></select>
-                                <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
-                                <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                        <div class="form-group"><label for="cal-kg">Kg</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-kg" value="0"></div>
+                    </div>
+
+                    <!-- Campos propios de cada tipo de control. calidad.js muestra
+                         el bloque del tipo abierto y oculta el otro; los campos del
+                         bloque oculto no se mandan al guardar (así editar un control
+                         no borra lo que ya tenía en esas columnas del Sheet).
+                         "N° Lote Cliente" (Cosecha) e "ID Planta" (Flujo de Masa)
+                         son la MISMA columna del Sheet: N° Lote Cliente/Planta. -->
+                    <div class="cal-bloque-tipo" data-tipo-control="COSECHA">
+                        <h3><i class="fas fa-tractor"></i> Datos de Cosecha</h3>
+                        <div class="form-group-row">
+                            <div class="form-group"><label for="cal-contrato-prod">Contrato de Producción *</label><input type="text" id="cal-contrato-prod" placeholder="Ej. CN26-120" data-requerido-tipo></div>
+                            <div class="form-group"><label for="cal-campo">Campo / Establecimiento</label><input type="text" id="cal-campo" list="cal-lista-campos" placeholder="Ej. La Esperanza"></div>
+                        </div>
+                        <div class="form-group-row">
+                            <div class="form-group"><label for="cal-lote-cliente-cosecha">N° Lote Cliente</label><input type="text" id="cal-lote-cliente-cosecha"></div>
+                            <div class="form-group"><label for="cal-rinde">Rinde (kg/ha)</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-rinde" value="0"></div>
+                        </div>
+                        <datalist id="cal-lista-campos"></datalist>
+                    </div>
+
+                    <div class="cal-bloque-tipo" data-tipo-control="FLUJO DE MASA">
+                        <h3><i class="fas fa-industry"></i> Datos de Planta</h3>
+                        <div class="form-group-row">
+                            <div class="form-group"><label for="cal-contrato-fm">Contrato de Flujo de Masa *</label><input type="text" id="cal-contrato-fm" placeholder="Ej. CN26-096" data-requerido-tipo></div>
+                            <div class="form-group">
+                                <label for="cal-planta">Planta</label>
+                                <div class="enum-row">
+                                    <select id="cal-planta" class="enum-select" data-enum="plantaCalidad"></select>
+                                    <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                    <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                                </div>
                             </div>
                         </div>
-                        <div class="form-group"><label for="cal-kg">Kg</label><input type="text" inputmode="decimal" class="campo-numero-ar" id="cal-kg" value="0"></div>
+                        <!-- El N° de Proceso no se repite dentro de una planta, pero el
+                             ID de lote sí puede repetirse en procesos distintos: un lote
+                             se identifica por Planta + Proceso + ID Planta. -->
+                        <div class="form-group-row">
+                            <div class="form-group"><label for="cal-proceso">N° Proceso</label><input type="text" id="cal-proceso" placeholder="Ej. GI81, PR500"></div>
+                            <div class="form-group"><label for="cal-lote-cliente">ID Planta (partida del lote)</label><input type="text" id="cal-lote-cliente" placeholder="Ej. LT-555A"></div>
+                        </div>
+                        <div class="form-group-row">
+                            <div class="form-group"><label for="cal-lote-brc">N° Lote BRC</label><input type="text" id="cal-lote-brc"></div>
+                            <div class="form-group"><label for="cal-lote">N° Lote</label><input type="text" id="cal-lote"></div>
+                        </div>
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="cal-envase">Envase</label>
+                                <div class="enum-row">
+                                    <select id="cal-envase" class="enum-select" data-enum="envase"></select>
+                                    <button type="button" class="btn-enum-add" onclick="agregarOpcionEnumUI(this)" title="Agregar opción">+</button>
+                                    <button type="button" class="btn-enum-remove" onclick="quitarOpcionEnumUI(this)" title="Quitar opción seleccionada">−</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- SECCIÓN 2: ANÁLISIS DE CALIBRE -->
@@ -1339,6 +1444,7 @@
                 <div class="detalle-section">
                     <h3 class="section-title">Información General</h3>
                     <div class="detalle-grid">
+                        <div class="detalle-item"><label>Tipo de Control</label><div class="detalle-value" id="det-cal-tipo-control">-</div></div>
                         <div class="detalle-item"><label>Fecha Análisis</label><div class="detalle-value" id="det-cal-fecha">-</div></div>
                         <div class="detalle-item"><label>Cliente</label><div class="detalle-value" id="det-cal-cliente">-</div></div>
                         <div class="detalle-item"><label>Muestreo en</label><div class="detalle-value" id="det-cal-muestreo">-</div></div>
@@ -1357,7 +1463,10 @@
                     <div class="detalle-grid">
                         <div class="detalle-item"><label>N° Lote</label><div class="detalle-value" id="det-cal-lote">-</div></div>
                         <div class="detalle-item"><label>N° Lote BRC</label><div class="detalle-value" id="det-cal-lote-brc">-</div></div>
-                        <div class="detalle-item"><label>N° Lote Cliente/Planta</label><div class="detalle-value" id="det-cal-lote-cliente">-</div></div>
+                        <div class="detalle-item"><label id="det-cal-lote-cliente-label">N° Lote Cliente/Planta</label><div class="detalle-value" id="det-cal-lote-cliente">-</div></div>
+                        <div class="detalle-item"><label>Campo / Establecimiento</label><div class="detalle-value" id="det-cal-campo">-</div></div>
+                        <div class="detalle-item"><label>Rinde (kg/ha)</label><div class="detalle-value" id="det-cal-rinde">-</div></div>
+                        <div class="detalle-item"><label>Planta</label><div class="detalle-value" id="det-cal-planta">-</div></div>
                         <div class="detalle-item"><label>N° CTG</label><div class="detalle-value" id="det-cal-ctg">-</div></div>
                         <div class="detalle-item"><label>Contrato Producción</label><div class="detalle-value" id="det-cal-contrato-prod">-</div></div>
                         <div class="detalle-item"><label>Contrato Comercial</label><div class="detalle-value" id="det-cal-contrato-com">-</div></div>
@@ -2178,6 +2287,7 @@
     <script src="orden-carga.js"></script>
     <script src="correo.js"></script>
     <script src="calidad.js"></script>
+    <script src="visor-fotos.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="produccion.js"></script>
     <script src="produccion-informes.js"></script>

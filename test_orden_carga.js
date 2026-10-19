@@ -34,6 +34,13 @@ class Hoja {
           out.push(r.slice(col - 1, col - 1 + (nCols || r.length)).map(v => String(v === undefined ? '' : v)));
         }
         return out;
+      },
+      // Para obtenerHojaOC(), que completa encabezados que falten
+      setValues: (valores) => {
+        valores.forEach((filaValores, i) => {
+          const r = h.filas[fila - 1 + i] || (h.filas[fila - 1 + i] = []);
+          filaValores.forEach((v, j) => { r[col - 1 + j] = v; });
+        });
       }
     };
   }
@@ -91,12 +98,16 @@ const OC = {
   Id_OC: 'OC-1', Nro_OC: '2056', Fecha: '2026-07-14',
   Contrato_Encabeza: 'CN26-063', Especie: 'Poroto Mung', Cosecha: '25-26',
   Destino: 'Planta destino', Destino_Planta: '12058',
+  Titular_CP: 'CEREALES VIEL S.A.', Titular_CP_CUIT: '30708622717',
   Objetivo_Kg: 75000, Total_Camiones: 2, Total_Bolsas: 3000, Total_Kg: 75000,
   Camiones: [
     {
       transportista: 'Transporte A', chofer: 'Chofer A', dominio_camion: 'AA000AA',
+      especie: 'Poroto Mung', cosecha: '25-26', flete: 'Sí',
+      flete_intermediario: 'Fletes SRL', flete_intermediario_cuit: '30-22222222-2',
+      flete_pagador: 'Pagador SA', flete_pagador_cuit: '30-33333333-3',
       CartasPorte: [
-        { productor: 'ACIAGRO', contrato_com: 'CN26-081 B', ctg: '10000000001', peso_neto: 26695,
+        { productor: 'ACIAGRO', productor_cuit: '30-11111111-1', contrato_com: 'CN26-081 B', ctg: '10000000001', peso_neto: 26695,
           observaciones: 'OC 2056 (1069 BLS)',
           Lotes: [
             { lote_brc: '4380', lote_planta: 'LT-556 A', bolsas: 737, kg_bolsa: 25, total_kg: 18425, calibre: '3.5mm' },
@@ -173,6 +184,15 @@ chequear('el lote NO se mezcla entre CP (CP2 del cam.1 tiene solo el 4381)',
 const bolsasTotales = o.Camiones.reduce((t, c) => t + c.CartasPorte.reduce((t2, cp) => t2 + cp.Lotes.reduce((t3, l) => t3 + Number(l.bolsas), 0), 0), 0);
 chequear('las bolsas leidas suman 3000', bolsasTotales, 3000);
 
+console.log('\n--- 3-B. CAMPOS NUEVOS (16/10/2026) ---');
+const cam1 = o.Camiones[0];
+chequear('grano y campaña del camion', [cam1.especie, cam1.cosecha], ['Poroto Mung', '25-26']);
+chequear('flete del camion', [cam1.flete, cam1.flete_intermediario, cam1.flete_intermediario_cuit, cam1.flete_pagador, cam1.flete_pagador_cuit],
+  ['Sí', 'Fletes SRL', '30-22222222-2', 'Pagador SA', '30-33333333-3']);
+chequear('CUIT del remitente de la CP 1', o.Camiones[0].CartasPorte[0].productor_cuit, '30-11111111-1');
+chequear('CUIT del titular de la CP', o.Titular_CP_CUIT, '30708622717');
+chequear('camion sin flete cargado -> campos vacios, no undefined', o.Camiones[1].flete, '');
+
 console.log('\n--- 4. ACTUALIZAR (se saca un camion) ---');
 const editada = JSON.parse(JSON.stringify(OC));
 editada.Camiones.pop();
@@ -210,6 +230,28 @@ chequear('borrar algo que no esta no rompe nada', leerOrdenesCarga()._json.lengt
 guardarOrdenCarga({ Id_OC: 'OC-3', Nro_OC: '2058', Fecha: '2026-07-15', Camiones: [] });
 chequear('una orden sin camiones se guarda igual', leerOrdenesCarga()._json.length, 2);
 chequear('y se lee con Camiones vacio', leerOrdenesCarga()._json.find(x => x.Nro_OC === '2058').Camiones, []);
+
+console.log('\n--- 8. HOJAS QUE YA EXISTIAN SIN LAS COLUMNAS NUEVAS ---');
+// Es el caso del Sheet real: OC_Camion y OC_CartaPorte se crearon antes del
+// 16/10/2026 con menos columnas. Al guardar una orden nueva tienen que recibir
+// los encabezados que faltan, y lo guardado se tiene que poder leer.
+Object.keys(HOJAS).forEach(k => delete HOJAS[k]);
+const COLS_CAM_VIEJAS = COLS_OC_CAMION.slice(0, COLS_OC_CAMION.indexOf('Tarifa') + 1);
+const COLS_CP_VIEJAS = COLS_OC_CP.slice(0, COLS_OC_CP.indexOf('Observaciones_CP') + 1);
+HOJAS['OC_Camion'] = new Hoja('OC_Camion'); HOJAS['OC_Camion'].appendRow(COLS_CAM_VIEJAS);
+HOJAS['OC_CartaPorte'] = new Hoja('OC_CartaPorte'); HOJAS['OC_CartaPorte'].appendRow(COLS_CP_VIEJAS);
+HOJAS['Orden_Carga'] = new Hoja('Orden_Carga'); HOJAS['Orden_Carga'].appendRow(COLS_OC.slice(0, COLS_OC.indexOf('Fecha_Registro') + 1));
+// Una fila vieja, guardada antes del cambio
+HOJAS['OC_Camion'].appendRow(['cam-viejo', 'OC-VIEJA', 1, 'T', '', 'C', '', 'ZZ000ZZ', '', 0, 0]);
+leerOrdenesCarga();
+guardarOrdenCarga(OC);
+chequear('OC_Camion recibio los encabezados nuevos', HOJAS['OC_Camion'].filas[0], COLS_OC_CAMION);
+chequear('OC_CartaPorte recibio Productor_CUIT', HOJAS['OC_CartaPorte'].filas[0], COLS_OC_CP);
+chequear('Orden_Carga recibio Titular_CP_CUIT', HOJAS['Orden_Carga'].filas[0], COLS_OC);
+const releida = leerOrdenesCarga()._json.find(x => x.Id_OC === 'OC-1');
+chequear('lo nuevo se lee bien tras completar encabezados', [releida.Camiones[0].especie, releida.Camiones[0].flete_pagador_cuit, releida.Camiones[0].CartasPorte[0].productor_cuit],
+  ['Poroto Mung', '30-33333333-3', '30-11111111-1']);
+chequear('y el CUIT del titular tambien', releida.Titular_CP_CUIT, '30708622717');
 
 console.log('\n' + (fallos === 0 ? '>>> TODO OK' : '>>> ' + fallos + ' FALLA(S)'));
 process.exit(fallos === 0 ? 0 : 1);

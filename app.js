@@ -131,7 +131,9 @@ const ENUMS_DEFAULT = {
     envase: ["Bolsas", "Big Bag", "Granel", "Silo Bolsa"],
     elaboro: ["Lucas Ramis", "Jonathan Rui", "Alejo Chamorro"],
     cliente: ["CAP. CORTES"],
-    muestreo: ["Planta", "Camión", "Big Bag", "Silo Bolsa", "Puerto"],
+    muestreo: ["Campo", "Planta", "Camión", "Big Bag", "Silo Bolsa", "Puerto"],
+    // Plantas de proceso (Control de Calidad → Flujo de Masa)
+    plantaCalidad: ["Viel", "4Pulse", "Tecnocampo", "Prosibi"],
     tipoGrano: ["Kabuli", "Desi"],
     destino: ["CAP. CORTES"],
     responsables: ["Soporte", "Operaciones", "Administración"],
@@ -160,6 +162,30 @@ function cargarEnums() {
 }
 
 let ENUMS = cargarEnums();
+
+// Opciones agregadas DESPUÉS de que los operarios ya tenían su lista guardada
+// en el celular: cargarEnums() respeta la lista guardada, así que sin esto no
+// les aparecerían nunca. Cada una se agrega UNA sola vez (si después alguien la
+// quita a mano, no vuelve).
+(function agregarOpcionesNuevasEnums() {
+    const NUEVAS = [
+        { id: "muestreo-campo-2026-10", enumKey: "muestreo", valor: "Campo" }
+    ];
+    try {
+        const hechas = JSON.parse(localStorage.getItem("braun_enums_migraciones") || "[]");
+        let cambio = false;
+        NUEVAS.forEach(n => {
+            if (hechas.includes(n.id)) return;
+            if (!ENUMS[n.enumKey].includes(n.valor)) ENUMS[n.enumKey].unshift(n.valor);
+            hechas.push(n.id);
+            cambio = true;
+        });
+        if (cambio) {
+            localStorage.setItem("braun_enums_migraciones", JSON.stringify(hechas));
+            localStorage.setItem(ENUM_STORAGE_KEY, JSON.stringify(ENUMS));
+        }
+    } catch (e) { /* sin localStorage: quedan las listas por defecto */ }
+})();
 
 function guardarEnums() {
     localStorage.setItem(ENUM_STORAGE_KEY, JSON.stringify(ENUMS));
@@ -330,8 +356,12 @@ function cambiarVista(idDestino) {
             document.getElementById('header-title').textContent = "Control de Calidad";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
+        } else if (idDestino === 'view-submenu-calidad-grano') {
+            document.getElementById('header-title').textContent = "Control de Calidad";
+            btnBack.classList.remove('hidden');
+            if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-modulo-calidad') {
-            document.getElementById('header-title').textContent = `Calidad ${(typeof nombreGranoActual === 'function') ? nombreGranoActual() : ''}`.trim();
+            document.getElementById('header-title').textContent = (typeof tituloModuloCalidad === 'function') ? tituloModuloCalidad() : "Control de Calidad";
             btnBack.classList.remove('hidden');
             if(vistaHistorialNavegacion.slice(-1)[0] !== idDestino) vistaHistorialNavegacion.push(idDestino);
         } else if (idDestino === 'view-contratos') {

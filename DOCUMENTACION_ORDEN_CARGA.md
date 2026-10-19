@@ -417,6 +417,62 @@ que simula el DOM y verifica las tres cosas que importan: que las listas se
 armen bien y sin repetidos, que al elegir se complete lo que corresponde, y que
 lo escrito a mano se respete.
 
+### Revisión con Lucas — sexto incremento (16/10/2026)
+
+Cambios pedidos después de revisar el formulario y el PDF con Lucas (las
+respuestas a las preguntas están en `PREGUNTAS_PENDIENTES_LUCAS.md`). Esto
+**reemplaza** lo que dicen las secciones 2 a 4 sobre la cabecera:
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| N° de orden y fecha | Se proponían y se podían editar | **Automáticos y bloqueados**. Solo la primera orden de todas deja escribir el número inicial |
+| Contrato que encabeza la OC | Campo de cabecera | **Se sacó**: no va (el `CN26-063` del Excel es comercial) |
+| Objetivo de kg | Campo de cabecera + "faltan X kg" | **Se sacó**: se carga por bolsas y los kilos reales los da la balanza |
+| Grano / Especie y Campaña | Cabecera | **Por camión**: una orden puede llevar mercadería distinta (un camión, un grano) |
+| Remitente comercial productor | Cabecera, sin CUIT | **Por carta de porte, con CUIT** (obligatorio). Ocupa el campo que antes decía "Productor" |
+| Remitente venta primaria | Cabecera | **Se sacó** |
+| Flete | Sección de cabecera | **Por camión**: pagador del flete + CUIT, km y tarifa siempre (opcionales). "¿Hay intermediario de flete? Sí/No": con Sí, intermediario + CUIT obligatorios |
+| Titular de la carta de porte | Solo razón social | **Razón social + CUIT** (se completa al elegirlo) |
+| N° de carta de porte | Se pedía en cada CP | **Se sacó**: lo carga planta. Queda oculto para no perder el de órdenes viejas |
+| Columna "Contrato" del historial | Contrato que encabeza | **Grano** (los de todos los camiones) |
+
+**Órdenes viejas.** Las que tienen grano, campaña o flete en la cabecera se
+adaptan al abrirlas o imprimirlas (`ocAdaptarOrdenVieja()`): esos datos pasan a
+cada camión que no los tenga. Al volver a guardarlas quedan en el formato nuevo.
+El Sheet no se toca: las columnas viejas de `Orden_Carga` siguen ahí, vacías en
+las órdenes nuevas.
+
+**Número repetido.** Si mientras se armaba una orden nueva otra persona guardó
+una con el mismo número, al guardar la nueva toma el siguiente libre y se avisa.
+Las Observaciones CP (`OC 2058 (10 BLS)`) se rearman con el número final.
+
+**Sheet.** `OC_Camion` suma al final `Especie`, `Cosecha`, `Flete`,
+`Flete_Intermediario`, `Flete_Intermediario_CUIT`, `Flete_Pagador` y
+`Flete_Pagador_CUIT`; `OC_CartaPorte` suma `Productor_CUIT`. **No hay que
+crearlas a mano**: `obtenerHojaOC()` agrega los encabezados que falten la primera
+vez que se guarda una orden. Hay que **publicar una nueva versión** del Apps
+Script.
+
+**Contraste con una CPE real** (`Carta Porte.pdf`, CTG 10235496949): el flete
+se ajustó después de verla. En esa CP hay pagador del flete, km y tarifa **sin**
+intermediario, así que esos tres quedaron siempre a la vista y el Sí/No solo
+decide si hay intermediario (en los datos el campo sigue llamándose `flete`). La
+CP también trae el CUIT del titular, que se sumó (`Titular_CP_CUIT`, al final de
+`Orden_Carga`). Quedaron afuera a propósito, porque no se pidieron: la
+procedencia (sección C: planta de origen, dirección, localidad) y la fecha y
+hora de partida.
+
+**PDF.** Sin contrato ni objetivo en la cabecera (queda "Grano:" con el resumen
+de los camiones). Cada camión muestra grano y campaña, y el flete solo si lo
+hay. En cada CP, el remitente con su CUIT va solo en el primer renglón y se
+corta con "…" si no entra; CTTO, CTG y observaciones van en el segundo. Se
+corrigió además que los títulos "CARTA DE PORTE" e "INDICACIONES" se montaban
+sobre la tabla de arriba.
+
+**Pruebas.** Los tres `test_orden_carga*.js` se actualizaron: el del backend
+simula una hoja vieja sin las columnas nuevas, y el del PDF audita también una
+orden con razones sociales largas.
+
 ## 9. Lo que sigue
 
 1. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que

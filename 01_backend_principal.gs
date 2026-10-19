@@ -806,6 +806,29 @@ function respuestaJsonCalidad(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// Columnas que la app empezó a mandar DESPUÉS de que las hojas de calidad ya
+// existían (vienen de AppSheet). Si a una hoja le falta alguna, se agrega sola
+// al final antes de guardar: como se escribe por nombre de encabezado, sin la
+// columna el dato se perdía sin avisar.
+//   - Tipo de Control, Campo / Establecimiento, Rinde/ha, Planta: 16/10/2026
+//     (Control de Cosecha / Flujo de Masa, ver DISEÑO_CALIDAD_COSECHA_FM.md)
+//   - Peso Muestra (g): carga en gramos;  usuario_registro: auditoría
+var COLUMNAS_AGREGADAS_CALIDAD = [
+  "Tipo de Control", "Campo / Establecimiento", "Rinde/ha", "Planta",
+  "Peso Muestra (g)", "usuario_registro"
+];
+
+function asegurarColumnasCalidad(hoja) {
+  var ultima = hoja.getLastColumn();
+  var actuales = ultima > 0
+    ? hoja.getRange(1, 1, 1, ultima).getDisplayValues()[0].map(function (h) { return String(h).trim(); })
+    : [];
+  var faltan = COLUMNAS_AGREGADAS_CALIDAD.filter(function (c) { return actuales.indexOf(c) === -1; });
+  if (faltan.length) {
+    hoja.getRange(1, ultima + 1, 1, faltan.length).setValues([faltan]);
+  }
+}
+
 // Devuelve la hoja de un grano (prueba los nombres candidatos en orden).
 function obtenerHojaCalidad(grano) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -964,6 +987,7 @@ function guardarCalidad(body) {
     return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
   }
 
+  asegurarColumnasCalidad(hoja);
   var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]
     .map(function (h) { return String(h).trim(); });
 
@@ -998,6 +1022,7 @@ function actualizarCalidad(body) {
   var hoja = ubicacion.hoja;
   var filaIdx = ubicacion.fila;
 
+  asegurarColumnasCalidad(hoja);
   var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]
     .map(function (h) { return String(h).trim(); });
 

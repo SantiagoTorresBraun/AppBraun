@@ -187,11 +187,18 @@ const REPORTES_CORREO = {
             const lotes = [item['N° Lote'], item['N° Lote BRC'], item['N° Lote Cliente/Planta']].filter(Boolean).join(' / ');
             return [
                 ['Fecha de análisis', item['Fecha Analisis']],
+                ['Tipo de control', (typeof tipoControlDe === 'function' && typeof TIPOS_CONTROL_CALIDAD !== 'undefined') ? TIPOS_CONTROL_CALIDAD[tipoControlDe(item)].nombre : item['Tipo de Control']],
                 ['Grano', grano],
                 ['Cliente', item['Cliente']],
+                ['Campo / Establecimiento', item['Campo / Establecimiento']],
+                ['Planta', item['Planta']],
+                ['N° Proceso', item['N° Proceso']],
                 ['Variedad', item['Variedad']],
                 ['Lote', lotes],
+                ['Contrato de producción', item['Contrato Produccion']],
+                ['Contrato de flujo de masa', item['Contrato FM']],
                 ['Contrato comercial', item['Contrato Comercial']],
+                ['Rinde', item['Rinde/ha'] ? (typeof formatNumeroAR === 'function' ? formatNumeroAR(item['Rinde/ha'], 2) : item['Rinde/ha']) + ' kg/ha' : ''],
                 ['Muestreo en', item['Muestreo en']],
                 ['Kg', item['Kg'] ? (typeof fmtKg === 'function' ? fmtKg(item['Kg']) : item['Kg']) + ' kg' : ''],
                 ['Muestra analizada', item['Peso Muestra (g)'] ? (typeof formatNumeroAR === 'function' ? formatNumeroAR(item['Peso Muestra (g)'], 2) : item['Peso Muestra (g)']) + ' g' : ''],
