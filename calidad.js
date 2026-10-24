@@ -1563,16 +1563,13 @@ async function generarPDFCalidad(base64Data, modo) {
         doc.text("Condición del Lote:", xIzq + wIzq / 2, yTablas + 4.8, { align: 'center' });
 
         const filaKg = ["Kg:", num(item["Kg"]) ? num(item["Kg"]).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'];
-        // Deja asentado sobre cuántos gramos se porcentuó el análisis
-        const filaMuestra = ["Muestra analizada:", num(item["Peso Muestra (g)"]) ? formatNumeroAR(num(item["Peso Muestra (g)"]), 2) + ' g' : '-'];
         const filasLote = esCosecha ? [
             ["Contrato Prod.:", item["Contrato Produccion"] || '-'],
             ["N° Lote Cliente:", item["N° Lote Cliente/Planta"] || '-'],
             ["Calibre:", item["Calibre"] || '-'],
             ["Fecha AC:", fechaVisible],
             filaKg,
-            ["Rinde:", num(item["Rinde/ha"]) ? formatNumeroAR(num(item["Rinde/ha"]), 2) + ' kg/ha' : '-'],
-            filaMuestra
+            ["Rinde:", num(item["Rinde/ha"]) ? formatNumeroAR(num(item["Rinde/ha"]), 2) + ' kg/ha' : '-']
         ] : [
             // Los controles viejos no tienen Contrato FM ni Planta: esas filas
             // solo aparecen si hay dato, así el reporte de siempre queda igual.
@@ -1583,8 +1580,7 @@ async function generarPDFCalidad(base64Data, modo) {
             ["Calibre:", item["Calibre"] || '-'],
             ["Fecha AC:", fechaVisible],
             ["Envase:", item["Envase"] || '-'],
-            filaKg,
-            filaMuestra
+            filaKg
         ];
         let yIzq = yTablas + 13;
         doc.setTextColor(45, 45, 45);
