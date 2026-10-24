@@ -285,6 +285,11 @@ function leerSumaInputs(selector) {
 // inputs analíticos están en gramos y se convierten a porcentaje contra el peso
 // de muestra analizada, que es lo que se guarda y lo que ve el cliente en el PDF.
 // Materia Extraña es peso que sale de esa misma muestra, así que suma al total.
+// Compara a 2 decimales (lo que se ve en pantalla): 100,25 % no cierra.
+function muestraDescuadrada(pct) {
+    return Math.round(pct * 100) !== 10000;
+}
+
 function recalcularTotalesCalidad() {
     const pesoMuestra = parseNumeroAR(document.getElementById('cal-peso-muestra').value);
     const buenosG  = leerSumaInputs('.input-calibre-cal');   // 10mm + 9mm + 8mm + 7mm + Bajo zaranda
@@ -307,7 +312,7 @@ function recalcularTotalesCalidad() {
     const elPct = document.getElementById('total-muestra-pct');
     elPct.textContent = formatNumeroAR(totalMuestraPct, 2) + " %";
     // Alerta visual si la muestra no cierra en 100% (faltó pesar algo o se cargó de más)
-    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', Math.abs(totalMuestraPct - 100) > 0.5 && totalMuestraG > 0);
+    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', muestraDescuadrada(totalMuestraPct) && totalMuestraG > 0);
 
     return {
         pesoMuestra, buenosG, daniosG, materiaExtranaG, totalMuestraG,
@@ -464,9 +469,10 @@ document.getElementById('form-calidad').addEventListener('submit', function(e) {
         document.getElementById('cal-peso-muestra').focus();
         return;
     }
-    if (totales.totalMuestraG > 0 && Math.abs(totales.totalMuestraPct - 100) > 0.5) {
-        const seguir = confirm(`Atención: cargaste ${formatNumeroAR(totales.totalMuestraG, 2)} g (calibres + defectos + materia extraña) sobre una muestra de ${formatNumeroAR(totales.pesoMuestra, 2)} g, o sea ${formatNumeroAR(totales.totalMuestraPct, 2)}%.\n\nLa muestra no cierra en 100%. ¿Querés guardar igual?`);
-        if (!seguir) return;
+    // La muestra tiene que cerrar justo en 100%: si no, no se deja guardar
+    if (muestraDescuadrada(totales.totalMuestraPct)) {
+        alert(`No se puede guardar: cargaste ${formatNumeroAR(totales.totalMuestraG, 2)} g (calibres + defectos + materia extraña) sobre una muestra de ${formatNumeroAR(totales.pesoMuestra, 2)} g, o sea ${formatNumeroAR(totales.totalMuestraPct, 2)} %.\n\nLa muestra tiene que cerrar en 100 %. Revisá los gramos cargados.`);
+        return;
     }
 
     const esEdicion = !!idCalidadEnEdicion;
@@ -1096,7 +1102,7 @@ function abrirDetalleCalidad(dataString) {
             fila('Humedad', pdfFormatearPct(num(item["Humedad"]))) +
             fila('Materia Extraña', pdfFormatearPct(num(item["Materia Extraña"]))) +
             fila('Insectos Vivos o Muertos', item["Insectos Vivos o Muertos"] === 'SI' ? '✕ Sí' : '✓ No') +
-            fila('Olor (ajeno al origen)', item["Olor"] === 'SI' ? '✕ Sí' : '✓ No');
+            fila('Olor', item["Olor"] === 'SI' ? '✕ Sí' : '✓ No');
 
         texto('det-cal-observaciones', item["observaciones"]);
 
@@ -1531,10 +1537,10 @@ async function generarPDFCalidad(base64Data, modo) {
         doc.text("Reporte de Calidad", margen + 7, 21.5);
         // Logo pegado al lado derecho de la barra, con su proporción real y
         // centrado verticalmente dentro de los 18 mm de alto del header.
-        pdfImagenProporcional(doc, LOGO_BRAUN_BLANCO, margen + anchoUtil - 46, 10, 38, 13, 'derecha');
+        pdfImagenProporcional(doc, LOGO_BRAUN_BLANCO, margen + anchoUtil - 46, 12.5, 38, 13, 'derecha');
 
-        // Cliente / N° Proceso
-        let y = 42;
+        // Fecha AC / Cliente / N° Proceso
+        let y = 38;
         const lineaDato = (etiqueta, valor) => {
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
@@ -1548,6 +1554,7 @@ async function generarPDFCalidad(base64Data, modo) {
         // El título no cambia ("Reporte de Calidad"); lo que cambia según el
         // tipo de control son los datos de identificación del lote.
         const esCosecha = tipoControlDe(item) === "COSECHA";
+        lineaDato("Fecha AC:", fechaVisible);
         lineaDato("Cliente:", item["Cliente"]);
         if (esCosecha) lineaDato("Campo:", item["Campo / Establecimiento"]);
         else lineaDato("N° Proceso:", item["N° Proceso"]);
@@ -1567,7 +1574,6 @@ async function generarPDFCalidad(base64Data, modo) {
             ["Contrato Prod.:", item["Contrato Produccion"] || '-'],
             ["N° Lote Cliente:", item["N° Lote Cliente/Planta"] || '-'],
             ["Calibre:", item["Calibre"] || '-'],
-            ["Fecha AC:", fechaVisible],
             filaKg,
             ["Rinde:", num(item["Rinde/ha"]) ? formatNumeroAR(num(item["Rinde/ha"]), 2) + ' kg/ha' : '-']
         ] : [
@@ -1578,7 +1584,6 @@ async function generarPDFCalidad(base64Data, modo) {
             ["N° Lote:", item["N° Lote"] || (((item["Tipo"] || '') + (item["N° Lote BRC"] || '')) || '-')],
             ["ID Planta:", item["N° Lote Cliente/Planta"] || '-'],
             ["Calibre:", item["Calibre"] || '-'],
-            ["Fecha AC:", fechaVisible],
             ["Envase:", item["Envase"] || '-'],
             filaKg
         ];

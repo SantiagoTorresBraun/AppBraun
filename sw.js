@@ -28,6 +28,8 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v21: Reporte de Calidad (calidad.js e index.html): sin "Muestra analizada",
+// Fecha AC arriba, logo centrado, Olor y muestra obligada a cerrar en 100%.
 // v15: sugerencias en la Orden de Carga (index.html y orden-carga.js).
 // v14: el PDF de la Orden de Carga (orden-carga.js cambio).
 // v13: la Orden de Carga se guarda en el Sheet (app.js, cola-sync.js y
@@ -38,7 +40,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v20';
+const VERSION = 'v21';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
