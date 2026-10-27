@@ -67,6 +67,8 @@ if (ini === -1) throw new Error('No encontré enviarAlBackend en app.js');
 const codigoEnviar = appJs.slice(ini, fin);
 
 const confirmadosCalidad = [];
+const cargasConfirmadas = [];
+let repintadasTabla = 0;
 const ctx = {
   console: { log() {}, warn() {}, error() {} },
   setTimeout, setInterval: () => 1, Promise, JSON, Object, Date, Math, Set, String, Array, Error, TypeError,
@@ -75,6 +77,8 @@ const ctx = {
   fetch: fetchFalso,
   WEB_APP_URL: 'https://script.google.com/macros/s/FALSO/exec',
   calidadConfirmadaPorServidor: item => confirmadosCalidad.push(item),
+  cargaConfirmadaPorServidor: item => cargasConfirmadas.push(item),
+  filtrarYRenderizarTabla: () => { repintadasTabla++; },
   filtrarYRenderizarCalidad: () => {},
   renderOfflineCount: () => {},
   window: {}
@@ -119,6 +123,65 @@ function cargarCalidad() {
     '\nObject.defineProperty(this, "historialCalidad", { get: () => historialCalidad, set: v => { historialCalidad = v; } });' +
     '\nthis.recientes = calidadConfirmadasRecientes;', c);
   c.leer = datos => { respuesta = datos; c.cargarHistorialCalidadDesdeGoogle(); return new Promise(r => setTimeout(r, 5)); };
+  return c;
+}
+
+function cargarFuncionesCarga() {
+  let respuesta = [];
+  const c = {
+    console: ctx.console, setTimeout, Set, Map, Object, Array, String, JSON, Promise,
+    navigator: { onLine: true }, WEB_APP_URL: 'https://x/exec',
+    fetch: () => Promise.resolve({ json: () => Promise.resolve(respuesta) }),
+    guardarHistorialLocal: (k, lista) => { c.copiaGuardada = lista.slice(); },
+    avisoHistorialGuardado() {}, filtrarYRenderizarTabla() {}, restaurarHistorialGuardado() {},
+    colaConfirmarPorServidor: () => Promise.resolve(0)
+  };
+  vm.createContext(c);
+  vm.runInContext('let historialGeneral = []; const cargasConfirmadasRecientes = new Map();\n' +
+    ['cargarHistorialDesdeGoogle', 'cargaConfirmadaPorServidor'].map(n => extraerFuncion(appJs, n)).join('\n') +
+    '\nObject.defineProperty(this, "historialGeneral", { get: () => historialGeneral });' +
+    '\nthis.recientes = cargasConfirmadasRecientes;', c);
+  c.leer = datos => { respuesta = datos; c.cargarHistorialDesdeGoogle(); return new Promise(r => setTimeout(r, 5)); };
+  return c;
+}
+
+// guardarCalidad REAL de 01_backend_principal.gs con Sheet, Drive y Lock falsos.
+function cargarBackendCalidad() {
+  const gs = fs.readFileSync(path.join(RAIZ, '01_backend_principal.gs'), 'utf8');
+  const hoja = {
+    filas: [['Id_Calidad', 'Grano', 'imagen 1']],
+    appendRow(f) { this.filas.push(f.slice()); },
+    getLastRow() { return this.filas.length; },
+    getLastColumn() { return this.filas[0].length; },
+    getRange(fila, col, nFilas, nCols) {
+      const h = this;
+      return { getDisplayValues: () => h.filas.slice(fila - 1, fila - 1 + nFilas).map(r => r.slice(col - 1, col - 1 + nCols).map(String)) };
+    }
+  };
+  const c = {
+    hoja, fotosSubidas: 0, flushes: 0, carrera: false, fallaFoto: false,
+    lock: { tomado: 0, liberado: 0 },
+    COLUMNAS_IMAGEN_CALIDAD: ['imagen 1'], COLUMNAS_PORCENTAJE_CALIDAD: [],
+    String, Object, Array, JSON
+  };
+  c.obtenerHojaCalidad = () => hoja;
+  c.asegurarColumnasCalidad = () => {};
+  c.aplicarFormatoPorcentajeCalidad = () => {};
+  c.respuestaJsonCalidad = obj => ({ contenido: JSON.stringify(obj) });
+  c.LockService = { getScriptLock: () => ({ tryLock: () => { c.lock.tomado++; return true; }, releaseLock: () => { c.lock.liberado++; } }) };
+  c.SpreadsheetApp = { flush: () => { c.flushes++; } };
+  c.guardarFotoCalidadEnDrive = (id, col) => {
+    if (c.fallaFoto) throw new Error('Drive rechazó la foto');
+    c.fotosSubidas++;
+    if (c.carrera) {            // el pedido B entra y termina mientras A sube su foto
+      c.carrera = false;
+      c.guardarCalidad({ Id_Calidad: id, Grano: 'GARBANZO', [col]: 'data:image/jpeg;base64,BBBB' });
+    }
+    return 'Control de Calidad_Images/' + id + '.jpg';
+  };
+  vm.createContext(c);
+  vm.runInContext(extraerFuncion(gs, 'buscarFilaPorIdCalidad') + '\n' + extraerFuncion(gs, 'guardarCalidad') +
+    '\nthis.guardarCalidad = guardarCalidad;', c);
   return c;
 }
 
@@ -236,6 +299,45 @@ const cola = () => ctx.colaPorStore(CAL);
   ok(veces.length === 1 && veces[0].desdeServidor, 'cuando el servidor lo trae, queda una sola vez y es la del servidor');
   ok(cal.recientes.size === 0, 'se olvida de la copia local');
   ok(cal.idsConfirmados && cal.idsConfirmados.has('CC-20'), 'le pasa los ids del servidor a la cola');
+
+  console.log('\n13. Carga: edición de una carga ya subida');
+  d = preparar([{ id: 1, Id_Carga: 'BC-9', _accion: 'actualizar' }, { id: 2, Id_Carga: 'BC-10' }], 'controles_carga'); modo = 'ok';
+  cargasConfirmadas.length = 0; repintadasTabla = 0;
+  await ctx.sincronizarCola(ctx.colaPorStore('controles_carga'));
+  const accCarga = enviados.map(e => e.cuerpo.Id_Carga + ':' + (e.accion || 'guardar')).sort();
+  ok(JSON.stringify(accCarga) === '["BC-10:guardar","BC-9:actualizar"]', 'la edición viaja como actualizar, el alta como guardar');
+  ok(cargasConfirmadas.length === 2, 'las dos pasan a la lista del servidor');
+  ok(repintadasTabla === 1, 'se repinta la tabla (sin bajar el historial entero)');
+  d = preparar([{ id: 1, Id_Carga: 'BC-9', _accion: 'actualizar', _sinConfirmar: true }], 'controles_carga');
+  await ctx.colaConfirmarPorServidor('controles_carga', 'Id_Carga', new Set(['BC-9']));
+  ok(!!d.stores.controles_carga[1], 'una edición sin confirmar NO se borra porque el id exista en el servidor');
+
+  console.log('\n14. Carga: la confirmada no desaparece de la lista');
+  const car = cargarFuncionesCarga();
+  car.cargaConfirmadaPorServidor({ id: 5, Id_Carga: 'BC-20', _accion: 'actualizar', _sinConfirmar: true });
+  ok(car.historialGeneral.length === 1 && !('_accion' in car.historialGeneral[0]) && !('id' in car.historialGeneral[0]), 'entra a historialGeneral sin campos internos');
+  await car.leer([{ Id_Carga: 'BC-viejo' }]);
+  ok(car.historialGeneral.some(r => r.Id_Carga === 'BC-20') && car.historialGeneral.length === 2, 'una lectura sin la carga no la hace desaparecer');
+  await car.leer([{ Id_Carga: 'BC-20', desdeServidor: true }]);
+  ok(car.historialGeneral.length === 1 && car.historialGeneral[0].desdeServidor && car.recientes.size === 0, 'cuando el servidor la trae, queda la del servidor');
+  ok(car.copiaGuardada && car.copiaGuardada.length === 1, 'la copia offline se guarda con la lista combinada');
+
+  console.log('\n15. Backend guardarCalidad: dos POST del mismo control a la vez');
+  const be = cargarBackendCalidad();
+  be.carrera = true;   // mientras A sube fotos, B entra completo
+  const resA = JSON.parse(be.guardarCalidad({ Id_Calidad: 'CC-77', Grano: 'GARBANZO', 'imagen 1': 'data:image/jpeg;base64,AAAA' }).contenido);
+  ok(be.hoja.filas.length === 2, 'queda UNA sola fila (' + (be.hoja.filas.length - 1) + ')');
+  ok(resA.ok === true && resA.nota === 'ya existía', 'el que perdió la carrera contesta ok / ya existía');
+  ok(be.lock.tomado === 2 && be.lock.liberado === 2, 'el lock se toma y se libera en los dos pedidos');
+  ok(be.flushes === 1, 'flush después de escribir');
+  const fotosAntes = be.fotosSubidas;
+  const resC = JSON.parse(be.guardarCalidad({ Id_Calidad: 'CC-77', Grano: 'GARBANZO', 'imagen 1': 'data:image/jpeg;base64,AAAA' }).contenido);
+  ok(resC.nota === 'ya existía' && be.fotosSubidas === fotosAntes, 'un reintento posterior no vuelve a subir fotos');
+  be.fallaFoto = true;
+  let tiro = false;
+  try { be.guardarCalidad({ Id_Calidad: 'CC-78', Grano: 'GARBANZO', 'imagen 1': 'data:image/jpeg;base64,AAAA' }); } catch (e) { tiro = true; }
+  ok(tiro && be.hoja.filas.length === 2, 'si Drive falla no se escribe la fila y el error sube (la app conserva el control)');
+  ok(be.lock.tomado === 2, 'y no llega a tomar el lock (las fotos van antes)');
 
   console.log('\n' + pasadas + ' pasaron, ' + fallas + ' fallaron\n');
   process.exit(fallas ? 1 : 0);

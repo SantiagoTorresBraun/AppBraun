@@ -2395,6 +2395,10 @@ function actualizarRegistroExistente(registro) {
             if (cursor.value.Id_Carga === registro.Id_Carga) {
                 encontradoEnColaLocal = true;
                 const registroActualizado = Object.assign({}, registro, { id: cursor.value.id });
+                // Si lo que estaba en cola era una edición, sigue siéndolo: sin
+                // el _accion viajaría como alta, el backend diría "ya existe" y
+                // la edición no llegaría.
+                if (cursor.value._accion) registroActualizado._accion = cursor.value._accion;
                 cursor.update(registroActualizado);
             }
             cursor.continue();
@@ -2406,26 +2410,50 @@ function actualizarRegistroExistente(registro) {
                 if (navigator.onLine) { sincronizarDatosPendientes(); }
             } else {
                 // No estaba en la cola: ya se había sincronizado antes con Google Sheets.
-                // Actualizamos la vista local y avisamos al backend (requiere soporte de tu lado en Apps Script).
+                // ANTES se mandaba directo al backend y, sin señal o con la red
+                // cortada a mitad, la edición se perdía aunque la app dijera
+                // "guardados". Ahora entra a la cola con _accion "actualizar"
+                // (que borra y reinserta, así que reenviarla es seguro) y queda
+                // en el celular hasta que el servidor la confirma.
                 const idx = historialGeneral.findIndex(r => r.Id_Carga === registro.Id_Carga);
                 if (idx !== -1) historialGeneral[idx] = registro;
-
-                if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-                    enviarAlBackend(Object.assign({ _accion: "actualizar" }, registro))
-                        .catch(err => {
-                            console.error("No se pudo sincronizar la edición con el servidor:", err);
-                            if (err && err.rechazadoPorBackend) {
-                                alert("⚠️ Los cambios NO se guardaron en el servidor.\n\n" +
-                                      "Motivo: " + err.message + "\n\n" +
-                                      "Volvé a entrar al registro y guardá de nuevo.");
-                            }
-                        });
-                }
-
-                finalizarGuardadoUI("¡Cambios guardados! Si el registro ya estaba sincronizado con Sheets, confirmá que tu Google Apps Script soporte la acción \"actualizar\" por Id_Carga.", true);
+                encolarEdicionCarga(registro);
             }
         }
     };
+}
+
+function encolarEdicionCarga(registro) {
+    const tx = db.transaction(["controles_carga"], "readwrite");
+    const req = tx.objectStore("controles_carga").add(Object.assign({}, registro, { _accion: "actualizar" }));
+    req.onsuccess = function() {
+        finalizarGuardadoUI("¡Cambios guardados en este celular! Se envían solos al servidor; mientras no lleguen, el control figura como \"Pendiente\".", true);
+        renderOfflineCount();
+        if (navigator.onLine) { sincronizarDatosPendientes(); }
+    };
+    req.onerror = function(e) {
+        console.error("Error al encolar la edición de la carga:", e.target.error);
+        alert("⚠️ No se pudieron guardar los cambios en este dispositivo. Motivo: " +
+              (e.target.error ? e.target.error.message : "desconocido") + "\n\nNo salgas del formulario: volvé a tocar Guardar.");
+    };
+}
+
+// Cargas que el servidor confirmó en esta sesión, por Id_Carga: no tienen que
+// desaparecer de la lista si una lectura del Sheet llega sin ellas.
+const cargasConfirmadasRecientes = new Map();
+
+// La cola avisa que el servidor confirmó esta carga (alta o edición). Pasa a
+// la lista de lo que ya está en el servidor: si no, al salir de la cola local
+// desaparecía del historial hasta la próxima lectura.
+function cargaConfirmadaPorServidor(item) {
+    const limpio = Object.assign({}, item);
+    ['id', '_accion', '_pendienteSync', '_intentos', '_ultimoError', '_ultimoIntento', '_proximoIntento',
+     '_fallido', '_errorDeDatos', '_sinConfirmar', '_enviosSinConfirmar'].forEach(c => delete limpio[c]);
+    if (!limpio.Id_Carga) return;
+    cargasConfirmadasRecientes.set(limpio.Id_Carga, limpio);
+    const idx = historialGeneral.findIndex(r => r.Id_Carga === limpio.Id_Carga);
+    if (idx !== -1) historialGeneral[idx] = limpio;
+    else historialGeneral.unshift(limpio);
 }
 
 function finalizarGuardadoUI(mensaje, volverAlHistorial) {
@@ -2460,14 +2488,24 @@ function cargarHistorialDesdeGoogle() {
     .then(data => {
         if(Array.isArray(data)) {
             historialGeneral = data;
+            const idsServidor = new Set(data.map(r => r && r.Id_Carga).filter(Boolean));
+            // Lo recién confirmado que todavía no vino en esta lectura se mantiene.
+            cargasConfirmadasRecientes.forEach((item, id) => {
+                if (idsServidor.has(id)) cargasConfirmadasRecientes.delete(id);
+                else historialGeneral.unshift(item);
+            });
             // Las cargas que quedaron "sin confirmar" en la cola y SÍ vinieron
             // del servidor llegaron bien: recién ahora salen del celular.
             if (typeof colaConfirmarPorServidor === "function") {
-                colaConfirmarPorServidor("controles_carga", "Id_Carga", new Set(data.map(r => r && r.Id_Carga).filter(Boolean)))
-                    .then(borrados => { if (borrados && typeof renderOfflineCount === "function") renderOfflineCount(); });
+                colaConfirmarPorServidor("controles_carga", "Id_Carga", idsServidor)
+                    .then(borrados => {
+                        if (!borrados) return;
+                        if (typeof renderOfflineCount === "function") renderOfflineCount();
+                        filtrarYRenderizarTabla();
+                    });
             }
             // Copia para poder verlo sin señal (sin fotos ni firmas).
-            guardarHistorialLocal("cargas", data);
+            guardarHistorialLocal("cargas", historialGeneral);
             avisoHistorialGuardado("tabla-historial-body", null);
             avisoHistorialGuardado("tabla-contratos-body", null);
             filtrarYRenderizarTabla();
@@ -2858,6 +2896,7 @@ function eliminarRegistro(base64Data) {
 
         // 2) Lo sacamos de la vista/tabla en memoria (viene de Google Sheets)
         historialGeneral = historialGeneral.filter(r => r.Id_Carga !== item.Id_Carga);
+        cargasConfirmadasRecientes.delete(item.Id_Carga);
         filtrarYRenderizarTabla();
         renderOfflineCount();
 

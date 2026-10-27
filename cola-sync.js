@@ -101,7 +101,20 @@ const COLAS = [
         quitarId: false,           // la carga siempre viajó con su id local
         idVisible: item => item.Id_Carga || '(sin id)',
         fecha: item => item.Fecha || '',
-        despues: function () { if (typeof renderOfflineCount === 'function') renderOfflineCount(); }
+        // Igual que Calidad: lo confirmado no tiene que desaparecer de la lista.
+        // Las ediciones viajan con su propio _accion ("actualizar"): como esta
+        // cola no fija acción, salen tal cual.
+        alConfirmar: function (item) {
+            if (typeof cargaConfirmadaPorServidor === 'function') cargaConfirmadaPorServidor(item);
+        },
+        despues: function (confirmados) {
+            if (typeof renderOfflineCount === 'function') renderOfflineCount();
+            // Se repinta y NO se relee el Sheet: el historial de cargas pesa
+            // ~900 KB (medido el 27/10/2026) y bajarlo por cada carga que sube
+            // es mucho para datos móviles en campo. alConfirmar ya la dejó en
+            // la lista.
+            if (confirmados > 0 && typeof filtrarYRenderizarTabla === 'function') filtrarYRenderizarTabla();
+        }
     },
     {
         store: 'controles_calidad',

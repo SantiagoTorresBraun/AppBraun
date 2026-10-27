@@ -28,6 +28,9 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v23: Control de Transporte: la edición de una carga ya subida entra a la
+// cola (antes se perdía sin señal) y la confirmada no desaparece de la lista
+// (app.js y cola-sync.js cambiaron).
 // v22: la cola ya no borra del celular lo que el servidor no confirmó, las
 // ediciones de Calidad sin señal entran a la cola y el control no desaparece
 // de la lista al subir (app.js, cola-sync.js y calidad.js cambiaron).
@@ -43,7 +46,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v22';
+const VERSION = 'v23';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

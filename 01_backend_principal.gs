@@ -983,6 +983,12 @@ function guardarCalidad(body) {
   // IDEMPOTENCIA: la app puede reintentar el mismo POST (cola offline que se
   // sincroniza dos veces, red inestable, doble toque en Guardar). Sin este
   // chequeo cada reintento agregaba otra fila con el mismo Id_Calidad.
+  //
+  // Este primer chequeo va SIN lock y cubre el reintento (lo común): evita
+  // volver a subir las 4 fotos a Drive si el control ya estaba. El de adentro
+  // del lock, más abajo, cubre la carrera real: dos POST del mismo control a la
+  // vez (con señal mala el celular corta, reenvía, y el primero sigue vivo en
+  // el servidor). Es el mismo esquema que guardarRegistroCompleto de Cargas.
   if (body["Id_Calidad"] && buscarFilaPorIdCalidad(hoja, body["Id_Calidad"]) !== -1) {
     return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
   }
@@ -1010,8 +1016,27 @@ function guardarCalidad(body) {
     return valor;
   });
 
-  hoja.appendRow(fila);
-  aplicarFormatoPorcentajeCalidad(hoja, hoja.getLastRow(), encabezados, null);
+  // Las fotos ya se subieron (arriba, fuera del lock a propósito: tardan
+  // varios segundos y no hay que tener a los demás pedidos esperando).
+  var lock = LockService.getScriptLock();
+  var conLock = false;
+  try { conLock = lock.tryLock(30000); } catch (errLock) { conLock = false; }
+
+  try {
+    if (body["Id_Calidad"] && buscarFilaPorIdCalidad(hoja, body["Id_Calidad"]) !== -1) {
+      // Otro pedido con el mismo control ganó la carrera mientras subíamos
+      // las fotos. Las nuestras quedan huérfanas en Drive, pero la fila no se
+      // duplica.
+      return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
+    }
+    hoja.appendRow(fila);
+    aplicarFormatoPorcentajeCalidad(hoja, hoja.getLastRow(), encabezados, null);
+    // Sin flush, la fila recién agregada puede no verla todavía el pedido que
+    // entra atrás nuestro, y volveríamos a tener dos filas.
+    SpreadsheetApp.flush();
+  } finally {
+    if (conLock) lock.releaseLock();
+  }
   return respuestaJsonCalidad({ ok: true });
 }
 
