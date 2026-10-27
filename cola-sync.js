@@ -56,6 +56,13 @@ const COLA_ESPERAS_MIN = [1, 5, 15];
 // Espera cuando el problema fue de red. No suma intentos.
 const COLA_ESPERA_RED_MIN = 2;
 
+// Espera cuando se mandó pero el servidor NO confirmó (respuesta ilegible,
+// página de error de Google). El registro se queda en el celular y se reenvía:
+// el backend es idempotente, así que si ya había llegado contesta "ya existía"
+// y recién ahí sale de la cola. Va creciendo para no reenviar fotos cada dos
+// minutos con datos móviles si el problema dura.
+const COLA_ESPERAS_SIN_CONFIRMAR_MIN = [2, 5, 15, 30, 60];
+
 // Cada tanto se reintenta solo: si no, un registro en espera se quedaría
 // esperando hasta que algo más dispare una sincronización.
 const COLA_LATIDO_MS = 60000;
@@ -63,7 +70,7 @@ const COLA_LATIDO_MS = 60000;
 // Campos que usa este archivo para llevar la cuenta. NUNCA viajan al backend.
 const COLA_CAMPOS_INTERNOS = [
     '_intentos', '_ultimoError', '_ultimoIntento', '_proximoIntento',
-    '_fallido', '_errorDeDatos'
+    '_fallido', '_errorDeDatos', '_sinConfirmar', '_enviosSinConfirmar'
 ];
 
 // Las cuatro colas. Producción queda afuera a propósito (ver el encabezado).
@@ -100,10 +107,27 @@ const COLAS = [
         store: 'controles_calidad',
         etiqueta: 'Control de Calidad',
         accion: 'guardar_calidad',
+        // Una edición hecha sin señal entra a la cola con su propio
+        // _accion: "actualizar_calidad". Sin esto se mandaría como
+        // guardar_calidad, el backend contestaría "ya existía" y la edición
+        // se perdería.
+        respetarAccionDelItem: true,
         quitarId: true,            // el id de IndexedDB no va al Sheet
         idVisible: item => item['Id_Calidad'] || '(sin id)',
         fecha: item => item['Fecha Analisis'] || '',
-        despues: function () { if (typeof filtrarYRenderizarCalidad === 'function') filtrarYRenderizarCalidad(); }
+        // El servidor confirmó: el control sale de la cola local, así que hay
+        // que ponerlo en la lista de lo que ya está en el servidor. Si no,
+        // desaparecía de la pantalla hasta la próxima lectura del Sheet y el
+        // operario creía que no se había guardado.
+        alConfirmar: function (item) {
+            if (typeof calidadConfirmadaPorServidor === 'function') calidadConfirmadaPorServidor(item);
+        },
+        despues: function (confirmados) {
+            if (typeof filtrarYRenderizarCalidad === 'function') filtrarYRenderizarCalidad();
+            // Solo si algo subió: si no, con un registro trabado se bajaría el
+            // historial entero cada minuto.
+            if (confirmados > 0 && typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
+        }
     },
     {
         store: 'ticketera_tickets',
@@ -171,7 +195,7 @@ function colaPayload(cfg, item) {
     const payload = Object.assign({}, item);
     COLA_CAMPOS_INTERNOS.forEach(function (campo) { delete payload[campo]; });
     if (cfg.quitarId) delete payload.id;
-    if (cfg.accion) payload._accion = cfg.accion;
+    if (cfg.accion && !(cfg.respetarAccionDelItem && payload._accion)) payload._accion = cfg.accion;
     return payload;
 }
 
@@ -183,6 +207,7 @@ async function sincronizarCola(cfg) {
 
     colaEnCurso[cfg.store] = true;
     let huboCambios = false;
+    let confirmados = 0;
 
     try {
         const todos = await colaLeerTodo(cfg.store);
@@ -200,6 +225,7 @@ async function sincronizarCola(cfg) {
             if (!navigator.onLine) break;          // se cortó la señal a mitad
             const ok = await colaEnviarUno(cfg, aEnviar[i]);
             huboCambios = true;
+            if (ok) confirmados++;
             if (ok && cfg.store === 'controles_carga' && typeof renderOfflineCount === 'function') {
                 renderOfflineCount();
             }
@@ -211,7 +237,7 @@ async function sincronizarCola(cfg) {
     }
 
     actualizarAvisoCola();
-    if (huboCambios && cfg.despues) { try { cfg.despues(); } catch (e) { } }
+    if (huboCambios && cfg.despues) { try { cfg.despues(confirmados); } catch (e) { } }
 }
 
 // Manda UN registro. Devuelve true si se fue y salió de la cola.
@@ -219,13 +245,62 @@ async function sincronizarCola(cfg) {
 // siguiente. Ese es todo el punto del arreglo.
 async function colaEnviarUno(cfg, item) {
     const idLocal = item.id;
+    let resultado;
     try {
-        await enviarAlBackend(colaPayload(cfg, item));
-        await colaBorrar(cfg.store, idLocal);
-        return true;
+        resultado = await enviarAlBackend(colaPayload(cfg, item));
     } catch (err) {
         await colaAnotarFallo(cfg, item, err);
         return false;
+    }
+    // Salió, pero nadie confirmó que llegó. NO se borra: se reenvía más tarde.
+    if (resultado && resultado.confirmado === false) {
+        await colaAnotarSinConfirmar(cfg, item);
+        return false;
+    }
+    await colaBorrar(cfg.store, idLocal);
+    if (cfg.alConfirmar) { try { cfg.alConfirmar(item); } catch (e) { } }
+    return true;
+}
+
+async function colaAnotarSinConfirmar(cfg, item) {
+    const registro = Object.assign({}, item);
+    const envios = (registro._enviosSinConfirmar || 0) + 1;
+    const espera = COLA_ESPERAS_SIN_CONFIRMAR_MIN[Math.min(envios, COLA_ESPERAS_SIN_CONFIRMAR_MIN.length) - 1];
+    registro._sinConfirmar = true;
+    registro._enviosSinConfirmar = envios;
+    registro._ultimoError = 'Se envió pero el servidor no confirmó que llegó';
+    registro._ultimoIntento = new Date().toISOString();
+    registro._proximoIntento = Date.now() + espera * 60000;
+    console.warn('[cola] ' + cfg.etiqueta + ' ' + cfg.idVisible(item) +
+        ' se envió sin confirmación (' + envios + '). Se conserva y se reenvía en ' + espera + ' min.');
+    await colaGuardar(cfg.store, registro);
+}
+
+// Cuando un módulo baja su historial del servidor, le pasa acá los ids que
+// vinieron. Lo que estaba "sin confirmar" y SÍ está en el servidor llegó bien:
+// recién ahí se borra del celular. La fila solo existe en el Sheet si el
+// guardado terminó (las fotos se suben antes del appendRow), así que es una
+// confirmación segura. Las ediciones en cola (_accion propio) no se tocan:
+// que el id exista en el servidor no dice que la edición haya llegado.
+async function colaConfirmarPorServidor(store, campoId, idsEnServidor) {
+    try {
+        if (!db || !idsEnServidor || !idsEnServidor.size) return 0;
+        const todos = await colaLeerTodo(store);
+        let borrados = 0;
+        for (let i = 0; i < todos.length; i++) {
+            const item = todos[i];
+            if (!item._sinConfirmar || item._accion) continue;
+            if (!item[campoId] || !idsEnServidor.has(item[campoId])) continue;
+            if (await colaBorrar(store, item.id)) borrados++;
+        }
+        if (borrados) {
+            console.log('[cola] ' + borrados + ' registro(s) de ' + store + ' confirmados al leer el servidor.');
+            actualizarAvisoCola();
+        }
+        return borrados;
+    } catch (e) {
+        console.warn('[cola] No se pudo confirmar contra el servidor:', e);
+        return 0;
     }
 }
 
@@ -275,6 +350,12 @@ function arrancarLatidoCola() {
     colaLatido = setInterval(function () {
         if (navigator.onLine) sincronizarTodasLasColas();
     }, COLA_LATIDO_MS);
+    // En el iPhone la app no corre en segundo plano: si el operario bloquea el
+    // teléfono o cambia de app, la cola se frena. Al volver se manda enseguida
+    // en vez de esperar hasta un minuto al próximo latido.
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && navigator.onLine) sincronizarTodasLasColas();
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -534,3 +615,4 @@ window.reintentarDeCola = reintentarDeCola;
 window.reintentarTodosLosFallidos = reintentarTodosLosFallidos;
 window.colaResumen = colaResumen;
 window.arrancarLatidoCola = arrancarLatidoCola;
+window.colaConfirmarPorServidor = colaConfirmarPorServidor;

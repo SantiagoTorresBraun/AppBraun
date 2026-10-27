@@ -69,6 +69,9 @@ let vistaHistorialCalidad = (function () {
 let contratoCalidadAbierto = null;
 let carpetasCalidadPintadas = [];   // lo que se ve, para abrir por índice
 let historialCalidad = [];          // registros ya sincronizados (vienen del Sheet)
+// Controles que el servidor confirmó en esta sesión, por Id_Calidad. Sirven
+// para que no desaparezcan de la lista si una lectura del Sheet llega sin ellos.
+const calidadConfirmadasRecientes = new Map();
 let idCalidadEnEdicion = null;      // Id_Calidad en edición (null = registro nuevo)
 const fotosCalidad = { "imagen 1": "", "imagen 2": "", "imagen 3": "", "imagen 4": "" };
 let fotosCalidadEnProceso = 0;
@@ -492,7 +495,9 @@ function guardarCalidadNueva(registro) {
     const req = tx.objectStore("controles_calidad").add(registro);
 
     req.onsuccess = function() {
-        alert(`¡Control de calidad de ${nombreGranoActual()} guardado con éxito!`);
+        alert(`¡Control de calidad de ${nombreGranoActual()} guardado en este celular!\n\n` +
+              `Se envía solo al servidor. Mientras no llegue figura como "Pendiente" en el historial: ` +
+              `no borres la app ni los datos del navegador hasta que desaparezca esa marca.`);
         resetFormularioCalidad();
         switchTabCalidad('historial');
         if (navigator.onLine) sincronizarCalidadPendientes();
@@ -514,36 +519,64 @@ function actualizarCalidadExistente(registro) {
         if (cursor) {
             if (cursor.value["Id_Calidad"] === registro["Id_Calidad"]) {
                 encontradoEnColaLocal = true;
-                cursor.update(Object.assign({}, registro, { id: cursor.value.id }));
+                // Se conserva el _accion: si lo que estaba en cola era una
+                // edición ("actualizar_calidad") y se pierde, se mandaría como
+                // alta, el backend diría "ya existía" y la edición no llegaría.
+                const actualizado = Object.assign({}, registro, { id: cursor.value.id });
+                if (cursor.value._accion) actualizado._accion = cursor.value._accion;
+                cursor.update(actualizado);
             }
             cursor.continue();
         } else {
             if (!encontradoEnColaLocal) {
-                // Ya estaba sincronizado: actualizamos la vista y avisamos al backend
+                // Ya estaba sincronizado. ANTES se mandaba directo al backend y,
+                // sin señal o con la red cortada a mitad, la edición se perdía
+                // aunque la app dijera "guardados". Ahora entra a la misma cola
+                // que los controles nuevos: queda en el celular hasta que el
+                // servidor la confirma.
                 const idx = historialCalidad.findIndex(r => r["Id_Calidad"] === registro["Id_Calidad"]);
                 if (idx !== -1) historialCalidad[idx] = registro;
-                if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
-                    enviarAlBackend(Object.assign({ _accion: "actualizar_calidad" }, registro))
-                        .catch(err => {
-                            console.error("No se pudo sincronizar la edición de calidad:", err);
-                            // El registro ya estaba sincronizado, así que no hay copia local
-                            // que conservar: lo único que se puede hacer es avisar, para que
-                            // el operario reintente en vez de creer que quedó guardado.
-                            if (err && err.rechazadoPorBackend) {
-                                alert("⚠️ Los cambios NO se guardaron en el servidor.\n\n" +
-                                      "Motivo: " + err.message + "\n\n" +
-                                      "Volvé a entrar al control y guardá de nuevo.");
-                            }
-                        });
-                }
-            } else if (navigator.onLine) {
-                sincronizarCalidadPendientes();
+                encolarEdicionCalidad(registro);
+                return;
             }
-            alert("¡Cambios del control de calidad guardados!");
+            if (navigator.onLine) sincronizarCalidadPendientes();
+            alert("¡Cambios del control de calidad guardados en este celular! Se envían solos al servidor.");
             resetFormularioCalidad();
             switchTabCalidad('historial');
         }
     };
+}
+
+function encolarEdicionCalidad(registro) {
+    const tx = db.transaction(["controles_calidad"], "readwrite");
+    const req = tx.objectStore("controles_calidad").add(Object.assign({}, registro, { _accion: "actualizar_calidad" }));
+    req.onsuccess = function() {
+        alert("¡Cambios del control de calidad guardados en este celular!\n\n" +
+              "Se envían solos al servidor. Mientras no lleguen, el control figura como \"Pendiente\".");
+        resetFormularioCalidad();
+        switchTabCalidad('historial');
+        if (navigator.onLine) sincronizarCalidadPendientes();
+    };
+    req.onerror = function(e) {
+        console.error("Error al encolar la edición de calidad:", e.target.error);
+        alert("⚠️ No se pudieron guardar los cambios en este dispositivo. Motivo: " +
+              (e.target.error ? e.target.error.message : "desconocido") + "\n\nNo salgas del formulario: volvé a tocar Guardar.");
+    };
+}
+
+// La cola avisa que el servidor confirmó este control (alta o edición). Pasa a
+// la lista de lo que ya está en el servidor para que no desaparezca de la
+// pantalla al salir de la cola local.
+function calidadConfirmadaPorServidor(item) {
+    const limpio = Object.assign({}, item);
+    ['id', '_accion', '_pendienteSync', '_intentos', '_ultimoError', '_ultimoIntento', '_proximoIntento',
+     '_fallido', '_errorDeDatos', '_sinConfirmar', '_enviosSinConfirmar'].forEach(c => delete limpio[c]);
+    const id = limpio["Id_Calidad"];
+    if (!id) return;
+    calidadConfirmadasRecientes.set(id, limpio);
+    const idx = historialCalidad.findIndex(r => r["Id_Calidad"] === id);
+    if (idx !== -1) historialCalidad[idx] = limpio;
+    else historialCalidad.unshift(limpio);
 }
 
 // Sube al backend (Google Apps Script) los registros en cola y los saca de IndexedDB
@@ -715,6 +748,20 @@ function cargarHistorialCalidadDesdeGoogle(intento) {
             if (que === "ok") {
                 const soloCalidad = data.filter(r => r && r["Id_Calidad"]);
                 historialCalidad = soloCalidad.map(normalizarRegistroCalidadRemoto);
+                // Lo que se confirmó recién y todavía no vino en esta lectura
+                // (la lectura salió antes de que llegara, o el Sheet tarda en
+                // mostrarlo) se mantiene: si no, desaparecería de la pantalla.
+                const idsServidor = new Set(soloCalidad.map(r => r["Id_Calidad"]));
+                calidadConfirmadasRecientes.forEach((item, id) => {
+                    if (idsServidor.has(id)) calidadConfirmadasRecientes.delete(id);
+                    else historialCalidad.unshift(item);
+                });
+                // Lo que quedó "sin confirmar" en la cola y SÍ está en el
+                // servidor llegó bien: recién ahora sale del celular.
+                if (typeof colaConfirmarPorServidor === "function") {
+                    colaConfirmarPorServidor("controles_calidad", "Id_Calidad", idsServidor)
+                        .then(borrados => { if (borrados) filtrarYRenderizarCalidad(); });
+                }
                 // Copia para poder verlo sin señal (Calidad no trae base64:
                 // sus imágenes ya son rutas, así que se guarda casi entero).
                 guardarHistorialLocal("calidad", historialCalidad);
@@ -897,7 +944,7 @@ async function filtrarYRenderizarCalidad() {
             ? `<img src="${foto}" class="thumb-historial" alt="Muestra">`
             : `<div class="thumb-historial thumb-vacia"><i class="fas fa-seedling"></i></div>`;
         const etiquetaPendiente = item._pendienteSync
-            ? `<br><span class="badge-pendiente" title="Todavía no se sincronizó con el servidor"><i class="fas fa-clock"></i> Pendiente</span>`
+            ? `<br><span class="badge-pendiente" title="${escapeHtml('Guardado en este celular, todavía no llegó al servidor' + (item._ultimoError ? '. Último intento: ' + item._ultimoError : '')).replace(/"/g, '&quot;')}"><i class="fas fa-clock"></i> Pendiente de envío</span>`
             : '';
         // Referencia según el tipo; los controles viejos sin contrato muestran lote / variedad
         const referencia = (tipoControlActual === "COSECHA"
@@ -1265,6 +1312,7 @@ function eliminarCalidad(base64Data) {
 
         // 2) Sacarlo de la vista en memoria
         historialCalidad = historialCalidad.filter(r => r["Id_Calidad"] !== item["Id_Calidad"]);
+        calidadConfirmadasRecientes.delete(item["Id_Calidad"]);
         filtrarYRenderizarCalidad();
 
         // 3) Avisar al backend (el Apps Script debe atender _accion: "eliminar_calidad")

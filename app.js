@@ -88,7 +88,12 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxER7E6CJhddVOrP7ga
 //
 // Si el navegador o la red impiden leer la respuesta, reintenta a la vieja
 // usanza para no dejar al operario sin poder guardar: en ese caso devuelve
-// { sinConfirmar: true } y el comportamiento es el de siempre.
+// { confirmado: false, sinConfirmar: true }.
+//
+// OJO: "sin confirmar" NO es "guardado". La cola (cola-sync.js) NO borra del
+// celular lo que vuelve sin confirmar: lo deja y lo reenvía más tarde, cosa
+// segura porque el backend es idempotente. Antes lo borraba, y así se podía
+// perder un control cargado en campo con la señal entrecortada.
 function enviarAlBackend(payload) {
     const cuerpo = JSON.stringify(payload);
     const cabeceras = { "Content-Type": "text/plain;charset=utf-8" };
@@ -97,9 +102,18 @@ function enviarAlBackend(payload) {
         .then(res => res.text())
         .then(texto => {
             let data = null;
-            try { data = JSON.parse(texto); } catch (e) { /* respuesta no-JSON: la damos por buena */ }
+            try { data = JSON.parse(texto); } catch (e) { /* respuesta no-JSON */ }
 
-            if (data && (data.status === "error" || data.ok === false)) {
+            // Todas las acciones del backend contestan JSON. Si llega otra cosa
+            // es la página de error de Google (Apps Script caído, se pasó de
+            // tiempo, cuota agotada) o un portal de wifi: NO es una confirmación.
+            // Antes esto se daba por bueno y la cola borraba el registro.
+            if (data === null || typeof data !== "object") {
+                console.warn("El backend contestó algo que no es JSON; se toma como NO confirmado:", String(texto).slice(0, 200));
+                return { confirmado: false, sinConfirmar: true };
+            }
+
+            if (data.status === "error" || data.ok === false) {
                 const err = new Error(data.message || data.error || "El servidor rechazó el guardado");
                 err.rechazadoPorBackend = true;
                 throw err;
@@ -1412,6 +1426,9 @@ function updateOnlineStatus() {
         cargarHistorialDesdeGoogle();
         sincronizarTicketsPendientes();
         if (typeof sincronizarCalidadPendientes === 'function') sincronizarCalidadPendientes();
+        // Volvió la señal: se refresca Calidad para que no quede el cartel de
+        // "copia guardada" con datos viejos (lo que se vio el 27/10 en campo).
+        if (typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
         if (typeof sincronizarMuestreosPendientes === 'function') sincronizarMuestreosPendientes();
         if (typeof cargarMuestreosDesdeGoogle === 'function') cargarMuestreosDesdeGoogle();
     } else {
@@ -2443,6 +2460,12 @@ function cargarHistorialDesdeGoogle() {
     .then(data => {
         if(Array.isArray(data)) {
             historialGeneral = data;
+            // Las cargas que quedaron "sin confirmar" en la cola y SÍ vinieron
+            // del servidor llegaron bien: recién ahora salen del celular.
+            if (typeof colaConfirmarPorServidor === "function") {
+                colaConfirmarPorServidor("controles_carga", "Id_Carga", new Set(data.map(r => r && r.Id_Carga).filter(Boolean)))
+                    .then(borrados => { if (borrados && typeof renderOfflineCount === "function") renderOfflineCount(); });
+            }
             // Copia para poder verlo sin señal (sin fotos ni firmas).
             guardarHistorialLocal("cargas", data);
             avisoHistorialGuardado("tabla-historial-body", null);
