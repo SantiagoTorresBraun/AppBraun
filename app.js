@@ -94,8 +94,13 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxER7E6CJhddVOrP7ga
 // celular lo que vuelve sin confirmar: lo deja y lo reenvía más tarde, cosa
 // segura porque el backend es idempotente. Antes lo borraba, y así se podía
 // perder un control cargado en campo con la señal entrecortada.
+//
+// SESIÓN: cada pedido lleva el token de la sesión (_token, ver 06_acceso.gs).
+// Se agrega acá, al momento de mandar, y no al encolar: así un registro que
+// quedó días en la cola sale con el token vigente y no con uno viejo.
 function enviarAlBackend(payload) {
-    const cuerpo = JSON.stringify(payload);
+    const token = (typeof tokenSesionActual === "function") ? tokenSesionActual() : "";
+    const cuerpo = JSON.stringify(Object.assign({}, payload, { _token: token }));
     const cabeceras = { "Content-Type": "text/plain;charset=utf-8" };
 
     return fetch(WEB_APP_URL, { method: "POST", headers: cabeceras, body: cuerpo })
@@ -113,6 +118,19 @@ function enviarAlBackend(payload) {
                 return { confirmado: false, sinConfirmar: true };
             }
 
+            // El backend no pudo verificar la sesión (se cayó el Sheet, por
+            // ejemplo): no es culpa del registro, se reintenta más tarde.
+            if (data.reintentar) return { confirmado: false, sinConfirmar: true };
+
+            // La sesión no está habilitada (modo "exigir"). Tampoco es culpa
+            // del registro: NO gasta intentos de la cola y NO se borra nada.
+            if (data.noAutorizado) {
+                if (typeof avisarSesionNoAutorizada === "function") avisarSesionNoAutorizada();
+                const err = new Error(data.message || "Sesión no habilitada en el servidor");
+                err.noAutorizado = true;
+                throw err;
+            }
+
             if (data.status === "error" || data.ok === false) {
                 const err = new Error(data.message || data.error || "El servidor rechazó el guardado");
                 err.rechazadoPorBackend = true;
@@ -122,7 +140,7 @@ function enviarAlBackend(payload) {
         })
         .catch(err => {
             // El backend contestó y dijo que NO: se propaga para conservar el registro.
-            if (err && err.rechazadoPorBackend) throw err;
+            if (err && (err.rechazadoPorBackend || err.noAutorizado)) throw err;
 
             // No se pudo leer la respuesta (CORS, red, navegador viejo).
             // Reintento sin confirmación: es exactamente lo que hacía antes.
@@ -130,6 +148,16 @@ function enviarAlBackend(payload) {
             return fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", headers: cabeceras, body: cuerpo })
                 .then(() => ({ confirmado: false, sinConfirmar: true }));
         });
+}
+
+// URL de una lectura del backend (?action=...), con el token de la sesión.
+// Todas las lecturas pasan por acá para que ninguna quede sin token.
+function urlBackend(accion, extra) {
+    const token = (typeof tokenSesionActual === "function") ? tokenSesionActual() : "";
+    let url = WEB_APP_URL + "?action=" + encodeURIComponent(accion);
+    if (token) url += "&_token=" + encodeURIComponent(token);
+    if (extra) url += "&" + extra;
+    return url;
 }
 let historialGeneral = []; 
 let tipoCargaActual = "PT"; 
@@ -1226,14 +1254,14 @@ async function renderizarTablaContratos() {
         const claseDif = diferencia < 0 ? 'dif-negativa' : (diferencia > 0 ? 'dif-positiva' : '');
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td data-label="Fecha">${f.fecha}</td>
-            <td data-label="Contrato Comercial">${f.contrato_com}</td>
-            <td data-label="Contrato Cliente">${f.contrato_cli}</td>
-            <td data-label="Carta de Porte">${f.carta_porte}</td>
+            <td data-label="Fecha">${escapeHtml(f.fecha)}</td>
+            <td data-label="Contrato Comercial">${escapeHtml(f.contrato_com)}</td>
+            <td data-label="Contrato Cliente">${escapeHtml(f.contrato_cli)}</td>
+            <td data-label="Carta de Porte">${escapeHtml(f.carta_porte)}</td>
             <td data-label="Kg CP">${fmt(f.kg_cp)}</td>
             <td data-label="Kg Descarga" class="celda-kg-descarga">${celdaKgDescargaHtml(f)}</td>
             <td data-label="Diferencia KG" class="${claseDif}"><b>${fmt(diferencia)}</b></td>
-            <td data-label="Observaciones CP">${f.observaciones}</td>
+            <td data-label="Observaciones CP">${escapeHtml(f.observaciones)}</td>
             <td data-label="Archivo">${archivoCpLinkHtml(f.archivo_cp)}</td>
         `;
         tbody.appendChild(tr);
@@ -1258,7 +1286,7 @@ function celdaKgDescargaHtml(f) {
     return '<button type="button" class="kg-editable" '
          +   'data-contrato="' + escapeHtml(f.id_contrato) + '" '
          +   'data-carga="' + escapeHtml(f.id_carga) + '" '
-         +   'data-kgcp="' + f.kg_cp + '" '
+         +   'data-kgcp="' + escapeHtml(String(f.kg_cp)) + '" '
          +   'title="Tocá para editar los kg de descarga">'
          +   valor
          + '<i class="fas fa-pen"></i>'
@@ -1580,6 +1608,12 @@ async function confirmarRecuperacionUI() {
         if (!r.ok) { avisoAuth('rec-aviso-2', r.error, true); return; }
 
         cerrarRecuperarPassword();
+        // Con la sesión abierta es la primera contraseña de alguien que entró
+        // con la genérica: sigue adentro, ya con su token (auth.js).
+        if (haySesionActiva()) {
+            alert('¡Listo! Tu contraseña personal quedó creada.\n\nLa próxima vez entrá con ella.');
+            return;
+        }
         document.getElementById('login-email').value = email;
         document.getElementById('login-password').value = '';
         document.getElementById('login-password').focus();
@@ -1630,6 +1664,11 @@ async function guardarPasswordNuevaUI() {
 
     try {
         const r = await definirPasswordPropia(sesion.email, actual, p1);
+        if (r.requiereCodigo) {
+            cerrarCambiarPassword();
+            abrirCrearPasswordConCodigo();
+            return;
+        }
         if (!r.ok) { avisoAuth('cam-aviso', r.error, true); return; }
         cerrarCambiarPassword();
         alert('¡Listo! Tu contraseña quedó cambiada.\n\nLa próxima vez entrá con la nueva.');
@@ -1651,10 +1690,19 @@ function ofrecerDefinirPassword() {
     const quiere = confirm(
         'Estás usando la contraseña genérica, la misma que el resto del equipo.\n\n' +
         '¿Querés crear tu contraseña personal ahora?\n\n' +
-        'Si la olvidás, la recuperás con un código a tu correo. ' +
+        'Te mandamos un código a tu correo para confirmar que sos vos. ' +
         'También podés hacerlo más tarde desde "Mi contraseña" en el menú.'
     );
-    if (quiere) abrirCambiarPassword();
+    if (quiere) abrirCrearPasswordConCodigo();
+}
+
+// La primera contraseña se crea con el código del correo (el backend ya no la
+// acepta sin esa prueba). Es la misma pantalla de "Olvidé mi contraseña", con
+// el correo de la sesión ya puesto.
+function abrirCrearPasswordConCodigo() {
+    const sesion = obtenerSesion();
+    abrirRecuperarPassword();
+    if (sesion) document.getElementById('rec-email').value = sesion.email;
 }
 
 // El botón flotante del Agente de IA ahora abre el chat real (agente.js).
@@ -1704,7 +1752,7 @@ function actualizarManualmente() {
 
     if (navigator.onLine && !WEB_APP_URL.includes("AQUÍ_VA")) {
         sincronizarDatosPendientes();
-        fetch(`${WEB_APP_URL}?action=read`)
+        fetch(urlBackend("read"))
             .then(res => res.json())
             .then(data => { if (Array.isArray(data)) historialGeneral = data; })
             .catch(err => console.error("No se pudo actualizar desde el servidor:", err))
@@ -1947,7 +1995,7 @@ function poblarSelectResponsables(sel) {
     const select = sel || document.getElementById('ticket-responsable');
     if (!select) return;
     select.innerHTML = '<option value="">-- Elegir responsable --</option>' +
-        obtenerUsuariosApp().map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+        obtenerUsuariosApp().map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.nombre)}</option>`).join('');
 }
 
 // Solicitante: también desplegable con todos los miembros de la empresa.
@@ -1956,7 +2004,7 @@ function poblarSelectSolicitante() {
     const select = document.getElementById('ticket-nombre');
     const correo = document.getElementById('ticket-correo');
     if (!select) return;
-    select.innerHTML = obtenerUsuariosApp().map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+    select.innerHTML = obtenerUsuariosApp().map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.nombre)}</option>`).join('');
     const sesion = obtenerSesion();
     if (sesion) select.value = sesion.email;
     if (correo) correo.value = select.value || '';
@@ -2158,7 +2206,7 @@ let historialTickets = []; // tickets ya sincronizados (vienen de la hoja "Ticke
 
 function cargarTicketsDesdeGoogle() {
     if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarTicketsGuardados(); return; }
-    fetch(`${WEB_APP_URL}?action=read_tickets`)
+    fetch(urlBackend("read_tickets"))
         .then(res => res.json())
         .then(data => {
             // Mismo cuidado que en Calidad (hallazgo 14): si se pierde el
@@ -2283,12 +2331,12 @@ async function renderTicketsTicketera() {
         const marcaRespuesta = item.respuesta
             ? ` <i class="fas fa-comment-dots" title="Tiene respuesta" style="color:#2e7d32;"></i>` : '';
         tr.innerHTML = `
-            <td data-label="Fecha" class="td-fecha-ticket">${fecha}${marcaPendiente}</td>
+            <td data-label="Fecha" class="td-fecha-ticket">${escapeHtml(fecha)}${marcaPendiente}</td>
             <td data-label="Solicitante"><b>${escapeHtml(item.nombre_solicitante || '-')}</b>${marcaRespuesta}<br><small>${escapeHtml(item.correo_solicitante || '')}</small></td>
             <td data-label="Responsable">
                 <select class="ticket-resp-select"></select>
             </td>
-            <td data-label="Prioridad" class="td-prio-ticket"><span class="badge-prio ${prioridadClass}">${item.prioridad || 'Baja'}</span></td>
+            <td data-label="Prioridad" class="td-prio-ticket"><span class="badge-prio ${prioridadClass}">${escapeHtml(item.prioridad || 'Baja')}</span></td>
             <td data-label="Estado">
                 <select class="ticket-estado-select">
                     <option value="Abierto">Abierto</option>
@@ -2307,7 +2355,7 @@ async function renderTicketsTicketera() {
         const respSelect = tr.querySelector('.ticket-resp-select');
         const usuariosEmpresa = obtenerUsuariosApp();
         respSelect.innerHTML = '<option value="">-- Ninguno --</option>' +
-            usuariosEmpresa.map(u => `<option value="${u.email}">${u.nombre}</option>`).join('');
+            usuariosEmpresa.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.nombre)}</option>`).join('');
         respSelect.value = item.correo_responsable || '';
         if (!respSelect.value && item.responsable_asignado) {
             // compat: tickets viejos guardados solo con el nombre
@@ -2383,8 +2431,28 @@ function updateTicketFields(id, patch, cb) {
     };
 }
 
-// Utilidad para escapar texto en HTML
-function escapeHtml(str){ if(!str) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Utilidad para escapar texto en HTML. Escapa también las comillas: sin eso no
+// protegía los atributos (value="...", title="..."), y por ahí se podía meter
+// código con un dato del Sheet (hallazgo 4 de AUDITORIA_2026-10-30.md).
+// Ojo: un 0 o un false devuelven '' (así fue siempre y hay pantallas que lo
+// usan para mostrar vacío).
+function escapeHtml(str){
+    if(!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Un dato como ARGUMENTO de una función en un onclick="...":
+//     `onclick="ocEditarOrden(${argJs(o.Id_OC)})"`      ← sin comillas alrededor
+// escapeHtml solo NO alcanza ahí: el navegador decodifica &#39; antes de
+// correr el código, y una comilla en el dato cerraría el string. Esto lo
+// convierte primero en un string de JavaScript válido y después lo escapa
+// para el atributo.
+function argJs(valor){
+    const texto = (valor === undefined || valor === null) ? '' : String(valor);
+    return JSON.stringify(texto).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 // Filtros del historial de tickets: refrescan la tabla en vivo
 document.getElementById('filter-ticket-search').addEventListener('input',
@@ -2551,9 +2619,24 @@ function soloPTFoto(clave) {
 // (URL de Drive que devuelve el backend, o un data:... recién elegido en el form).
 function archivoCpLinkHtml(valor) {
     if (!valor) return 'Sin archivo';
-    const esDataUri = valor.indexOf('data:') === 0;
+    const url = urlSegura(valor);
+    if (!url) return 'Sin archivo';
+    const esDataUri = String(valor).indexOf('data:') === 0;
     const attrDescarga = esDataUri ? ' download="carta-de-porte"' : '';
-    return `<a href="${valor}" target="_blank" rel="noopener" class="archivo-link"${attrDescarga}><i class="fas fa-paperclip"></i> Ver / descargar archivo</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener" class="archivo-link"${attrDescarga}><i class="fas fa-paperclip"></i> Ver / descargar archivo</a>`;
+}
+
+// Una URL que viene del Sheet, lista para un href="" o src="". Solo deja pasar
+// http(s) y los data: de archivos: un "javascript:..." o un data:text/html
+// guardado en una celda correría código al tocar el link (hallazgo 4).
+// Devuelve '' si no es una URL aceptable.
+function urlSegura(valor) {
+    const texto = String(valor || '').trim();
+    if (/^https?:\/\//i.test(texto)) return escapeHtml(texto);
+    if (/^data:/i.test(texto) && !/^data:[^,;]*(html|svg|xml|javascript)/i.test(texto)) return escapeHtml(texto);
+    // Ruta relativa (las de AppSheet): sin esquema no puede correr nada.
+    if (texto && !/^[a-z][a-z0-9+.-]*:/i.test(texto)) return escapeHtml(texto);
+    return '';
 }
 
 // --- 8-B. ARCHIVO ADJUNTO DE LA CARTA DE PORTE (reemplaza el viejo campo "Link CP") ---
@@ -2739,7 +2822,7 @@ function finalizarGuardadoUI(mensaje, volverAlHistorial) {
 // --- 9. TRAER HISTORIAL E INYECTAR EN TABLA ---
 function cargarHistorialDesdeGoogle() {
     if (!navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) { restaurarHistorialGuardado(); return; }
-    fetch(`${WEB_APP_URL}?action=read`)
+    fetch(urlBackend("read"))
     .then(res => res.json())
     .then(data => {
         if(Array.isArray(data)) {
@@ -2922,19 +3005,19 @@ async function filtrarYRenderizarTabla(opciones) {
             : '';
  
         const listaProductos = (Array.isArray(item.Productos) && item.Productos.length > 0)
-            ? item.Productos.map(p => p.producto || '-').join('<br>')
+            ? item.Productos.map(p => escapeHtml(p.producto || '-')).join('<br>')
             : '-';
  
         const listaContratos = (Array.isArray(item.Contratos) && item.Contratos.length > 0)
-            ? item.Contratos.map(c => c.contrato_com || '-').join('<br>')
+            ? item.Contratos.map(c => escapeHtml(c.contrato_com || '-')).join('<br>')
             : '-';
  
-        const numRegistroMovil = item.Id_Carga ? `<span class="reg-num-movil">#${item.Id_Carga}</span>` : '';
+        const numRegistroMovil = item.Id_Carga ? `<span class="reg-num-movil">#${escapeHtml(item.Id_Carga)}</span>` : '';
         tr.innerHTML = `
-            <td data-label="Fecha" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-fecha">${item.Fecha || '-'}${numRegistroMovil}</td>
+            <td data-label="Fecha" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-fecha">${escapeHtml(item.Fecha || '-')}${numRegistroMovil}</td>
             <td data-label="Producto" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable"><b>${listaProductos}</b>${etiquetaPendiente}</td>
             <td data-label="Contrato" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${listaContratos}</td>
-            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? String(item.ESTATUS).toLowerCase() : 'sin-dato'}">${item.ESTATUS || '—'}</span></td>
+            <td data-label="Estado" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable td-estado"><span class="badge ${item.ESTATUS ? escapeHtml(String(item.ESTATUS).toLowerCase()) : 'sin-dato'}">${escapeHtml(item.ESTATUS || '—')}</span></td>
             <td data-label="Peso" onclick="abrirDetalleCargaDesdeTabla('${dataString}')" class="celda-clickeable">${fmtKg(item.Kg_Cargados)} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarRegistroParaEditar('${dataString}')" title="Editar registro">
@@ -3078,7 +3161,7 @@ function cargarRegistroParaEditar(base64Data) {
             const previewEl = document.getElementById(mapaFotos[key]);
             if (previewEl) {
                 previewEl.innerHTML = valor
-                    ? `<img src="${valor}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;">`
+                    ? `<img src="${urlSegura(valor)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;">`
                     : "📸 Sin foto";
             }
         });
@@ -3742,7 +3825,7 @@ function abrirDetalleCarga(registro) {
     // Llenar información general
     document.getElementById('det-fecha').textContent = registro.Fecha || '-';
     document.getElementById('det-tipo').textContent = registro.Tipo_Carga || '-';
-    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? String(registro.ESTATUS).toLowerCase() : 'sin-dato'}">${registro.ESTATUS || '—'}</span>`;
+    document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? escapeHtml(String(registro.ESTATUS).toLowerCase()) : 'sin-dato'}">${escapeHtml(registro.ESTATUS || '—')}</span>`;
     document.getElementById('det-kg').textContent = fmtKg(registro.Kg_Cargados) + ' kg';
     document.getElementById('det-oc').textContent = registro.Id_OC ? textoVinculoOC(registro) : '-';
     
@@ -3751,9 +3834,9 @@ function abrirDetalleCarga(registro) {
     if (Array.isArray(registro.Productos) && registro.Productos.length > 0) {
         detProductos.innerHTML = registro.Productos.map((p, i) => `
             <div class="detalle-item-lista">
-                <strong>${p.producto || '-'}</strong>
+                <strong>${escapeHtml(p.producto || '-')}</strong>
                 <div class="detalle-item-sublista">
-                    Calibre: ${p.calibre || '-'} | Envase: ${p.envase || '-'} | Cantidad: ${p.cantidad || '-'}
+                    Calibre: ${escapeHtml(p.calibre || '-')} | Envase: ${escapeHtml(p.envase || '-')} | Cantidad: ${escapeHtml(p.cantidad || '-')}
                 </div>
             </div>
         `).join('');
@@ -3769,9 +3852,9 @@ function abrirDetalleCarga(registro) {
     if (Array.isArray(registro.Contratos) && registro.Contratos.length > 0) {
         detContratos.innerHTML = registro.Contratos.map((c, i) => `
             <div class="detalle-item-lista">
-                <strong>${c.contrato_com || '-'}</strong>
+                <strong>${escapeHtml(c.contrato_com || '-')}</strong>
                 <div class="detalle-item-sublista">
-                    Carta de Porte: ${c.carta_porte || '-'} &nbsp;|&nbsp; ${archivoCpLinkHtml(c.archivo_cp)}
+                    Carta de Porte: ${escapeHtml(c.carta_porte || '-')} &nbsp;|&nbsp; ${archivoCpLinkHtml(c.archivo_cp)}
                 </div>
             </div>
         `).join('');
@@ -3794,7 +3877,7 @@ function abrirDetalleCarga(registro) {
         detVerificaciones.innerHTML = verificacionesValidas.map(v => `
             <div class="detalle-verificacion">
                 <span>${v.label}</span>
-                <span class="valor">${v.valor === 'SI' ? '✓ Sí' : v.valor === 'NO' ? '✕ No' : v.valor}</span>
+                <span class="valor">${v.valor === 'SI' ? '✓ Sí' : v.valor === 'NO' ? '✕ No' : escapeHtml(String(v.valor))}</span>
             </div>
         `).join('');
     }
@@ -3816,7 +3899,7 @@ function abrirDetalleCarga(registro) {
     if (fotosValidas.length > 0) {
         detFotos.innerHTML = fotosValidas.map(f => `
             <div class="detalle-foto-box">
-                <img src="${registro[f.campo]}" alt="${f.nombre}" class="detalle-foto-img">
+                <img src="${urlSegura(registro[f.campo])}" alt="${f.nombre}" class="detalle-foto-img">
                 <div class="detalle-foto-label">${f.nombre}</div>
             </div>
         `).join('');

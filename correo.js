@@ -160,7 +160,8 @@ const REPORTES_CORREO = {
                 ['Patente chasis', item.Patente_Chasis],
                 ['Patente acoplado', item.Patente_Acoplado],
                 ['Total Kg cargados', kg],
-                ['Estatus', '<span style="background:' + color + ';color:#ffffff;padding:2px 10px;border-radius:10px;font-size:12px">' + estatus + '</span>'],
+                // { html } marca lo que ya es HTML armado acá; el estatus de adentro se escapa igual
+                ['Estatus', { html: '<span style="background:' + color + ';color:#ffffff;padding:2px 10px;border-radius:10px;font-size:12px">' + escaparHtmlCorreo(estatus) + '</span>' }],
                 ['Elaboró', item.Elaboro],
                 ['Indicaciones de descarga', item.Indicaciones_Descarga],
                 ['N° de registro', item.Id_Carga]
@@ -311,16 +312,24 @@ function mensajeReportePorDefecto(item, tipo) {
          + 'Saludos,\n' + (nombreUsuarioActual() || '');
 }
 
+// Escapa un dato para el HTML del correo. Va aparte de escapeHtml() (app.js)
+// porque esa devuelve '' para un 0, y acá un 0 kg tiene que verse.
+function escaparHtmlCorreo(t) {
+    return String(t === undefined || t === null ? '' : t)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // Cuerpo HTML institucional: el mensaje del usuario + una tabla con los datos
 // generales, para que el destinatario no dependa de abrir el PDF para lo básico.
 function cuerpoHtmlReporte(item, tipo, mensajeUsuario) {
     const reporte = reporteDe(tipo);
-    const escapar = function (t) {
-        return String(t === undefined || t === null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    };
+    const escapar = escaparHtmlCorreo;
     const fila = function (etiqueta, valor) {
-        // Los valores que ya vienen como HTML (el badge de estatus) se dejan pasar
-        const contenido = (typeof valor === 'string' && valor.indexOf('<span') === 0) ? valor : escapar(valor);
+        // Solo pasa sin escapar lo que viene marcado como { html } (el badge de
+        // estatus). Antes pasaba cualquier texto que EMPEZARA con "<span", y un
+        // dato del Sheet escrito así entraba crudo al correo.
+        const contenido = (valor && typeof valor === 'object' && 'html' in valor) ? valor.html : escapar(valor);
         return '<tr><td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#777777;white-space:nowrap">' + etiqueta + '</td>'
              + '<td style="padding:7px 12px;border-bottom:1px solid #eeeeee;color:#333333"><b>' + (contenido || '-') + '</b></td></tr>';
     };
@@ -862,7 +871,7 @@ function abrirModalCorreo(item, tipo) {
     document.getElementById('correo-mensaje').value = mensajeReportePorDefecto(item, tipoCorreoActual);
     document.getElementById('correo-auto').checked = correoAutoActivo();
     document.getElementById('correo-adjunto').innerHTML =
-        '<i class="fas fa-file-pdf"></i> ' + nombreArchivoPdf(item, tipoCorreoActual);
+        '<i class="fas fa-file-pdf"></i> ' + escaparHtmlCorreo(nombreArchivoPdf(item, tipoCorreoActual));
 
     // El envío automático al guardar hoy existe solo en Control de Carga
     document.getElementById('correo-auto').closest('.correo-auto-box').classList.toggle('hidden', tipoCorreoActual !== 'carga');
@@ -873,7 +882,7 @@ function abrirModalCorreo(item, tipo) {
     // Estado del último envío de este registro
     const aviso = document.getElementById('correo-ultimo-envio');
     const estado = estadoCorreoDeItem(item);
-    const detalle = String(item.Estado_Correo || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const detalle = escaparHtmlCorreo(item.Estado_Correo || '');
     if (estado === 'enviado') {
         aviso.className = 'correo-aviso enviado';
         aviso.innerHTML = '<i class="fas fa-circle-check"></i> Este reporte ya se envió: ' + detalle;
@@ -889,7 +898,8 @@ function abrirModalCorreo(item, tipo) {
     const recientes = destinatariosRecientes();
     chips.innerHTML = recientes.length
         ? recientes.map(function (e) {
-            return '<button type="button" class="correo-chip" onclick="usarDestinatario(\'' + e + '\')">' + e + '</button>';
+            // Son correos tipeados a mano y guardados en el celular: se escapan igual
+            return '<button type="button" class="correo-chip" onclick="usarDestinatario(' + argJs(e) + ')">' + escaparHtmlCorreo(e) + '</button>';
           }).join('')
         : '';
 

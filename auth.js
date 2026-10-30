@@ -92,7 +92,7 @@ function obtenerUsuariosApp() {
 // Baja del Sheet la lista de usuarios y actualiza la caché local.
 function sincronizarUsuariosDesdeSheet() {
     if (typeof WEB_APP_URL === 'undefined' || !navigator.onLine || WEB_APP_URL.includes("AQUÍ_VA")) return;
-    fetch(`${WEB_APP_URL}?action=read_usuarios`)
+    fetch(urlBackend("read_usuarios"))
         .then(res => res.json())
         .then(data => {
             if (!Array.isArray(data)) return;
@@ -161,9 +161,11 @@ function leerCacheAuth() {
     catch (e) { return {}; }
 }
 
-function guardarCacheAuth(email, sal, hashVerificador, nombre) {
+// token: el de sesión que da el backend (06_acceso.gs). Se guarda acá también
+// para que quien entra sin señal siga mandando un token válido al sincronizar.
+function guardarCacheAuth(email, sal, hashVerificador, nombre, token) {
     const cache = leerCacheAuth();
-    cache[email] = { sal: sal, hash: hashVerificador, nombre: nombre || email };
+    cache[email] = { sal: sal, hash: hashVerificador, nombre: nombre || email, token: token || '' };
     try { localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(cache)); } catch (e) { }
 }
 
@@ -244,8 +246,8 @@ async function iniciarSesion(email, password) {
     if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Correo o contraseña incorrectos.' };
 
     // Login bueno: se deja la copia local para poder entrar sin señal.
-    guardarCacheAuth(emailNormalizado, perfil.salt, await hashPassword(verificador), r.nombre);
-    return abrirSesion(emailNormalizado, r.nombre || (usuarioLista && usuarioLista.nombre), false);
+    guardarCacheAuth(emailNormalizado, perfil.salt, await hashPassword(verificador), r.nombre, r.token);
+    return abrirSesion(emailNormalizado, r.nombre || (usuarioLista && usuarioLista.nombre), false, r.token);
 }
 
 async function loginOffline(email, password, usuarioLista) {
@@ -255,7 +257,7 @@ async function loginOffline(email, password, usuarioLista) {
     if (guardado && guardado.sal && guardado.hash) {
         const verificador = await derivarVerificador(password || '', guardado.sal);
         if (await hashPassword(verificador) !== guardado.hash) return generico;
-        return abrirSesion(email, guardado.nombre, false);
+        return abrirSesion(email, guardado.nombre, false, guardado.token);
     }
 
     // Nunca entró en este dispositivo. Si además es un usuario heredado, la
@@ -268,15 +270,49 @@ async function loginOffline(email, password, usuarioLista) {
     return abrirSesion(email, usuarioLista.nombre, true);
 }
 
-function abrirSesion(email, nombre, debeDefinirClave) {
+// Quien entra con la genérica no recibe token: el backend no se lo da a nadie
+// que no haya probado una contraseña personal.
+function abrirSesion(email, nombre, debeDefinirClave, token) {
     const sesion = {
         email: email,
         nombre: nombre || email,
-        loginAt: new Date().toISOString()
+        loginAt: new Date().toISOString(),
+        token: token || ''
     };
     localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sesion));
     localStorage.removeItem('usuarioBraun'); // legado del login viejo
     return { ok: true, usuario: sesion, debeDefinirClave: !!debeDefinirClave };
+}
+
+// El backend dio un token nuevo (cambio de contraseña): si es el usuario de la
+// sesión abierta, se lo cambia sin hacerlo entrar de nuevo.
+function actualizarTokenDeSesion(email, token) {
+    if (!token) return;
+    try {
+        const sesion = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null');
+        if (!sesion || sesion.email !== email) return;
+        sesion.token = token;
+        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sesion));
+    } catch (e) { }
+}
+
+// Lo que se manda en cada pedido al backend (ver enviarAlBackend y urlBackend
+// en app.js). "" si la sesión es con la genérica o anterior a los tokens.
+function tokenSesionActual() {
+    const sesion = obtenerSesion();
+    return (sesion && sesion.token) || '';
+}
+
+// El backend contestó que la sesión no está habilitada (modo "exigir" de
+// 06_acceso.gs). Lo que estaba por subir NO se pierde: queda en la cola.
+// Se avisa una sola vez cada 10 minutos para no tapar la pantalla de carteles.
+let authUltimoAvisoNoAutorizado = 0;
+function avisarSesionNoAutorizada() {
+    if (Date.now() - authUltimoAvisoNoAutorizado < 600000) return;
+    authUltimoAvisoNoAutorizado = Date.now();
+    alert('Tu sesión no está habilitada en el servidor.\n\n' +
+          'Cerrá sesión y volvé a entrar con tu contraseña personal. ' +
+          'Lo que tengas sin subir queda guardado en este dispositivo y se sube solo después.');
 }
 
 function cerrarSesionAuth() {
@@ -296,17 +332,13 @@ async function definirPasswordPropia(email, passwordActual, passwordNueva) {
     const perfil = await pedirPerfilAuth(emailNormalizado);
     if (!perfil || !perfil.existe) return { ok: false, error: 'Ese usuario no está registrado.' };
 
-    // Si ya tiene clave propia hay que probar la actual. Si no la tiene, se
-    // valida la genérica acá mismo para no dejar que otro le defina la clave.
-    let verificadorActual = '';
-    if (perfil.tieneClave) {
-        verificadorActual = await derivarVerificador(passwordActual || '', perfil.salt);
-    } else {
-        const hash = await hashPassword(passwordActual || '');
-        if (hash !== AUTH_HASH_GENERICO) {
-            return { ok: false, error: 'La contraseña actual no es correcta.' };
-        }
+    // La PRIMERA contraseña se crea con el código del correo, no acá: el
+    // backend ya no deja definirla sin esa prueba (hallazgo 3 de
+    // AUDITORIA_2026-10-30.md). La pantalla abre ese camino sola.
+    if (!perfil.tieneClave) {
+        return { ok: false, requiereCodigo: true, error: 'Para crear tu contraseña te mandamos un código a tu correo.' };
     }
+    const verificadorActual = await derivarVerificador(passwordActual || '', perfil.salt);
 
     const sal = generarSal();
     const verificador = await derivarVerificador(passwordNueva, sal);
@@ -317,9 +349,10 @@ async function definirPasswordPropia(email, passwordActual, passwordNueva) {
         salt: sal,
         verificador: verificador
     });
-    if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'No se pudo guardar la contraseña.' };
+    if (!r || !r.ok) return { ok: false, requiereCodigo: !!(r && r.requiereCodigo), error: (r && r.error) || 'No se pudo guardar la contraseña.' };
 
-    guardarCacheAuth(emailNormalizado, sal, await hashPassword(verificador), perfil.nombre);
+    guardarCacheAuth(emailNormalizado, sal, await hashPassword(verificador), perfil.nombre, r.token);
+    actualizarTokenDeSesion(emailNormalizado, r.token);
     return { ok: true };
 }
 
@@ -354,7 +387,8 @@ async function confirmarRecuperacion(email, codigo, passwordNueva) {
     if (!r || !r.ok) return r || { ok: false, error: 'No se pudo cambiar la contraseña.' };
 
     // La clave cambió: la copia local vieja ya no sirve, se reemplaza.
-    guardarCacheAuth(emailNormalizado, sal, await hashPassword(verificador), r.nombre);
+    guardarCacheAuth(emailNormalizado, sal, await hashPassword(verificador), r.nombre, r.token);
+    actualizarTokenDeSesion(emailNormalizado, r.token);
     return { ok: true, nombre: r.nombre };
 }
 

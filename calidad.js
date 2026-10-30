@@ -667,46 +667,11 @@ function normalizarRegistroCalidadRemoto(r) {
 
 // Una foto se puede mostrar si es base64 (sacada desde la app) o una URL
 // (resuelta por el Apps Script desde la ruta de AppSheet en Drive).
+// Solo http(s) o una imagen embebida: cualquier otra cosa (javascript:, etc.)
+// no se pone nunca en un src, venga de donde venga el dato.
 function esImagenRenderizable(valor) {
     if (!valor) return false;
-    const v = String(valor);
-    return v.startsWith('data:image') || v.startsWith('http');
-}
-
-// --- Lectura directa de la hoja (PLAN B, sin Apps Script) --------------------
-// Usa el endpoint gviz de Google Sheets. Solo funciona si el Sheet está
-// compartido como "Cualquiera con el enlace: Lector". Devuelve los valores
-// formateados (como se ven en la hoja), que luego pasan por el normalizador.
-const CALIDAD_SHEET_ID = "1RXqKN0EJroi5fgZlvKYTXNGMCTDCc5iTu4cNrY1tP-M";
-const CALIDAD_SHEET_NOMBRE = "Control Calidad Garbanzo";
-
-function leerCalidadDirectoDelSheet() {
-    const url = `https://docs.google.com/spreadsheets/d/${CALIDAD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(CALIDAD_SHEET_NOMBRE)}`;
-    return fetch(url)
-        .then(res => {
-            if (!res.ok) throw new Error(`El Sheet respondió ${res.status} (¿está compartido como "cualquiera con el enlace puede ver"?)`);
-            return res.text();
-        })
-        .then(texto => {
-            // La respuesta viene envuelta en google.visualization.Query.setResponse({...})
-            const inicio = texto.indexOf('{');
-            const fin = texto.lastIndexOf('}');
-            if (inicio === -1 || fin === -1) throw new Error("Respuesta gviz inválida");
-            const json = JSON.parse(texto.slice(inicio, fin + 1));
-            if (json.status === 'error') throw new Error("gviz: " + JSON.stringify(json.errors));
-
-            const cols = json.table.cols.map(c => (c.label || '').trim());
-            return json.table.rows.map(fila => {
-                const reg = {};
-                cols.forEach((nombre, i) => {
-                    if (!nombre) return;
-                    const celda = (fila.c || [])[i];
-                    // .f = valor formateado ("25,20%", "8/10/2025"); .v = valor crudo
-                    reg[nombre] = celda ? (celda.f !== undefined && celda.f !== null ? celda.f : (celda.v === null || celda.v === undefined ? '' : celda.v)) : '';
-                });
-                return reg;
-            }).filter(r => r["Id_Calidad"]);
-        });
+    return /^(data:image\/|https?:\/\/)/i.test(String(valor));
 }
 
 // Cuantas veces se reintenta antes de darse por vencido. El problema es
@@ -738,7 +703,7 @@ function cargarHistorialCalidadDesdeGoogle(intento) {
 
     // El _ que cambia en cada pedido evita que un cache intermedio (proxy,
     // navegador) devuelva la respuesta de OTRA accion.
-    const url = `${WEB_APP_URL}?action=read_calidad&_=${Date.now()}_${intento}`;
+    const url = urlBackend("read_calidad", `_=${Date.now()}_${intento}`);
 
     fetch(url)
         .then(res => res.json())
@@ -941,7 +906,7 @@ async function filtrarYRenderizarCalidad() {
         tr.onclick = () => abrirDetalleCalidad(dataString);
         const foto = [item["imagen 1"], item["imagen 2"], item["imagen 3"], item["imagen 4"]].find(esImagenRenderizable) || "";
         const miniatura = foto
-            ? `<img src="${foto}" class="thumb-historial" alt="Muestra">`
+            ? `<img src="${escapeHtml(foto)}" class="thumb-historial" alt="Muestra">`
             : `<div class="thumb-historial thumb-vacia"><i class="fas fa-seedling"></i></div>`;
         const etiquetaPendiente = item._pendienteSync
             ? `<br><span class="badge-pendiente" title="${escapeHtml('Guardado en este celular, todavía no llegó al servidor' + (item._ultimoError ? '. Último intento: ' + item._ultimoError : '')).replace(/"/g, '&quot;')}"><i class="fas fa-clock"></i> Pendiente de envío</span>`
@@ -955,10 +920,10 @@ async function filtrarYRenderizarCalidad() {
 
         tr.innerHTML = `
             <td data-label="Foto" class="td-thumb">${miniatura}</td>
-            <td data-label="Fecha" class="td-fecha">${item["Fecha Analisis"] || '-'}<span class="reg-num-movil">#${item["Id_Calidad"] || ''}</span></td>
+            <td data-label="Fecha" class="td-fecha">${escapeHtml(item["Fecha Analisis"] || '-')}<span class="reg-num-movil">#${escapeHtml(item["Id_Calidad"] || '')}</span></td>
             <td data-label="Cliente"><b>${escapeHtml(item["Cliente"] || '-')}</b>${etiquetaPendiente}</td>
             <td data-label="${etiquetaReferenciaCalidad()}">${escapeHtml(referencia)}</td>
-            <td data-label="Kg">${item["Kg"] || 0} kg</td>
+            <td data-label="Kg">${escapeHtml(String(item["Kg"] || 0))} kg</td>
             <td class="td-acciones" onclick="event.stopPropagation();">
                 <button class="btn-table-action" onclick="cargarCalidadParaEditar('${dataString}')" title="Editar control">
                     <i class="fas fa-pen" style="color:#ef6c00; font-size: 1.1rem; cursor:pointer;"></i>
@@ -1071,7 +1036,7 @@ function pintarCarpetasCalidad(controles) {
                 </div>
                 ${c.clientes.length ? `<div class="cal-carpeta-dato">Cliente: <b>${escapeHtml(resumen(c.clientes))}</b></div>` : ''}
                 ${c.lugares.length ? `<div class="cal-carpeta-dato">${etiquetaLugar}: <b>${escapeHtml(resumen(c.lugares))}</b></div>` : ''}
-                <div class="cal-carpeta-dato">${periodo}${c.kg ? ` · <b>${formatNumeroAR(c.kg, 0)} kg</b>` : ''}</div>
+                <div class="cal-carpeta-dato">${escapeHtml(periodo)}${c.kg ? ` · <b>${formatNumeroAR(c.kg, 0)} kg</b>` : ''}</div>
                 ${c.pendientes ? `<div class="cal-carpeta-dato"><span class="badge-pendiente"><i class="fas fa-clock"></i> ${c.pendientes} sin subir</span></div>` : ''}
             </button>`;
     }).join('');
@@ -1161,7 +1126,7 @@ function abrirDetalleCalidad(dataString) {
         contFotos.innerHTML = fotos.length > 0
             ? fotos.map(f => `
                 <div class="detalle-foto-box">
-                    <img src="${f.src}" alt="${f.nombre}" class="detalle-foto-img">
+                    <img src="${escapeHtml(f.src)}" alt="${f.nombre}" class="detalle-foto-img">
                     <div class="detalle-foto-label">${f.nombre}</div>
                 </div>`).join('')
             : '<p style="color: #999;">No hay fotos registradas</p>';

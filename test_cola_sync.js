@@ -120,6 +120,7 @@ function cargarCalidad() {
   vm.createContext(c);
   vm.runInContext('let historialCalidad = []; const calidadConfirmadasRecientes = new Map(); const CALIDAD_INTENTOS = 3, CALIDAD_ESPERA_MS = 1;\n' +
     ['clasificarRespuestaCalidad', 'cargarHistorialCalidadDesdeGoogle', 'calidadConfirmadaPorServidor'].map(n => extraerFuncion(fuente, n)).join('\n') +
+    '\n' + extraerFuncion(appJs, 'urlBackend') +   // la lectura arma su URL con el token (app.js)
     '\nObject.defineProperty(this, "historialCalidad", { get: () => historialCalidad, set: v => { historialCalidad = v; } });' +
     '\nthis.recientes = calidadConfirmadasRecientes;', c);
   c.leer = datos => { respuesta = datos; c.cargarHistorialCalidadDesdeGoogle(); return new Promise(r => setTimeout(r, 5)); };
@@ -138,7 +139,7 @@ function cargarFuncionesCarga() {
   };
   vm.createContext(c);
   vm.runInContext('let historialGeneral = []; const cargasConfirmadasRecientes = new Map();\n' +
-    ['cargarHistorialDesdeGoogle', 'cargaConfirmadaPorServidor'].map(n => extraerFuncion(appJs, n)).join('\n') +
+    ['cargarHistorialDesdeGoogle', 'cargaConfirmadaPorServidor', 'urlBackend'].map(n => extraerFuncion(appJs, n)).join('\n') +
     '\nObject.defineProperty(this, "historialGeneral", { get: () => historialGeneral });' +
     '\nthis.recientes = cargasConfirmadasRecientes;', c);
   c.leer = datos => { respuesta = datos; c.cargarHistorialDesdeGoogle(); return new Promise(r => setTimeout(r, 5)); };

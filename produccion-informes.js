@@ -959,7 +959,7 @@ function sincronizarInformesPendientes() {
 
 function cargarInformesDesdeGoogle() {
     if (!navigator.onLine || typeof WEB_APP_URL === 'undefined' || WEB_APP_URL.includes('AQUÍ_VA')) return;
-    fetch(`${WEB_APP_URL}?action=read_informes`)
+    fetch(urlBackend("read_informes"))
         .then(res => res.json())
         .then(data => {
             // Mismo cuidado que en Calidad y Producción: un filtro que da cero
@@ -1011,7 +1011,7 @@ async function renderListaInformes() {
         return `<div class="informe-card" onclick="abrirInformeDesdeLista(${i})">
             <div class="informe-card-top">
                 <span class="informe-tipo">${t.emoji} ${escInf(t.label)}</span>
-                <span class="informe-fecha">${fechaCortaAR(x.Fecha)}</span>
+                <span class="informe-fecha">${escInf(fechaCortaAR(x.Fecha))}</span>
             </div>
             <div class="informe-card-body">
                 <b>${escInf(x.Codigo || '')}</b>

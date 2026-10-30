@@ -124,7 +124,7 @@ function renderMuestreoActivo() {
         cont.innerHTML = pts.map((p, i) => {
             const sev = SEVERIDADES[+p.Severidad || 0] || SEVERIDADES[0];
             const foto = p.Foto
-                ? `<div class="punto-thumb" style="background-image:url('${p.Foto}')"></div>`
+                ? `<div class="punto-thumb" style="background-image:url('${escProd(p.Foto)}')"></div>`
                 : `<div class="punto-thumb sin-foto"><i class="fas fa-image"></i></div>`;
             // La coordenada no es solo texto: abre el punto en Google Maps.
             // Es la forma de "georreferenciar de verdad" sin depender de una
@@ -143,7 +143,7 @@ function renderMuestreoActivo() {
             return `<div class="punto-card" onclick="editarPunto(${i})">
                 ${foto}
                 <div class="punto-info">
-                    <div class="punto-top"><span class="punto-num">#${p.Orden || i + 1}</span><span class="sev-pill" style="background:${sev.color}">${sev.label}</span></div>
+                    <div class="punto-top"><span class="punto-num">#${escProd(String(p.Orden || i + 1))}</span><span class="sev-pill" style="background:${sev.color}">${sev.label}</span></div>
                     <div class="punto-obs">${escProd(p.Tipo_Observacion || '—')}${p.Objetivo ? ' · ' + escProd(p.Objetivo) : ''}</div>
                     ${medicion ? `<div class="punto-medicion">${escProd(medicion)}</div>` : ''}
                     <div class="punto-meta">${coord}${precision}${p.Estado_Fenologico ? ' · ' + escProd(p.Estado_Fenologico) : ''}</div>
@@ -194,7 +194,7 @@ function editarPunto(idx) {
     document.getElementById('pc-incidencia').value = valorPlanoParaEditar(p.Incidencia_pct || 0);
     document.getElementById('pc-conteo').value = valorPlanoParaEditar(p.Conteo_Valor || 0);
     document.getElementById('pc-nota').value = p.Nota || '';
-    document.getElementById('pc-foto-preview').innerHTML = p.Foto ? `<img src="${p.Foto}" alt="foto">` : '';
+    document.getElementById('pc-foto-preview').innerHTML = p.Foto ? `<img src="${escProd(p.Foto)}" alt="foto">` : '';
     renderChipsTipo();
     renderChipsSeveridad();
     const coordsEl = document.getElementById('gps-coords');
@@ -489,7 +489,7 @@ function renderMapaMuestreo() {
         const marcador = L.marker([+p.Lat, +p.Long], {
             icon: L.divIcon({
                 className: 'marcador-punto',
-                html: `<span style="background:${sev.color}">${n}</span>`,
+                html: `<span style="background:${sev.color}">${escProd(String(n))}</span>`,
                 iconSize: [30, 30], iconAnchor: [15, 15]
             })
         });
@@ -518,7 +518,8 @@ function renderMapaMuestreo() {
 }
 
 function popupPunto(p, n, sev) {
-    const foto = p.Foto ? `<img src="${p.Foto}" alt="foto del punto" class="popup-foto">` : '';
+    // La foto y el número vienen del Sheet: se escapan como el resto (hallazgo 4).
+    const foto = p.Foto ? `<img src="${escProd(p.Foto)}" alt="foto del punto" class="popup-foto">` : '';
     const filas = [
         ['Observación', [p.Tipo_Observacion, p.Objetivo].filter(Boolean).join(' · ')],
         ['Severidad', sev.label],
@@ -529,7 +530,7 @@ function popupPunto(p, n, sev) {
     ].filter(f => f[1]);
 
     return `<div class="popup-punto">
-        <div class="popup-titulo">Punto #${n}</div>
+        <div class="popup-titulo">Punto #${escProd(String(n))}</div>
         ${foto}
         ${filas.map(f => `<div class="popup-fila"><b>${escProd(f[0])}:</b> ${escProd(f[1])}</div>`).join('')}
         <div class="popup-fila popup-coord">${(+p.Lat).toFixed(6)}, ${(+p.Long).toFixed(6)}${p.Precision_m ? ` (±${Math.round(+p.Precision_m)} m)` : ''}</div>
@@ -756,7 +757,7 @@ function sincronizarMuestreosPendientes() {
 
 function cargarMuestreosDesdeGoogle() {
     if (!navigator.onLine || WEB_APP_URL.includes('AQUÍ_VA')) return;
-    fetch(`${WEB_APP_URL}?action=read_muestreos`)
+    fetch(urlBackend("read_muestreos"))
         .then(res => res.json())
         .then(data => {
             // Mismo cuidado que en Calidad (hallazgo 14): un filtro que da cero

@@ -735,9 +735,16 @@ function agenteEjecutarPlan(plan) {
 // 7. LLAMADA A LA IA (pasa por el Apps Script, que guarda la clave de Groq)
 // =========================================================================
 
+// El token de la sesión (06_acceso.gs). El agente arma sus propios POST en vez
+// de usar enviarAlBackend(), así que lo agrega a mano.
+function agenteToken() {
+    return (typeof tokenSesionActual === "function") ? tokenSesionActual() : "";
+}
+
 function agenteLlamarIA(mensajes, modoJson) {
     const cuerpo = JSON.stringify({
         _accion: "agente_consulta",
+        _token: agenteToken(),
         modelo: AGENTE_CFG.modelo,
         esfuerzo: AGENTE_CFG.esfuerzo,
         json: !!modoJson,
@@ -849,7 +856,7 @@ function agenteRegistrarConsulta(info) {
         fetch(WEB_APP_URL, {
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(Object.assign({ _accion: "log_agente" }, info))
+            body: JSON.stringify(Object.assign({ _accion: "log_agente", _token: agenteToken() }, info))
         }).catch(function () { /* el registro no molesta al usuario */ });
     } catch (e) { /* idem */ }
 }
@@ -901,7 +908,7 @@ function agenteVotar(idConsulta, voto, contenedor) {
         fetch(WEB_APP_URL, {
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({ _accion: "votar_agente", Id_Consulta: idConsulta, Voto: voto })
+            body: JSON.stringify({ _accion: "votar_agente", _token: agenteToken(), Id_Consulta: idConsulta, Voto: voto })
         }).catch(function () { });
     } catch (e) { }
 

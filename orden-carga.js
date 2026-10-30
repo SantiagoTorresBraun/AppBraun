@@ -531,7 +531,7 @@ function ocPintarTotales(totalOc, bolsasOc, porLote) {
     caja.innerHTML = claves.length === 0
         ? '<p class="oc-vacio">Todavía no hay lotes cargados.</p>'
         : claves.map(k => `<div class="oc-lote-fila">
-               <span class="oc-lote-nombre">Lote ${k}</span>
+               <span class="oc-lote-nombre">Lote ${escapeHtml(k)}</span>
                <span class="oc-lote-bolsas">${formatNumeroAR(porLote[k].bolsas, 0)} bolsas</span>
                <span class="oc-lote-kg">${formatNumeroAR(porLote[k].kg, 0)} kg</span>
            </div>`).join('');
@@ -995,7 +995,7 @@ const OC_COPIA_LOCAL = 'ordenes_carga';
 
 function ocCargarOrdenesDesdeGoogle() {
     if (!navigator.onLine) { ocRestaurarCopiaLocal(); return Promise.resolve(); }
-    return fetch(WEB_APP_URL + '?action=read_oc')
+    return fetch(urlBackend('read_oc'))
         .then(res => res.json())
         .then(data => {
             // Mismo cuidado que en Calidad y Producción (hallazgo 14): una lista
@@ -1092,19 +1092,21 @@ async function ocRenderHistorial() {
             + `<i class="fas fa-truck"></i> ${conControl}/${camiones.length}</span>`;
     };
 
+    // Todo lo que viene de la orden se escapa: llega del Sheet, y lo que se
+    // escriba ahí no puede terminar corriendo como código (hallazgo 4).
     cuerpo.innerHTML = filtradas.map(o => `<tr>
-            <td>${o.Fecha || '-'}</td>
-            <td><strong>${o.Nro_OC || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}${avance(o)}</td>
-            <td>${ocGranosDe(o) || '-'}</td>
-            <td>${o.Destino || '-'}</td>
-            <td>${o.Total_Camiones || 0}</td>
+            <td>${escapeHtml(o.Fecha) || '-'}</td>
+            <td><strong>${escapeHtml(o.Nro_OC) || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}${avance(o)}</td>
+            <td>${escapeHtml(ocGranosDe(o)) || '-'}</td>
+            <td>${escapeHtml(o.Destino) || '-'}</td>
+            <td>${escapeHtml(String(o.Total_Camiones || 0))}</td>
             <td>${formatNumeroAR(o.Total_Kg || 0, 0)} kg</td>
             <td>
-                <button type="button" class="btn-accion control" title="Hacer el Control de Transporte de un camión" onclick="ocIniciarControl('${o.Id_OC}')"><i class="fas fa-truck-loading"></i></button>
-                <button type="button" class="btn-accion pdf" title="Descargar el informe para planta" onclick="ocGenerarPDF('${o.Id_OC}')"><i class="fas fa-file-pdf"></i></button>
-                ${typeof botonCorreoHtml === 'function' ? botonCorreoHtml(o, `ocAbrirCorreo('${o.Id_OC}')`) : ''}
-                <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.Id_OC}')"><i class="fas fa-edit"></i></button>
-                <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.Id_OC}')"><i class="fas fa-trash-alt"></i></button>
+                <button type="button" class="btn-accion control" title="Hacer el Control de Transporte de un camión" onclick="ocIniciarControl(${argJs(o.Id_OC)})"><i class="fas fa-truck-loading"></i></button>
+                <button type="button" class="btn-accion pdf" title="Descargar el informe para planta" onclick="ocGenerarPDF(${argJs(o.Id_OC)})"><i class="fas fa-file-pdf"></i></button>
+                ${typeof botonCorreoHtml === 'function' ? botonCorreoHtml(o, `ocAbrirCorreo(${argJs(o.Id_OC)})`) : ''}
+                <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden(${argJs(o.Id_OC)})"><i class="fas fa-edit"></i></button>
+                <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden(${argJs(o.Id_OC)})"><i class="fas fa-trash-alt"></i></button>
             </td>
         </tr>`).join('');
 }

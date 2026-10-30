@@ -29,10 +29,10 @@
 // -------------------------------------------------------------------------
 // LO QUE ESTO **NO** ARREGLA
 // -------------------------------------------------------------------------
-// El resto del backend sigue sin pedir credenciales: quien tenga la URL del
-// Web App puede leer y escribir sin pasar por acá. Esto da contraseñas
-// personales y trazabilidad real de quién hizo qué, pero NO protege los datos.
-// Eso es el hallazgo 1 de AUDITORIA_2026-08-28.md y se arregla aparte.
+// Por sí solo, esto no protege los datos: da contraseñas personales y
+// trazabilidad. Lo que protege el resto del backend es el token de sesión que
+// se entrega al entrar (06_acceso.gs), y solo una vez que ACCESO_MODO pasa a
+// "exigir".
 // =========================================================================
 
 // Columnas que este módulo necesita en la hoja "Usuarios". Se crean solas.
@@ -146,21 +146,45 @@ function authLogin(body) {
     return respuestaAuth(generico);
   }
 
+  var email = String(body.email).trim().toLowerCase();
   return respuestaAuth({
     ok: true,
-    email: String(body.email).trim().toLowerCase(),
-    nombre: String(hoja.getRange(fila, 1).getDisplayValue() || "").trim()
+    email: email,
+    nombre: String(hoja.getRange(fila, 1).getDisplayValue() || "").trim(),
+    token: tokenParaRespuesta(email)
   });
+}
+
+// El token de sesión de 06_acceso.gs. Si no se pudo emitir (o el archivo no
+// está), el login sale bien igual: en modo "registrar" el token todavía no es
+// obligatorio, y no puede ser la razón de que alguien no entre.
+function tokenParaRespuesta(email) {
+  if (typeof emitirTokenSesion !== "function") return "";
+  try {
+    return emitirTokenSesion(email);
+  } catch (err) {
+    Logger.log("No se pudo emitir el token de sesión: " + err);
+    return "";
+  }
+}
+
+function revocarSesionesSiSePuede(email) {
+  if (typeof revocarSesionesDeUsuario !== "function") return;
+  try { revocarSesionesDeUsuario(email); }
+  catch (err) { Logger.log("No se pudieron revocar las sesiones de " + email + ": " + err); }
 }
 
 // ------------------------------------------------------------------------
 // 3. DEFINIR O CAMBIAR LA CONTRASEÑA (_accion: "auth_definir")
 // ------------------------------------------------------------------------
-// Dos caminos válidos para llegar acá:
-//   a) el usuario ya tiene clave y manda la actual (cambio voluntario);
-//   b) el usuario todavía no tiene clave (primera vez).
-// Un usuario CON clave que no manda la actual no pasa: si no, cualquiera con la
-// URL del Web App podría cambiarle la contraseña a otro.
+// Solo para CAMBIAR una contraseña que ya existe: hay que mandar la actual.
+//
+// La PRIMERA contraseña ya no se define acá. Antes un usuario sin clave podía
+// definirla sin probar nada (la genérica se validaba en el navegador), así que
+// cualquiera con la URL del Web App se quedaba con la cuenta de quien todavía
+// no la había creado (hallazgo 3 de AUDITORIA_2026-10-30.md). Ahora la
+// primera vez se hace con el código que llega al correo: auth_reset_pedir y
+// auth_reset_confirmar, el mismo camino que "Olvidé mi contraseña".
 function authDefinir(body) {
   var hoja = obtenerHojaUsuarios();
   var fila = buscarFilaUsuario(hoja, body.email);
@@ -171,17 +195,25 @@ function authDefinir(body) {
   }
 
   var actualGuardado = leerCampoUsuario(hoja, fila, COL_AUTH.verificador);
-  if (actualGuardado) {
-    if (!igualesEnTiempoConstante(sha256Hex(body.verificador_actual || ""), actualGuardado)) {
-      return respuestaAuth({ ok: false, error: "La contraseña actual no es correcta." });
-    }
+  if (!actualGuardado) {
+    return respuestaAuth({
+      ok: false, requiereCodigo: true,
+      error: "Para crear tu contraseña te mandamos un código a tu correo. Usá \"¿Olvidaste tu contraseña?\" en la pantalla de inicio."
+    });
+  }
+  if (!igualesEnTiempoConstante(sha256Hex(body.verificador_actual || ""), actualGuardado)) {
+    return respuestaAuth({ ok: false, error: "La contraseña actual no es correcta." });
   }
 
+  var email = String(body.email).trim().toLowerCase();
   escribirCampoUsuario(hoja, fila, COL_AUTH.salt, body.salt);
   escribirCampoUsuario(hoja, fila, COL_AUTH.verificador, sha256Hex(body.verificador));
   escribirCampoUsuario(hoja, fila, COL_AUTH.actualizada, fechaHoraCorreo());
   limpiarReset(hoja, fila); // un cambio de clave invalida cualquier código pendiente
-  return respuestaAuth({ ok: true });
+  // Las sesiones abiertas con la clave vieja (en otro celular, o de alguien
+  // que la conocía) se cortan; la de quien la cambió sigue con un token nuevo.
+  revocarSesionesSiSePuede(email);
+  return respuestaAuth({ ok: true, token: tokenParaRespuesta(email) });
 }
 
 // ------------------------------------------------------------------------
@@ -266,11 +298,13 @@ function authResetConfirmar(body) {
   escribirCampoUsuario(hoja, fila, COL_AUTH.verificador, sha256Hex(body.verificador));
   escribirCampoUsuario(hoja, fila, COL_AUTH.actualizada, fechaHoraCorreo());
   limpiarReset(hoja, fila); // el código es de un solo uso
+  revocarSesionesSiSePuede(email);
 
   return respuestaAuth({
     ok: true,
     email: email,
-    nombre: String(hoja.getRange(fila, 1).getDisplayValue() || "").trim()
+    nombre: String(hoja.getRange(fila, 1).getDisplayValue() || "").trim(),
+    token: tokenParaRespuesta(email)
   });
 }
 
@@ -282,7 +316,7 @@ function enviarMailRecuperacion(email, nombre, codigo) {
     '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">' +
       '<div style="background:#b71c1c;color:#fff;padding:16px 22px;font-size:17px;font-weight:bold">App Braun — Recuperar contraseña</div>' +
       '<div style="padding:22px;color:#333">' +
-        '<p style="margin-top:0">Hola' + (nombre ? ' <b>' + nombre + '</b>' : '') + ',</p>' +
+        '<p style="margin-top:0">Hola' + (nombre ? ' <b>' + escaparHtmlCorreo(nombre) + '</b>' : '') + ',</p>' +
         '<p>Pediste cambiar tu contraseña de App Braun. Este es tu código:</p>' +
         '<p style="text-align:center;margin:26px 0">' +
           '<span style="display:inline-block;background:#f5f5f7;border:2px dashed #b71c1c;border-radius:8px;' +

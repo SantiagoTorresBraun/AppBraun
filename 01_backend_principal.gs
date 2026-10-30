@@ -113,6 +113,16 @@ function doPost(e) {
 
     var accion = data._accion || "guardar";
 
+    // ==================== CONTROL DE ACCESO (06_acceso.gs) ====================
+    // Por defecto en modo "registrar": valida el token pero no rechaza a nadie.
+    // Si 06_acceso.gs no está en el proyecto, se sigue como antes en vez de
+    // romper todo el backend.
+    var acceso = (typeof controlarAcceso === "function")
+      ? controlarAcceso(accion, data._token, data.usuario_registro)
+      : { email: "", rechazo: null };
+    if (acceso.rechazo) return acceso.rechazo;
+    delete data._token; // el token no se escribe nunca en ninguna hoja
+
     // ==================== NUEVO: CONTROL DE CALIDAD ====================
     // Editar los Kg de descarga desde el modulo de Contratos: toca UNA celda,
     // sin pasar por "actualizar" (que borra la carga entera y la reinserta).
@@ -182,7 +192,7 @@ function doPost(e) {
     // Lo usa correo.js como plan B cuando no puede mandar el mail desde el Gmail
     // del usuario. NO vuelve a guardar el registro: solo manda el correo (con el
     // PDF que arma el navegador) y deja constancia en la columna Estado_Correo.
-    if (accion === "enviar_correo_reporte") return enviarReportePorCorreo(data);
+    if (accion === "enviar_correo_reporte") return enviarReportePorCorreo(data, acceso.email);
 
     // El correo salió desde el Gmail del usuario: solo hay que anotar el estado.
     if (accion === "actualizar_estado_correo") return actualizarEstadoCorreoDeCarga(data);
@@ -460,10 +470,20 @@ function claveEnvioCorreo(data) {
   return "mail_" + hash;
 }
 
-function enviarReportePorCorreo(data) {
+// emailAutenticado: el dueño del token de sesión (06_acceso.gs), o "" si el
+// pedido llegó sin token válido (posible solo en modo "registrar").
+function enviarReportePorCorreo(data, emailAutenticado) {
   // Se valida ANTES de tocar el antiduplicado: si falta el destinatario no hubo
   // envío, y no hay que dejar una marca que después bloquee el reintento bueno.
   if (!data.Correo) return respuestaErrorCorreo("Falta el correo del destinatario");
+  if (typeof problemaDelCorreo === "function") {
+    var problema = problemaDelCorreo(data);
+    if (problema) return respuestaErrorCorreo(problema);
+  }
+  // Las respuestas van a quien mandó el reporte de verdad, no a lo que diga el
+  // pedido. La app ya manda su propio correo acá; esto solo cierra el desvío.
+  if (emailAutenticado) data.Correo_Reply_To = emailAutenticado;
+  data._emailAutenticado = emailAutenticado || "";
 
   var cache = CacheService.getScriptCache();
   var clave = claveEnvioCorreo(data);
@@ -525,6 +545,9 @@ function enviarReportePorCorreoInterno(data) {
       : ("Reporte de control de carga " + (data.Id_Carga || "") + ". El detalle completo va en el PDF adjunto.");
 
     MailApp.sendEmail(data.Correo, asunto, cuerpoTexto, opciones);
+
+    // Constancia de quién lo mandó y a quién (06_acceso.gs). No lanza errores.
+    if (typeof registrarCorreoEnviado === "function") registrarCorreoEnviado(data, data._emailAutenticado);
 
     // A PARTIR DE ACÁ EL CORREO YA SALIÓ Y NO SE PUEDE DESHACER.
     // Por eso dejar la constancia en la planilla va en su propio try: si falla
@@ -631,6 +654,14 @@ function respuestaErrorCorreo(mensaje) {
 // ========================================================
 function doGet(e) {
   try {
+    // ==================== CONTROL DE ACCESO (06_acceso.gs) ====================
+    // Igual que en doPost. Sin ?action es la lectura del historial de cargas.
+    var parametros = (e && e.parameter) || {};
+    var acceso = (typeof controlarAcceso === "function")
+      ? controlarAcceso(parametros.action || "read", parametros._token, "")
+      : { email: "", rechazo: null };
+    if (acceso.rechazo) return acceso.rechazo;
+
     // ==================== NUEVO: CONTROL DE CALIDAD ====================
     // Si la app pide ?action=read_calidad, respondemos la hoja de calidad
     // y NO el historial de cargas.
@@ -1583,7 +1614,7 @@ function crearTicket(body) {
       body.correo_responsable,
       "Nuevo ticket de " + (body.nombre_solicitante || "un solicitante") + " [" + (body.prioridad || "Baja") + "]",
       "Nuevo Ticket Asignado",
-      "<b>" + (body.nombre_solicitante || "") + "</b> te asignó un ticket. Estos son los datos:",
+      "<b>" + escaparHtmlCorreo(body.nombre_solicitante || "") + "</b> te asignó un ticket. Estos son los datos:",
       body,
       body.correo_solicitante,
       body.archivo_adjunto
@@ -1644,7 +1675,7 @@ function responderTicket(body) {
       actual.correo_solicitante,
       "Respuesta a tu ticket — " + (actual.id_ticket || ""),
       "Tu Ticket Tiene Respuesta",
-      "<b>" + (actual.responsable_asignado || "El responsable") + "</b> respondió tu ticket:",
+      "<b>" + escaparHtmlCorreo(actual.responsable_asignado || "El responsable") + "</b> respondió tu ticket:",
       actual,
       actual.correo_responsable,
       null
@@ -1747,12 +1778,23 @@ function eliminarUsuario(body) {
 
 // Correo HTML institucional. replyTo apunta a la contraparte para que
 // "Responder" del cliente de correo también funcione como canal directo.
+// Los campos del ticket los escribe cualquiera que lo cree, y este correo sale
+// desde la cuenta de Braun: sin escapar, se podía meter HTML (un link falso, un
+// formulario) en un mail legítimo (hallazgo 4 de AUDITORIA_2026-10-30.md).
+function escaparHtmlCorreo(texto) {
+  return String(texto === undefined || texto === null ? "" : texto)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjuntoBase64) {
   try {
     var colorPrio = t.prioridad === "Alta" ? "#c62828" : (t.prioridad === "Media" ? "#ef6c00" : "#2e7d32");
-    var filaHtml = function (et, val) {
+    // val va escapado; valHtml es para las celdas que arma este mismo código.
+    var filaHtml = function (et, val, valHtml) {
+      var celda = valHtml !== undefined ? valHtml : escaparHtmlCorreo(val || "-");
       return '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777;white-space:nowrap">' + et + '</td>' +
-             '<td style="padding:6px 10px;border-bottom:1px solid #eee;color:#333">' + (val || "-") + '</td></tr>';
+             '<td style="padding:6px 10px;border-bottom:1px solid #eee;color:#333">' + celda + '</td></tr>';
     };
     var fechaLegible = "";
     try { fechaLegible = Utilities.formatDate(new Date(t.fecha_creacion), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"); } catch (e) { fechaLegible = t.fecha_creacion || ""; }
@@ -1765,13 +1807,13 @@ function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjun
           '<table style="border-collapse:collapse;width:100%;font-size:14px">' +
             filaHtml("Ticket", t.id_ticket) +
             filaHtml("Fecha", fechaLegible) +
-            filaHtml("Solicitante", (t.nombre_solicitante || "") + " &lt;" + (t.correo_solicitante || "") + "&gt;") +
+            filaHtml("Solicitante", (t.nombre_solicitante || "") + " <" + (t.correo_solicitante || "") + ">") +
             filaHtml("Responsable", t.responsable_asignado) +
-            filaHtml("Prioridad", '<span style="background:' + colorPrio + ';color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:bold">' + (t.prioridad || "Baja") + '</span>') +
+            filaHtml("Prioridad", "", '<span style="background:' + colorPrio + ';color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:bold">' + escaparHtmlCorreo(t.prioridad || "Baja") + '</span>') +
             filaHtml("Estado", t.estado_ticket) +
             filaHtml("Detalle", t.detalle_solicitud) +
           '</table>' +
-          (t.respuesta ? '<div style="background:#f5f5f5;border-left:4px solid #a31e1e;padding:10px 14px;margin-top:14px"><b>Respuesta:</b><br>' + t.respuesta + '</div>' : '') +
+          (t.respuesta ? '<div style="background:#f5f5f5;border-left:4px solid #a31e1e;padding:10px 14px;margin-top:14px"><b>Respuesta:</b><br>' + escaparHtmlCorreo(t.respuesta) + '</div>' : '') +
           '<p style="text-align:center;margin:24px 0 8px">' +
             '<a href="' + URL_APP_TICKETERA + '#/ticketera" style="background:#a31e1e;color:#ffffff;padding:11px 28px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir Ticketera</a>' +
           '</p>' +

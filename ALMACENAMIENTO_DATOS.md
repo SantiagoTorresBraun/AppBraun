@@ -73,7 +73,7 @@ del Drive y la cuenta que autorizó el Apps Script.
 ## 3. Google Sheet — hojas y qué guarda cada una
 
 **ID del Sheet conocido**: `1RXqKN0EJroi5fgZlvKYTXNGMCTDCc5iTu4cNrY1tP-M`
-(constante `CALIDAD_SHEET_ID` en [calidad.js:494](calidad.js#L494))
+(antes estaba en la constante `CALIDAD_SHEET_ID` de `calidad.js`; se quitó el 30/10/2026 junto con `leerCalidadDirectoDelSheet()`, que leía el Sheet directo, sin pasar por el backend, y nadie usaba)
 → `https://docs.google.com/spreadsheets/d/1RXqKN0EJroi5fgZlvKYTXNGMCTDCc5iTu4cNrY1tP-M`
 
 | Hoja | Qué guarda | Escrita por | Definida en |

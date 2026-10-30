@@ -28,6 +28,9 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v26: seguridad (AUDITORIA_2026-10-30.md): token de sesión en cada pedido,
+// la primera contraseña con código por correo y escape contra XSS (app.js,
+// auth.js, agente.js, calidad.js, correo.js, orden-carga.js, produccion*.js).
 // v25: la Orden de Carga se manda por correo como el reporte de Transporte
 // (correo.js, orden-carga.js e index.html).
 // v24: enganche Orden de Carga → Control de Transporte (app.js, orden-carga.js,
@@ -50,7 +53,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v25';
+const VERSION = 'v26';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
