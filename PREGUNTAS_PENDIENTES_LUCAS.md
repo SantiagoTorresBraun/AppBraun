@@ -27,7 +27,11 @@ o simplemente *avisar*. Si la diferencia es real (balanza, tara, redondeo), son
 dos datos distintos y hay que guardar los dos. Si fue un error de tipeo, la app
 debería frenarlo antes de que salga el camión.
 
-SI PUEDE NO COINCIDIR
+SI PUEDE NO COINCIDIR y ESO ESTA BIEN
+
+> ✅ **Resuelto.** Son dos datos distintos y se guardan los dos: el peso neto
+> declarado de la CP y la suma de los lotes. Si no coinciden, la app **avisa y
+> no bloquea**: la orden se guarda igual.
 
 ### 1.2. ¿La orden se arma contra un objetivo de kilos?
 
@@ -39,14 +43,24 @@ los camiones, y avisar si se pasa.
 
 LOS KILOS DE LA ORDEN DAN EXACTO POR QUE SE CARGA RESPECTO A BOLSAS PERO SI VA A TENER DIFERENCIA CON LOS PESOS DE LA BALANZA
 
+> ✅ **Resuelto (16/10).** No hay objetivo de kilos: la orden se arma por
+> bolsas, y los kilos reales los da la balanza. Se sacó el campo "objetivo de
+> kg" y el "faltan X kg".
+
 ### 1.3. Los "Kg Descarga", ¿quién los carga y cuándo?
 
 **Por qué preguntamos:** hoy es un campo del Control de Transporte, pero el dato
 llega después, desde el destino. Queremos saber si lo carga la misma persona de
 planta más tarde, o alguien de oficina cuando le avisan del destino.
 
----
 SE CARGA EN OTRO MOMENTO LO CARGA OTRO OPERARIO Y SON LOS KG DE BALANZA DESTINO
+
+> ✅ **Resuelto.** No viene de la Orden de Carga. Se carga después, desde el
+> módulo de **Contratos** (editar Kg de descarga), sin tener que abrir y
+> regrabar el control entero.
+
+---
+
 ## 2. Contratos
 
 ### ⭐ 2.1. `CN26-063`, el del nombre del archivo, ¿qué contrato es?
@@ -309,7 +323,7 @@ NO CAMBIA
 
 ## Resumen de lo que frena el desarrollo ahora
 
-1. **1.1** — los 20 kg de diferencia entre el peso declarado y la suma de los lotes
+1. ~~**1.1** — los 20 kg de diferencia entre el peso declarado y la suma de los lotes~~ ✅ puede no coincidir: se avisa, no se bloquea
 2. **2.1** — qué contrato es `CN26-063`
 3. **3.1** — qué campos vienen de la OC y qué carga la planta
 4. **9.1 y 9.2** (Control de Calidad) — si el contrato es obligatorio, y cómo se

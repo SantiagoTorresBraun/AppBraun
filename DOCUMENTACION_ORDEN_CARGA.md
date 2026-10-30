@@ -169,13 +169,14 @@ solo campo `N° de Lote`.
 La primera CP declara 26.695 kg pero sus lotes suman 26.715 — **20 kg de
 diferencia**. Las otras tres cierran exacto.
 
-**Pendiente:** ¿es la balanza (y entonces es un campo independiente que puede
-diferir) o es un error de tipeo que la app debería impedir?
+**Confirmado por Lucas:** puede no coincidir y está bien. Son dos datos
+distintos y se guardan los dos; la app avisa la diferencia pero no bloquea.
 
 ### La OC cierra en número redondo
 
-75.000 kg exactos, 3.000 bolsas de 25 kg. Sugiere que se arma contra un objetivo
-de kg, y que convendría mostrar "cargaste 75.000 de 75.000, faltan 0".
+75.000 kg exactos, 3.000 bolsas de 25 kg. **No es un objetivo:** da exacto
+porque se carga por bolsas, y los kilos reales los da la balanza (ver el sexto
+incremento).
 
 ### El CTG se completa después
 
