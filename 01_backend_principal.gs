@@ -187,6 +187,7 @@ function doPost(e) {
     // El correo salió desde el Gmail del usuario: solo hay que anotar el estado.
     if (accion === "actualizar_estado_correo") return actualizarEstadoCorreoDeCarga(data);
     if (accion === "actualizar_estado_correo_calidad") return actualizarEstadoCorreoDeCalidad(data);
+    if (accion === "actualizar_estado_correo_oc") return actualizarEstadoCorreoDeOC(data);   // 05_orden_carga.gs
     // ==========================================================================
 
     // accion === "guardar" (caso normal, registro nuevo de Control de Carga).
@@ -449,7 +450,7 @@ var VENTANA_ANTIDUPLICADO_CORREO_SEG = 300;
 function claveEnvioCorreo(data) {
   var partes = [
     data.Tipo_Reporte || "carga",
-    data.Id_Carga || data.Id_Calidad || "",
+    data.Id_Carga || data.Id_Calidad || data.Id_OC || "",
     String(data.Correo || "").trim().toLowerCase(),
     String(data.Correo_Asunto || "")
   ].join("|");
@@ -535,6 +536,8 @@ function enviarReportePorCorreoInterno(data) {
       var estado = data.Estado_Correo || ("Enviado " + fechaHoraCorreo() + " a " + data.Correo + " (vía app)");
       if (data.Tipo_Reporte === "calidad") {
         marcarEstadoCorreoCalidad(data.Id_Calidad, data.Grano, data.Correo, estado);
+      } else if (data.Tipo_Reporte === "oc") {
+        marcarEstadoCorreoOC(data.Id_OC, data.Correo, estado);   // 05_orden_carga.gs
       } else {
         marcarEstadoCorreo(data.Id_Carga, data.Correo, estado);
       }

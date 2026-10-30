@@ -104,6 +104,12 @@ function estadoCorreoDeItem(item) {
 
 // Botón de sobre para la columna "Acciones" del historial (de cualquier módulo).
 function botonCorreoHistorialHtml(item, dataString, tipo) {
+    return botonCorreoHtml(item, 'abrirModalCorreoDesdeTabla(\'' + dataString + '\', \'' + (tipo || 'carga') + '\')');
+}
+
+// El mismo sobre, con el onclick que necesite cada módulo (la Orden de Carga
+// abre el modal por su Id_OC, no por la libreta del historial).
+function botonCorreoHtml(item, onclick) {
     const estado = estadoCorreoDeItem(item);
     const limpio = function (t) { return String(t || '').replace(/["<>&]/g, ' '); };
     const config = {
@@ -111,7 +117,7 @@ function botonCorreoHistorialHtml(item, dataString, tipo) {
         error:     { icono: 'fa-envelope-open-text',    color: '#c62828', titulo: limpio(item.Estado_Correo) || 'El último envío falló — tocá para reintentar' },
         pendiente: { icono: 'fa-envelope',              color: '#5f6368', titulo: 'Enviar reporte por correo' }
     }[estado];
-    return '<button class="btn-table-action btn-correo-' + estado + '" onclick="abrirModalCorreoDesdeTabla(\'' + dataString + '\', \'' + (tipo || 'carga') + '\')" title="' + config.titulo + '">'
+    return '<button type="button" class="btn-table-action btn-correo-' + estado + '" onclick="' + onclick + '" title="' + config.titulo + '">'
          +     '<i class="fas ' + config.icono + '" style="color:' + config.color + '; font-size:1.15rem; cursor:pointer;"></i>'
          + '</button>';
 }
@@ -160,7 +166,8 @@ const REPORTES_CORREO = {
                 ['N° de registro', item.Id_Carga]
             ];
         },
-        pieAdjunto: 'Se adjunta el reporte completo en PDF (verificaciones, firmas y el registro fotográfico del control).'
+        pieAdjunto: 'Se adjunta el reporte completo en PDF (verificaciones, firmas y el registro fotográfico del control).',
+        notaDatos: 'los datos generales de la carga (fecha, producto, contrato, chofer, patentes, kilos y estatus)'
     },
 
     calidad: {
@@ -212,9 +219,66 @@ const REPORTES_CORREO = {
                 ['N° de registro', item['Id_Calidad']]
             ];
         },
-        pieAdjunto: 'Se adjunta el reporte completo en PDF (calibres, defectos, gráficos y fotos de la muestra).'
+        pieAdjunto: 'Se adjunta el reporte completo en PDF (calibres, defectos, gráficos y fotos de la muestra).',
+        notaDatos: 'los datos generales del análisis (fecha, grano, lote, contratos, humedad y totales)'
+    },
+
+    // La Orden de Carga: la oficina se la manda a planta o al responsable de
+    // campo (Lucas, punto 8.3). El PDF es el mismo del botón de descarga.
+    oc: {
+        etiqueta: 'Orden de Carga',
+        campoId: 'Id_OC',
+        accionEstado: 'actualizar_estado_correo_oc',
+        generarPdf: function (dataString) {
+            return ocGenerarPDF(JSON.parse(decodeURIComponent(escape(atob(dataString)))), 'blob');
+        },
+        asunto: function (item) {
+            const granos = (typeof ocGranosDe === 'function') ? ocGranosDe(item) : '';
+            return ['Orden de Carga N° ' + (item.Nro_OC || ''), granos, item.Destino, item.Fecha]
+                .map(function (p) { return String(p || '').trim(); }).filter(Boolean).join(' — ');
+        },
+        introMensaje: function (item) {
+            const camiones = (item.Camiones || []).length;
+            return 'Te envío la orden de carga N° ' + (item.Nro_OC || '') + ' del ' + (item.Fecha || 'día de la fecha')
+                 + (camiones ? ', con ' + camiones + (camiones === 1 ? ' camión' : ' camiones') : '') + '.\n'
+                 + 'En el PDF adjunto está cada camión con sus cartas de porte y los lotes a cargar.';
+        },
+        filas: function (item) {
+            const numero = function (v) { return (typeof formatNumeroAR === 'function') ? formatNumeroAR(v || 0, 0) : (v || 0); };
+            const camiones = (item.Camiones || []).map(function (c, i) {
+                return 'Camión ' + (i + 1) + (c.dominio_camion ? ' (' + c.dominio_camion + ')' : '');
+            }).join(', ');
+            return [
+                ['N° de orden', item.Nro_OC],
+                ['Fecha', item.Fecha],
+                ['Grano', (typeof ocGranosDe === 'function') ? ocGranosDe(item) : item.Especie],
+                ['Destino', item.Destino],
+                ['Titular de la carta de porte', item.Titular_CP],
+                ['Camiones', camiones],
+                ['Total de bolsas', numero(item.Total_Bolsas)],
+                ['Total Kg', numero(item.Total_Kg) + ' kg'],
+                ['Observaciones', item.Observaciones],
+                ['N° de registro', item.Id_OC]
+            ];
+        },
+        pieAdjunto: 'Se adjunta la orden completa en PDF (cada camión, sus cartas de porte y los lotes a cargar).',
+        notaDatos: 'los datos generales de la orden (número, fecha, grano, destino, camiones y totales)'
     }
 };
+
+// Dónde vive cada tipo de reporte en este dispositivo: la lista en memoria del
+// módulo, el almacén de la cola local y cómo se repinta su historial.
+function listaEnMemoriaDe(tipo) {
+    if (tipo === 'calidad') return (typeof historialCalidad !== 'undefined') ? historialCalidad : null;
+    if (tipo === 'oc') return (typeof ocHistorialRemoto !== 'undefined') ? ocHistorialRemoto : null;
+    return (typeof historialGeneral !== 'undefined') ? historialGeneral : null;
+}
+
+function almacenLocalDe(tipo) {
+    if (tipo === 'calidad') return 'controles_calidad';
+    if (tipo === 'oc') return 'ordenes_carga';
+    return 'controles_carga';
+}
 
 function reporteDe(tipo) {
     return REPORTES_CORREO[tipo] || REPORTES_CORREO.carga;
@@ -514,6 +578,7 @@ function enviarConBackend(datos) {
         Tipo_Reporte: datos.tipo || 'carga',
         Id_Carga: datos.idCarga,
         Id_Calidad: datos.idCarga,
+        Id_OC: datos.idCarga,
         Grano: datos.grano || '',
         Correo: datos.para,
         Correo_Cc: datos.cc || '',
@@ -697,13 +762,16 @@ async function registrarEstadoCorreo(item, tipo, correo, estado, via) {
     item.Correo = correo;
     item.Estado_Correo = estado;
 
-    // El envío por backend ya actualiza la planilla del lado del servidor.
-    if (via !== 'backend' && !item._pendienteSync) {
+    // El envío por backend ya actualiza la planilla del lado del servidor. Lo que
+    // todavía no subió (control o orden pendiente) no está en la planilla: la
+    // constancia viaja en la cola local y llega con él.
+    if (via !== 'backend' && !item._pendienteSync && !item._pendiente) {
         try {
             await enviarAlBackend({
                 _accion: reporte.accionEstado,
                 Id_Carga: id,          // Control de Carga
                 Id_Calidad: id,        // Control de Calidad
+                Id_OC: id,             // Orden de Carga
                 Grano: item.Grano || '',
                 Correo: correo,
                 Estado_Correo: estado
@@ -714,9 +782,7 @@ async function registrarEstadoCorreo(item, tipo, correo, estado, via) {
     }
 
     // Lista en memoria del módulo que corresponda
-    const listaEnMemoria = (tipo === 'calidad')
-        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
-        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    const listaEnMemoria = listaEnMemoriaDe(tipo);
     if (Array.isArray(listaEnMemoria)) {
         const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
         if (enMemoria) { enMemoria.Correo = correo; enMemoria.Estado_Correo = estado; }
@@ -724,7 +790,7 @@ async function registrarEstadoCorreo(item, tipo, correo, estado, via) {
 
     actualizarEstadoCorreoEnColaLocal(tipo, id, correo, estado);
 
-    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo === 'carga') {
         sincronizarEstadoCorreoFormulario(id, correo, estado);
     }
     repintarHistorial(tipo);
@@ -733,6 +799,8 @@ async function registrarEstadoCorreo(item, tipo, correo, estado, via) {
 function repintarHistorial(tipo) {
     if (tipo === 'calidad') {
         if (typeof filtrarYRenderizarCalidad === 'function') filtrarYRenderizarCalidad();
+    } else if (tipo === 'oc') {
+        if (typeof ocRenderHistorial === 'function') ocRenderHistorial();
     } else if (typeof filtrarYRenderizarTabla === 'function') {
         filtrarYRenderizarTabla();
     }
@@ -741,7 +809,8 @@ function repintarHistorial(tipo) {
 function actualizarEstadoCorreoEnColaLocal(tipo, id, correo, estado) {
     if (!db || !id) return;
     const reporte = reporteDe(tipo);
-    const almacen = (tipo === 'calidad') ? 'controles_calidad' : 'controles_carga';
+    const almacen = almacenLocalDe(tipo);
+    if (!db.objectStoreNames.contains(almacen)) return;
     try {
         const store = db.transaction([almacen], 'readwrite').objectStore(almacen);
         store.openCursor().onsuccess = function (e) {
@@ -783,6 +852,8 @@ function abrirModalCorreo(item, tipo) {
     const reporte = reporteDe(tipoCorreoActual);
 
     document.getElementById('correo-titulo').textContent = 'Enviar reporte de ' + reporte.etiqueta;
+    const nota = document.getElementById('correo-nota-datos');
+    if (nota) nota.textContent = 'Debajo del mensaje se agregan automáticamente ' + reporte.notaDatos + '.';
     document.getElementById('correo-de').textContent = nombreUsuarioActual() + ' <' + usuarioRegistroActual() + '>';
     document.getElementById('correo-para').value = item.Correo || '';
     document.getElementById('correo-cc').value = '';
@@ -794,7 +865,7 @@ function abrirModalCorreo(item, tipo) {
         '<i class="fas fa-file-pdf"></i> ' + nombreArchivoPdf(item, tipoCorreoActual);
 
     // El envío automático al guardar hoy existe solo en Control de Carga
-    document.getElementById('correo-auto').closest('.correo-auto-box').classList.toggle('hidden', tipoCorreoActual === 'calidad');
+    document.getElementById('correo-auto').closest('.correo-auto-box').classList.toggle('hidden', tipoCorreoActual !== 'carga');
     document.getElementById('correo-via').textContent = gmailConfigurado()
         ? 'El correo sale desde tu Gmail y queda en tu carpeta Enviados.'
         : 'El correo sale desde la app, con tu nombre y "Responder a" tu correo.';
@@ -853,6 +924,7 @@ function nombreArchivoPdf(item, tipo) {
         const grano = (typeof nombreGranoCalidad === 'function') ? nombreGranoCalidad(item.Grano) : (item.Grano || '');
         return 'Calidad_' + String(grano).replace(/\s+/g, '_') + '_' + (item['Fecha Analisis'] || '') + '_' + (item['Id_Calidad'] || '') + '.pdf';
     }
+    if (tipo === 'oc') return 'Orden_de_Carga_' + (item.Nro_OC || 'Braun') + '.pdf';
     return 'Reporte_Carga_' + (item.Tipo_Carga || 'PT') + '_' + (item.Id_Carga || 'Braun') + '.pdf';
 }
 
@@ -945,16 +1017,14 @@ function marcarEnvioSinConfirmar(item, tipo, para) {
     item.Correo = para;
     item.Estado_Correo = estado;
 
-    const listaEnMemoria = (tipo === 'calidad')
-        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
-        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    const listaEnMemoria = listaEnMemoriaDe(tipo);
     if (Array.isArray(listaEnMemoria)) {
         const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
         if (enMemoria) { enMemoria.Correo = para; enMemoria.Estado_Correo = estado; }
     }
 
     actualizarEstadoCorreoEnColaLocal(tipo, id, para, estado);
-    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo === 'carga') {
         sincronizarEstadoCorreoFormulario(id, para, estado);
     }
     repintarHistorial(tipo);
@@ -966,16 +1036,14 @@ function marcarErrorCorreo(item, tipo, para, error) {
     const estado = ('Error ' + fechaHoraCorta() + ': ' + ((error && error.message) || 'no se pudo enviar')).substring(0, 180);
     item.Estado_Correo = estado;
 
-    const listaEnMemoria = (tipo === 'calidad')
-        ? (typeof historialCalidad !== 'undefined' ? historialCalidad : null)
-        : (typeof historialGeneral !== 'undefined' ? historialGeneral : null);
+    const listaEnMemoria = listaEnMemoriaDe(tipo);
     if (Array.isArray(listaEnMemoria)) {
         const enMemoria = listaEnMemoria.find(r => r[reporte.campoId] === id);
         if (enMemoria) enMemoria.Estado_Correo = estado;
     }
 
     actualizarEstadoCorreoEnColaLocal(tipo, id, item.Correo || para, estado);
-    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo !== 'calidad') {
+    if (typeof sincronizarEstadoCorreoFormulario === 'function' && tipo === 'carga') {
         sincronizarEstadoCorreoFormulario(id, item.Correo || para, estado);
     }
     repintarHistorial(tipo);

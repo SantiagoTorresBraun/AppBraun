@@ -6,6 +6,13 @@ los que puede salir, por qué llegaban duplicados, y qué protege cada capa.
 Código: [correo.js](correo.js) (frontend) y `enviarReportePorCorreo()` en
 [01_backend_principal.gs](01_backend_principal.gs) (backend).
 
+Se mandan tres tipos de reporte por el mismo motor, cada uno descripto en
+`REPORTES_CORREO`: **Control de Transporte** (`carga`), **Control de Calidad**
+(`calidad`) y **Orden de Carga** (`oc`, desde el 30/10/2026). Cada tipo deja
+la constancia en su propia hoja (`Orden`, la de calidad de su grano, y
+`Orden_Carga`). Sumar otro es agregar una entrada ahí, con su PDF en modo
+`'blob'`, y su constancia en el backend.
+
 ---
 
 ## 1. Los dos caminos de salida

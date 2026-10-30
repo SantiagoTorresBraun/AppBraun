@@ -2,7 +2,8 @@
 
 > Estado: **la orden se guarda en el Sheet, genera su PDF para planta, los
 > datos se eligen en vez de escribirse, y cada camión arranca su Control de
-> Transporte ya completo** (séptimo incremento). Falta mandar la OC por correo.
+> Transporte ya completo** (séptimo incremento). La orden se manda por correo
+> igual que el reporte de Transporte (octavo incremento).
 > Fuentes: `Propuesta nuevas vinculaciones.docx` y el Excel real
 > `CN26-063 Orden de Carga 14-7.xlsx` (OC 2056, 14/07).
 > Última actualización: 30/10/2026.
@@ -552,8 +553,31 @@ historiales), así planta puede arrancar el control desde la orden en el silo.
   chofer, guardar, ver la orden en 2/2, intentar de nuevo el camión 1 (abre el
   existente), detalle, desvincular, MP sin el bloque, y sin señal.
 
+### La orden por correo — octavo incremento (30/10/2026)
+
+Lucas (punto 8.3): la orden la manda un operario de Braun a planta o al
+responsable de campo, en PDF. Ahora sale **por el mismo camino que el reporte de
+Control de Transporte** ([DOCUMENTACION_CORREO.md](DOCUMENTACION_CORREO.md)): el
+mismo modal, desde el Gmail del usuario o, si no se puede, desde el backend con
+su nombre; la misma guarda contra duplicados; y el mismo sobre en el historial
+(gris sin enviar, verde enviado, rojo si falló).
+
+- **Desde el historial:** el sobre de cada orden abre el modal con el asunto
+  ("Orden de Carga N° 2056 — Poroto Mung — CAP. CORTES — 2026-10-30"), el
+  mensaje y el PDF de la orden adjunto (el mismo del botón de descarga).
+- **Al guardar una orden:** con señal pregunta "¿La mandás por correo ahora?";
+  sin señal ofrece el PDF, como antes.
+- **Constancia:** `Orden_Carga` suma `Correo` y `Estado_Correo` al final (se
+  crean solas). Editar la orden no las pierde: la app las vuelve a mandar.
+- No hay "envío automático al guardar": eso es propio de Transporte.
+- Código: entrada `oc` de `REPORTES_CORREO` en `correo.js`;
+  `ocGenerarPDF(orden, 'blob')` y `ocAbrirCorreo()` en `orden-carga.js`;
+  `marcarEstadoCorreoOC()` y `actualizarEstadoCorreoDeOC()` en `05_orden_carga.gs`.
+- Pruebas: sección 6 de `test_enganche_oc.js`, y el recorrido en Chrome con
+  `prueba_local.mjs`, que en modo prueba **no manda ningún correo real** (apaga
+  Gmail y el backend simulado solo lo anota).
+
 ## 9. Lo que sigue
 
-1. **Mandar la OC por correo** (Lucas, punto 8.3): hoy el PDF solo se descarga.
-2. Datos maestros de verdad, si existen en algún lado: hoy las listas se arman
+1. Datos maestros de verdad, si existen en algún lado: hoy las listas se arman
    solas con lo ya cargado (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 7.1).

@@ -213,7 +213,7 @@ corresponda y listo.
 
 | Hoja | Columnas |
 |---|---|
-| `Orden_Carga` | Id_OC, Nro_OC, Fecha, Contrato_Encabeza, Especie, Cosecha, Titular_CP, Remitente_Productor, Remitente_Venta, Destinatario(+CUIT), Destino(+CUIT, Planta, Direccion, Localidad, Provincia), Flete_Intermediario(+CUIT), Flete_Pagador(+CUIT), Objetivo_Kg, Observaciones, Total_Camiones, Total_Bolsas, Total_Kg, Estado, usuario_registro, Fecha_Registro |
+| `Orden_Carga` | Id_OC, Nro_OC, Fecha, Contrato_Encabeza, Especie, Cosecha, Titular_CP, Remitente_Productor, Remitente_Venta, Destinatario(+CUIT), Destino(+CUIT, Planta, Direccion, Localidad, Provincia), Flete_Intermediario(+CUIT), Flete_Pagador(+CUIT), Objetivo_Kg, Observaciones, Total_Camiones, Total_Bolsas, Total_Kg, Estado, usuario_registro, Fecha_Registro, Titular_CP_CUIT, Correo, Estado_Correo |
 | `OC_Camion` | Id_Camion, Id_OC, Nro_Camion, Transportista(+CUIT), Chofer(+CUIL), Dominio_Camion, Dominio_Acoplado, Km, Tarifa |
 | `OC_CartaPorte` | Id_CP, Id_Camion, Id_OC, Nro_CP, Productor, Contrato_Comercial, CTG, Carta_Porte, Peso_Neto, Observaciones_CP |
 | `OC_Lote` | Id_Lote_OC, Id_CP, Id_OC, Nro_Lote, Lote_BRC, Lote_Planta, Tipo, Calibre, Bolsas, Kg_Bolsa, Total_Kg |

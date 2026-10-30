@@ -28,6 +28,8 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v25: la Orden de Carga se manda por correo como el reporte de Transporte
+// (correo.js, orden-carga.js e index.html).
 // v24: enganche Orden de Carga → Control de Transporte (app.js, orden-carga.js,
 // index.html y style.css) y aviso de peso de la CP con margen del 1 %.
 // v23: Control de Transporte: la edición de una carga ya subida entra a la
@@ -48,7 +50,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v24';
+const VERSION = 'v25';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

@@ -717,6 +717,14 @@ function ocArmarObjeto() {
         orden[clave] = OC_CAMPOS_NUMERICOS.indexOf(clave) !== -1 ? ocNumero(el.value) : el.value;
     });
 
+    // A quién se mandó por correo y cuándo. No está en el formulario: viene de
+    // la orden que se está editando, y sin esto se perdería al guardarla,
+    // porque editar es borrar y reinsertar.
+    const anterior = ocIdEditando ? ocBuscarOrden(ocIdEditando)
+        || (ocPendientesConocidas || []).find(o => o.Id_OC === ocIdEditando) : null;
+    orden.Correo = anterior ? (anterior.Correo || '') : '';
+    orden.Estado_Correo = anterior ? (anterior.Estado_Correo || '') : '';
+
     const totales = ocTotalesActuales();
     orden.Total_Camiones = totales.camiones;
     orden.Total_Bolsas = ocNumero(totales.bolsas);
@@ -913,14 +921,24 @@ async function ocGuardarOrden() {
     }
     ocSwitchTab('historial');
 
-    // El PDF es el informe que se le manda a planta: se ofrece en el momento,
-    // que es cuando hace falta. Si dice que no, queda el botón del historial.
-    const aviso = navigator.onLine
-        ? 'Orden de carga guardada.'
-        : 'Orden de carga guardada en este dispositivo. Se va a subir sola cuando haya señal.';
-    if (confirm(aviso + '\n\n¿Generás el PDF para mandarle a planta?')) {
+    // La orden se le manda a planta: se ofrece en el momento, que es cuando
+    // hace falta. Con señal, por correo (con el PDF adjunto); sin señal, el PDF
+    // para compartirlo como se pueda. Si dice que no, quedan los botones del
+    // historial.
+    if (navigator.onLine && typeof abrirModalCorreo === 'function') {
+        if (confirm('Orden de carga guardada.\n\n¿La mandás por correo ahora? (va con el PDF adjunto)')) {
+            abrirModalCorreo(orden, 'oc');
+        }
+    } else if (confirm('Orden de carga guardada en este dispositivo. Se va a subir sola cuando haya señal.\n\n' +
+                       '¿Generás el PDF para mandarle a planta?')) {
         ocGenerarPDF(orden);
     }
+}
+
+function ocAbrirCorreo(idOC) {
+    const orden = ocBuscarOrden(idOC);
+    if (!orden) { alert('Esa orden ya no está.'); ocRenderHistorial(); return; }
+    abrirModalCorreo(orden, 'oc');
 }
 
 function ocEditarOrden(idOC) {
@@ -1084,6 +1102,7 @@ async function ocRenderHistorial() {
             <td>
                 <button type="button" class="btn-accion control" title="Hacer el Control de Transporte de un camión" onclick="ocIniciarControl('${o.Id_OC}')"><i class="fas fa-truck-loading"></i></button>
                 <button type="button" class="btn-accion pdf" title="Descargar el informe para planta" onclick="ocGenerarPDF('${o.Id_OC}')"><i class="fas fa-file-pdf"></i></button>
+                ${typeof botonCorreoHtml === 'function' ? botonCorreoHtml(o, `ocAbrirCorreo('${o.Id_OC}')`) : ''}
                 <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.Id_OC}')"><i class="fas fa-edit"></i></button>
                 <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.Id_OC}')"><i class="fas fa-trash-alt"></i></button>
             </td>
@@ -1434,9 +1453,17 @@ const OC_GRIS = [40, 40, 40];
 // Acepta el id (desde el historial) o la orden ya armada (al guardar). Lo
 // segundo importa: recién guardada, el historial todavía se está refrescando y
 // buscarla por id podía no encontrarla.
-function ocGenerarPDF(ordenOId) {
+// modo 'blob': no descarga nada, devuelve { doc, nombreArchivo, item } para
+// adjuntarlo al correo (correo.js), igual que generarPDFReporte() del Control
+// de Transporte. Así el adjunto es exactamente el PDF del botón de descarga.
+function ocGenerarPDF(ordenOId, modo) {
+    const paraAdjuntar = modo === 'blob';
     const encontrada = (typeof ordenOId === 'string') ? ocBuscarOrden(ordenOId) : ordenOId;
-    if (!encontrada) { alert('No encontré esa orden de carga.'); return; }
+    if (!encontrada) {
+        if (paraAdjuntar) throw new Error('No encontré esa orden de carga.');
+        alert('No encontré esa orden de carga.');
+        return;
+    }
     // Las órdenes viejas tienen grano y flete en la cabecera: se pasan al camión
     const orden = ocAdaptarOrdenVieja(encontrada);
 
@@ -1462,9 +1489,12 @@ function ocGenerarPDF(ordenOId) {
                      196, 289, { align: 'right' });
         }
 
-        doc.save('Orden_de_Carga_' + (orden.Nro_OC || 'Braun') + '.pdf');
+        const nombreArchivo = 'Orden_de_Carga_' + (orden.Nro_OC || 'Braun') + '.pdf';
+        if (paraAdjuntar) return { doc: doc, nombreArchivo: nombreArchivo, item: orden };
+        doc.save(nombreArchivo);
     } catch (err) {
         console.error('No se pudo generar el PDF de la orden:', err);
+        if (paraAdjuntar) throw err;
         alert('Ocurrió un inconveniente al generar el PDF de esta orden.');
     }
 }

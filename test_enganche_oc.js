@@ -298,5 +298,63 @@ ok(front.ocTextoCamion({ dominio_camion: 'AA000AA', chofer: 'Chofer A' }, 1) ===
   'el texto del camión para la lista');
 ok(front.ocTextoCamion({}, 3) === 'Camión 3', 'sin dominio ni chofer, solo el número');
 
+// ===========================================================================
+console.log('\n--- 6. EL CORREO DE LA ORDEN (constancia en Orden_Carga) ---');
+const MAILS = [];
+const CACHE = {};
+global.MailApp = { sendEmail: (para, asunto, texto, opciones) => MAILS.push({ para, asunto, opciones }) };
+global.CacheService = { getScriptCache: () => ({ get: k => CACHE[k] || null, put: (k, v) => { CACHE[k] = v; }, remove: k => { delete CACHE[k]; } }) };
+global.Utilities.computeDigest = (alg, texto) => Array.from(Buffer.from(require('crypto').createHash('md5').update(texto).digest()));
+global.Utilities.DigestAlgorithm = { MD5: 'md5' };
+global.Utilities.base64Decode = b64 => Array.from(Buffer.from(b64, 'base64'));
+global.Utilities.newBlob = (bytes, tipo, nombre) => ({ bytes, tipo, nombre });
+
+reiniciarHojas();
+guardarOrdenCarga(oc2056());
+ok(leerOrdenes()[0].Correo === '' && leerOrdenes()[0].Estado_Correo === '', 'una orden recién guardada no tiene correo');
+
+const resp = JSON.parse(actualizarEstadoCorreoDeOC({ Id_OC: 'OC-2056', Correo: 'planta@ejemplo.com', Estado_Correo: 'Enviado 30/10/2026 10:00 a planta@ejemplo.com (vía app)' }).getContent());
+let ordenLeida = leerOrdenes()[0];
+ok(resp.status === 'success' && ordenLeida.Correo === 'planta@ejemplo.com' && /^Enviado/.test(ordenLeida.Estado_Correo),
+  'salió por Gmail: queda la constancia en la orden');
+
+// Editar la orden: la app manda de vuelta Correo y Estado_Correo (ocArmarObjeto)
+const conCorreo = Object.assign(oc2056(), { Correo: ordenLeida.Correo, Estado_Correo: ordenLeida.Estado_Correo });
+conCorreo.Camiones[0].chofer = 'Chofer corregido';
+actualizarOrdenCarga(conCorreo);
+ordenLeida = leerOrdenes()[0];
+ok(ordenLeida.Correo === 'planta@ejemplo.com' && ordenLeida.Camiones[0].chofer === 'Chofer corregido',
+  'editar la orden no pierde a quién se mandó');
+
+const noEsta = JSON.parse(actualizarEstadoCorreoDeOC({ Id_OC: 'OC-NO-SUBIO', Correo: 'x@y.com', Estado_Correo: 'Enviado' }).getContent());
+ok(noEsta.status !== 'success', 'una orden que todavía no subió contesta "no encontrada" (la constancia viaja con ella)');
+
+// Una hoja Orden_Carga de antes, sin las columnas de correo
+reiniciarHojas();
+hojaNueva('Orden_Carga', COLS_OC.slice(0, COLS_OC.indexOf('Correo')));
+guardarOrdenCarga(oc2056());
+marcarEstadoCorreoOC('OC-2056', 'planta@ejemplo.com', 'Enviado');
+ok(HOJAS['Orden_Carga'].filas[0].slice(-2).join(',') === 'Correo,Estado_Correo' && leerOrdenes()[0].Correo === 'planta@ejemplo.com',
+  'en una hoja vieja, las columnas de correo se crean solas al final');
+
+// Plan B: el correo sale por el backend, con el PDF adjunto
+reiniciarHojas();
+guardarOrdenCarga(oc2056());
+const envio = {
+  _accion: 'enviar_correo_reporte', Tipo_Reporte: 'oc', Id_Carga: 'OC-2056', Id_Calidad: 'OC-2056', Id_OC: 'OC-2056',
+  Correo: 'planta@ejemplo.com', Correo_Asunto: 'Orden de Carga N° 2056 — Poroto Mung — CAP. CORTES — 2026-07-14',
+  Correo_Cuerpo_Html: '<p>hola</p>', Correo_Nombre_Remitente: 'Santiago (App Braun)', Correo_Reply_To: 'santi@braun',
+  Pdf_Base64: Buffer.from('%PDF-1.3 prueba').toString('base64'), Pdf_Nombre: 'Orden_de_Carga_2056.pdf',
+  Estado_Correo: 'Enviado 30/10/2026 10:05 a planta@ejemplo.com (vía app)'
+};
+enviarReportePorCorreo(envio);
+ok(MAILS.length === 1 && MAILS[0].para === 'planta@ejemplo.com' && MAILS[0].opciones.attachments[0].nombre === 'Orden_de_Carga_2056.pdf',
+  'por el backend sale un correo, con el PDF de la orden adjunto');
+ordenLeida = leerOrdenes()[0];
+ok(/^Enviado 30\/10\/2026 10:05/.test(ordenLeida.Estado_Correo), 'y la constancia queda en la orden, no en la hoja de controles');
+ok(HOJAS['Orden'].filas.length === 1, 'la hoja Orden (Control de Transporte) no se toca');
+const dup = JSON.parse(enviarReportePorCorreo(envio).getContent());
+ok(MAILS.length === 1 && dup.duplicado === true, 'el mismo envío repetido no manda un segundo correo');
+
 console.log('\n' + (fallos === 0 ? '>>> TODO OK' : '>>> ' + fallos + ' FALLA(S)'));
 process.exit(fallos ? 1 : 0);

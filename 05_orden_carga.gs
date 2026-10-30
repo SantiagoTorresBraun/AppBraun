@@ -52,7 +52,9 @@ var COLS_OC = ["Id_OC", "Nro_OC", "Fecha", "Contrato_Encabeza", "Especie", "Cose
   "Total_Camiones", "Total_Bolsas", "Total_Kg",
   "Estado", "usuario_registro", "Fecha_Registro",
   // 16/10/2026: el titular de la CP va con CUIT, como en la carta de porte
-  "Titular_CP_CUIT"];
+  "Titular_CP_CUIT",
+  // 30/10/2026: a quién se mandó la orden por correo y cuándo (correo.js)
+  "Correo", "Estado_Correo"];
 
 // Las columnas nuevas van SIEMPRE al final: las filas se escriben por posición
 // desde esta lista, y las hojas que ya existen reciben los encabezados que les
@@ -222,7 +224,9 @@ function cabeceraOCaFila(data) {
     Estado: data.Estado || "Generada",
     usuario_registro: data.usuario_registro || "",
     Fecha_Registro: new Date(),
-    Titular_CP_CUIT: data.Titular_CP_CUIT || ""
+    Titular_CP_CUIT: data.Titular_CP_CUIT || "",
+    Correo: data.Correo || "",
+    Estado_Correo: data.Estado_Correo || ""
   };
 }
 
@@ -409,6 +413,8 @@ function leerOrdenesCarga() {
       Total_Kg: fila[colOC["Total_Kg"]],
       Estado: fila[colOC["Estado"]],
       usuario_registro: fila[colOC["usuario_registro"]],
+      Correo: valorPorNombre(fila, colOC, "Correo"),
+      Estado_Correo: valorPorNombre(fila, colOC, "Estado_Correo"),
       Camiones: camionesPorOC[idOC] || []
     });
   }
@@ -445,4 +451,38 @@ function fechaISO(valor) {
     return Utilities.formatDate(valor, Session.getScriptTimeZone(), "yyyy-MM-dd");
   }
   return String(valor);
+}
+
+
+// ---------------------------------------------------------------------------
+// CONSTANCIA DEL CORREO  (la orden se manda a planta con el PDF adjunto)
+// ---------------------------------------------------------------------------
+// El envío en sí es el mismo de Control de Transporte (enviarReportePorCorreo,
+// en 01_backend_principal.gs, con Tipo_Reporte "oc"). Acá solo se anota a quién
+// se mandó y cuándo, en las columnas Correo y Estado_Correo de Orden_Carga.
+// Por nombre, como todo en estas hojas. Devuelve false si la orden todavía no
+// está en el Sheet (se armó sin señal): la constancia llega con ella.
+function marcarEstadoCorreoOC(idOC, correo, estado) {
+  if (!idOC) return false;
+  var hoja = obtenerHojaOC(NOMBRE_HOJA_OC, COLS_OC);   // completa las columnas si faltan
+  var fila = buscarFilaPorId(hoja, idOC);
+  if (fila === -1) return false;
+  var col = indicePorNombre(hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0]);
+  if (correo) hoja.getRange(fila, col["Correo"] + 1).setValue(correo);
+  hoja.getRange(fila, col["Estado_Correo"] + 1).setValue(estado || "Enviado");
+  return true;
+}
+
+// _accion: "actualizar_estado_correo_oc" — el correo salió desde el Gmail del
+// usuario (no pasó por acá): solo se deja constancia.
+function actualizarEstadoCorreoDeOC(data) {
+  try {
+    if (!marcarEstadoCorreoOC(data.Id_OC, data.Correo, data.Estado_Correo)) {
+      return respuestaErrorCorreo("No se encontró la orden " + (data.Id_OC || ""));
+    }
+    return respuestaOk();
+  } catch (error) {
+    Logger.log("No se pudo actualizar el estado del correo de la orden: " + error);
+    return respuestaErrorCorreo(error.toString());
+  }
 }

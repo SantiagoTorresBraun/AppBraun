@@ -61,16 +61,16 @@ const BACKEND_SIMULADO = String.raw`
           { Id_Camion: 'CAM-PRUEBA-1', especie: 'Poroto Mung', cosecha: '25-26', transportista: 'Transporte A', chofer: 'Chofer A',
             dominio_camion: 'AA000AA', dominio_acoplado: 'AC000AA', flete: 'No', flete_pagador: 'Pagador SA',
             CartasPorte: [
-              { productor: 'PRODUCTOR B', contrato_com: 'CN26-081 B', peso_neto: 26695, observaciones: 'OC 2056 (1069 BLS)',
+              { productor: 'PRODUCTOR B', productor_cuit: '30-00000000-2', contrato_com: 'CN26-081 B', peso_neto: 26695, observaciones: 'OC 2056 (1069 BLS)',
                 Lotes: [lote('4380', 'LT-556 A', 737, '3.5mm'), lote('4450', 'LT-573', 250, '4mm'), lote('4455', 'LT-578 R', 82, '3.5mm')] },
-              { productor: 'PRODUCTOR C', contrato_com: 'CN26-081 C', peso_neto: 9785, observaciones: 'OC 2056 (391 BLS)',
+              { productor: 'PRODUCTOR C', productor_cuit: '30-00000000-3', contrato_com: 'CN26-081 C', peso_neto: 9785, observaciones: 'OC 2056 (391 BLS)',
                 Lotes: [lote('4381', 'LT-556 B', 391, '3.5mm')] }] },
           { Id_Camion: 'CAM-PRUEBA-2', especie: 'Poroto Mung', cosecha: '25-26', transportista: 'Transporte B', chofer: 'Chofer B',
             dominio_camion: 'BB000BB', dominio_acoplado: 'BC000BB', flete: 'No', flete_pagador: 'Pagador SA',
             CartasPorte: [
-              { productor: 'PRODUCTOR C', contrato_com: 'CN26-081 C', peso_neto: 14575, observaciones: 'OC 2056 (583 BLS)',
+              { productor: 'PRODUCTOR C', productor_cuit: '30-00000000-3', contrato_com: 'CN26-081 C', peso_neto: 14575, observaciones: 'OC 2056 (583 BLS)',
                 Lotes: [lote('4381', 'LT-556 B', 336, '3.5mm'), lote('4450', 'LT-573', 247, '4mm')] },
-              { productor: 'PRODUCTOR A', contrato_com: 'CN26-081 A', peso_neto: 23925, observaciones: 'OC 2056 (957 BLS)',
+              { productor: 'PRODUCTOR A', productor_cuit: '30-00000000-1', contrato_com: 'CN26-081 A', peso_neto: 23925, observaciones: 'OC 2056 (957 BLS)',
                 Lotes: [lote('4380', 'LT-556 A', 645, '3.5mm'), lote('4469', 'LT-604 R', 312, '3.5mm')] }] }
         ]
       }],
@@ -101,6 +101,8 @@ const BACKEND_SIMULADO = String.raw`
   var fetchReal = window.fetch.bind(window);
   window.fetch = function (url, opts) {
     var u = String(url && url.url || url);
+    // Segunda barrera: si algo igual intentara usar la API de Gmail, se corta.
+    if (u.indexOf('gmail.googleapis.com') !== -1) return Promise.reject(new TypeError('Gmail bloqueado en modo prueba'));
     if (u.indexOf('script.google.com') === -1) return fetchReal(url, opts);
     var e = leer();
 
@@ -121,6 +123,19 @@ const BACKEND_SIMULADO = String.raw`
         e.ordenes.unshift(o);
       } else if (accion === 'eliminar_oc') {
         e.ordenes = e.ordenes.filter(function (o) { return o.Id_OC !== d.Id_OC; });
+      } else if (accion === 'enviar_correo_reporte' || accion.indexOf('actualizar_estado_correo') === 0) {
+        // NO sale ningún correo: se anota como si hubiera salido.
+        var estado = d.Estado_Correo || ('Enviado a ' + d.Correo + ' (simulado)');
+        var lista = d.Tipo_Reporte === 'oc' || accion === 'actualizar_estado_correo_oc' ? e.ordenes : e.cargas;
+        var campo = lista === e.ordenes ? 'Id_OC' : 'Id_Carga';
+        var id = d[campo] || d.Id_Carga;
+        lista.forEach(function (r) { if (r[campo] === id) { r.Correo = d.Correo; r.Estado_Correo = estado; } });
+        if (accion === 'enviar_correo_reporte') {
+          e.correos = (e.correos || []).concat([{ para: d.Correo, cc: d.Correo_Cc, asunto: d.Correo_Asunto,
+            adjunto: d.Pdf_Nombre, kb: Math.round(String(d.Pdf_Base64 || '').length * 0.75 / 1024), cuando: new Date().toISOString() }]);
+          console.log('%c[correo simulado] NO se mandó nada. Para: ' + d.Correo + ' · ' + d.Correo_Asunto + ' · adjunto ' + d.Pdf_Nombre,
+                      'color:#b8860b;font-weight:bold');
+        }
       }
       guardar(e);
       return responder({ status: 'success', ok: true });
@@ -131,10 +146,15 @@ const BACKEND_SIMULADO = String.raw`
     return responder([]);
   };
 
+  // Ningún correo real: tampoco desde el Gmail del usuario (ese camino no pasa
+  // por el backend). Se fuerza el plan B, que acá es el backend simulado. Va en
+  // DOMContentLoaded porque recién ahí correo.js ya definió la función.
+  document.addEventListener('DOMContentLoaded', function () { window.gmailConfigurado = function () { return false; }; });
+
   // Que nunca se confunda con producción.
   document.addEventListener('DOMContentLoaded', function () {
     var f = document.createElement('div');
-    f.textContent = 'MODO PRUEBA — backend simulado, nada llega al Sheet  ·  empezar de cero: /?reiniciar';
+    f.textContent = 'MODO PRUEBA — backend simulado: nada llega al Sheet ni sale ningún correo  ·  empezar de cero: /?reiniciar';
     f.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#ffd54f;color:#3e2723;' +
       'font:600 12px system-ui,sans-serif;text-align:center;padding:4px 8px;pointer-events:none';
     document.body.appendChild(f);

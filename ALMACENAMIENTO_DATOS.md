@@ -348,5 +348,6 @@ recibió el mismo chequeo de idempotencia que ya tenían Calidad, Producción y 
       `doc.addImage(base64)`, que necesita la imagen embebida; si las celdas pasaran a guardar un
       link, **el PDF de Control de Carga dejaría de mostrar las fotos** hasta adaptarlo para que
       las descargue primero (como ya hace `calidad.js` con `cargarImagenParaPDF()`).
-- [ ] **Confirmar que el Sheet `1RXqKN0E…` es el mismo** donde está pegado el Apps Script.
-      Se verifica corriendo `diagnosticoDrive()` y comparando el ID que imprime.
+- [x] ~~Confirmar que el Sheet `1RXqKN0E…` es el mismo donde está pegado el Apps Script~~ —
+      confirmado por Santiago el 30/10/2026: el Apps Script vive en el Sheet
+      `1RXqKN0EJroi5fgZlvKYTXNGMCTDCc5iTu4cNrY1tP-M`.
