@@ -26,10 +26,11 @@
 //  escriben desde estas listas de encabezados. Agregar una columna es agregarla
 //  al final de la lista que corresponda.
 //
-//  TODAVÍA NO SE TOCA la hoja `Orden`: el enganche OC → Control de Transporte
-//  (que necesita Id_OC + N° de camión al final de esa hoja) es el paso
-//  siguiente, y depende de definir qué campos vienen de la OC y cuáles carga
-//  planta. Ver PREGUNTAS_PENDIENTES_LUCAS.md, punto 3.1.
+//  EL ENGANCHE con Control de Transporte: cada control que planta hace sobre un
+//  camión de la orden guarda Id_OC + Id_Camion_OC (y los números que lee la
+//  gente) en columnas propias al final de la hoja `Orden`, escritas por nombre
+//  (escribirVinculoOC, en 01_backend_principal.gs). Por eso Id_Camion NO puede
+//  cambiar al editar la orden: lo genera la app y viaja con cada camión.
 // ============================================================================
 
 var NOMBRE_HOJA_OC         = "Orden_Carga";

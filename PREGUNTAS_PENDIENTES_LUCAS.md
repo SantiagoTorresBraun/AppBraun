@@ -30,8 +30,10 @@ debería frenarlo antes de que salga el camión.
 SI PUEDE NO COINCIDIR y ESO ESTA BIEN
 
 > ✅ **Resuelto.** Son dos datos distintos y se guardan los dos: el peso neto
-> declarado de la CP y la suma de los lotes. Si no coinciden, la app **avisa y
-> no bloquea**: la orden se guarda igual.
+> declarado de la CP y la suma de los lotes. Nunca se bloquea: la orden se
+> guarda igual. Hasta un **1 %** de diferencia se toma como balanza y se muestra
+> como dato, en gris (los 20 kg de la OC 2056 son 0,07 %). Más del 1 % se avisa
+> en naranja, porque probablemente es un error de tipeo.
 
 ### 1.2. ¿La orden se arma contra un objetivo de kilos?
 

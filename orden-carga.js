@@ -21,11 +21,9 @@
 //  los lotes no saben a qué carta de porte pertenecen. Acá sí: cada CP declara
 //  un peso neto que se compone de lotes concretos.
 //
-//  ESTADO: este archivo arma la PANTALLA y los cálculos. Todavía NO escribe en
-//  el Sheet ni genera el Control de Transporte: el borrador se guarda en el
-//  navegador (localStorage). Nada de esto toca el flujo de Control de
-//  Transporte que ya funciona — es un módulo aparte, y los registros PT viejos
-//  siguen igual, sin OC asociada.
+//  ESTADO: la orden se guarda en el Sheet (sección 5), genera su PDF para
+//  planta (sección 8) y cada camión arranca su Control de Transporte ya
+//  completo (sección 9). Los controles PT viejos siguen igual, sin OC asociada.
 //
 //  Reutiliza de app.js: poblarSelect(), parseNumeroAR(), formatNumeroAR(),
 //  scrollATarjeta(), cambiarVista(). Por eso el <script> va DESPUÉS de app.js.
@@ -183,6 +181,10 @@ function ocAgregarCamion(opciones) {
     card.innerHTML = `
         ${ocEncabezadoHtml('Camión', 'ocDuplicarCamion', 'camion')}
         <div class="dynamic-card-body">
+            <!-- La clave del camión. El Control de Transporte que planta hace
+                 sobre este camión apunta acá, así que NO puede cambiar al
+                 editar la orden (ver ocIdCamionNuevo). -->
+            <input type="hidden" class="oc-camion-item" data-field="Id_Camion">
             <div class="form-group-row">
                 <div class="form-group"><label>Grano / Especie</label><select class="oc-camion-item enum-select" data-field="especie" data-enum="producto"></select></div>
                 <div class="form-group"><label>Campaña</label><input type="text" class="oc-camion-item" data-field="cosecha" list="oc-lista-cosechas" placeholder="25-26"></div>
@@ -241,6 +243,8 @@ function ocAgregarCamion(opciones) {
 
     card.querySelectorAll(':scope > .dynamic-card-body .enum-select').forEach(sel => poblarSelect(sel, sel.dataset.enum, ''));
     ocAplicarValores(card, 'oc-camion-item', opciones.valores);
+    const idCamion = card.querySelector('[data-field="Id_Camion"]');
+    if (!idCamion.value) idCamion.value = ocIdCamionNuevo();
     ocMostrarFlete(card);
     card.querySelector('.oc-flete-select').addEventListener('change', () => { ocMostrarFlete(card); ocRecalcularTodo(); });
     card.querySelector('[data-field="especie"]').addEventListener('change', ocRecalcularTodo);
@@ -275,7 +279,18 @@ function ocMostrarFlete(card) {
 // CUIT, chofer y dominios; acá se copia todo y queda una CP vacía para llenar.
 function ocDuplicarCamion(boton) {
     const origen = boton.closest('.oc-camion');
-    ocAgregarCamion({ valores: ocValoresDe(origen, 'oc-camion-item'), enfocar: true });
+    const valores = ocValoresDe(origen, 'oc-camion-item');
+    valores.Id_Camion = '';   // es otro camión: lleva su propia clave
+    ocAgregarCamion({ valores: valores, enfocar: true });
+}
+
+// Antes la app no mandaba ninguna clave de camión y el backend inventaba una
+// en cada guardado: como editar una orden es borrarla y reinsertarla, el mismo
+// camión cambiaba de id con cada corrección. Ahora la clave nace con la tarjeta
+// y viaja con ella. Los camiones guardados antes conservan la que les puso el
+// backend (llega en read_oc y se vuelve a mandar igual).
+function ocIdCamionNuevo() {
+    return 'CAM-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
 }
 
 // --- 2.2. CARTA DE PORTE -------------------------------------------------
@@ -475,17 +490,29 @@ function ocRecalcularTodo() {
 }
 
 // El peso neto de la carta de porte puede no coincidir con la suma de los
-// lotes: en la OC 2056 la primera CP declara 26.695 y los lotes dan 26.715.
-// No sabemos todavía si eso es la balanza o un error de tipeo, así que por
-// ahora se AVISA y no se bloquea.
+// lotes, y está bien (Lucas, PREGUNTAS_PENDIENTES_LUCAS 1.1): los lotes se
+// cuentan por bolsas y el peso lo da la balanza. En la OC 2056 la primera CP
+// declara 26.695 y los lotes dan 26.715. Nunca se bloquea; solo cambia el tono:
+// hasta OC_TOLERANCIA_PESO es la balanza y se muestra como dato, en gris; más
+// que eso huele a error de tipeo (26.695 → 2.669,5) y se avisa en naranja.
+const OC_TOLERANCIA_PESO = 0.01;
+
 function ocAvisarDiferenciaPeso(cp, sumaLotes) {
     const aviso = cp.querySelector('.oc-aviso-peso');
     const declarado = parseNumeroAR(cp.querySelector('.oc-peso-neto').value);
     if (!declarado || !sumaLotes) { aviso.classList.add('hidden'); return; }
     const dif = declarado - sumaLotes;
     if (Math.abs(dif) < 0.5) { aviso.classList.add('hidden'); return; }
-    aviso.textContent = (dif > 0 ? 'El peso declarado supera la suma de los lotes en ' : 'La suma de los lotes supera el peso declarado en ')
-        + formatNumeroAR(Math.abs(dif), 2) + ' kg.';
+    const pct = Math.abs(dif) / declarado;
+    const detalle = formatNumeroAR(Math.abs(dif), 2) + ' kg (' + formatNumeroAR(pct * 100, 2) + ' %)';
+    if (pct <= OC_TOLERANCIA_PESO) {
+        aviso.textContent = 'Diferencia con la suma de los lotes: ' + detalle + '.';
+        aviso.classList.add('oc-aviso-peso-leve');
+    } else {
+        aviso.textContent = (dif > 0 ? 'El peso declarado supera la suma de los lotes en ' : 'La suma de los lotes supera el peso declarado en ')
+            + detalle + '. Revisá que no sea un error de tipeo.';
+        aviso.classList.remove('oc-aviso-peso-leve');
+    }
     aviso.classList.remove('hidden');
 }
 
@@ -943,8 +970,13 @@ async function ocEliminarOrden(idOC) {
 
 // --- 5.4. El historial ---------------------------------------------------
 
+// Las órdenes también quedan copiadas en el celular: planta tiene que poder
+// arrancar el Control de Transporte desde la OC aunque no haya señal en el
+// silo (ver sección 9). Es la misma copia que usan los demás historiales.
+const OC_COPIA_LOCAL = 'ordenes_carga';
+
 function ocCargarOrdenesDesdeGoogle() {
-    if (!navigator.onLine) return Promise.resolve();
+    if (!navigator.onLine) { ocRestaurarCopiaLocal(); return Promise.resolve(); }
     return fetch(WEB_APP_URL + '?action=read_oc')
         .then(res => res.json())
         .then(data => {
@@ -952,10 +984,24 @@ function ocCargarOrdenesDesdeGoogle() {
             // vacía puede ser "no hay órdenes" o "me contestaron otra cosa". Si
             // no parece lo que pedimos, se conserva lo que había.
             const pareceOrdenes = Array.isArray(data) && (data.length === 0 || data.some(o => o && o.Id_OC));
-            if (pareceOrdenes) ocHistorialRemoto = data.filter(o => o && o.Id_OC);
-            else console.warn('[orden-carga] El servidor devolvió algo que no son órdenes; se conserva lo que había.');
+            if (pareceOrdenes) {
+                ocHistorialRemoto = data.filter(o => o && o.Id_OC);
+                if (typeof guardarHistorialLocal === 'function') guardarHistorialLocal(OC_COPIA_LOCAL, ocHistorialRemoto);
+            } else {
+                console.warn('[orden-carga] El servidor devolvió algo que no son órdenes; se conserva lo que había.');
+            }
         })
-        .catch(err => console.error('No se pudieron cargar las órdenes de carga:', err));
+        .catch(err => {
+            console.error('No se pudieron cargar las órdenes de carga:', err);
+            ocRestaurarCopiaLocal();
+        });
+}
+
+// Lo viejo nunca pisa lo nuevo: solo se usa la copia si no hay nada en memoria.
+function ocRestaurarCopiaLocal() {
+    if (ocHistorialRemoto.length || typeof leerHistorialLocal !== 'function') return;
+    const copia = leerHistorialLocal(OC_COPIA_LOCAL);
+    if (copia) ocHistorialRemoto = copia.registros.filter(o => o && o.Id_OC);
 }
 
 // Texto donde busca el filtro rápido: todo lo escrito en la orden.
@@ -1015,14 +1061,28 @@ async function ocRenderHistorial() {
         return;
     }
 
+    // Cuántos camiones de cada orden ya tienen su Control de Transporte.
+    const controles = (typeof controlesDeTransporteConocidos === 'function')
+        ? await controlesDeTransporteConocidos() : [];
+    const avance = o => {
+        const hechos = ocControlesPorCamion(o.Id_OC, controles);
+        const camiones = o.Camiones || [];
+        const conControl = camiones.filter(c => hechos[String(c.Id_Camion || '')]).length;
+        if (!camiones.length) return '';
+        const completa = conControl === camiones.length;
+        return ` <span class="oc-chip-controles${completa ? ' completa' : ''}" title="Camiones con su Control de Transporte">`
+            + `<i class="fas fa-truck"></i> ${conControl}/${camiones.length}</span>`;
+    };
+
     cuerpo.innerHTML = filtradas.map(o => `<tr>
             <td>${o.Fecha || '-'}</td>
-            <td><strong>${o.Nro_OC || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}</td>
+            <td><strong>${o.Nro_OC || '-'}</strong>${o._pendiente ? ' <span class="oc-chip-pendiente" title="Todavía no subió al Sheet">sin subir</span>' : ''}${avance(o)}</td>
             <td>${ocGranosDe(o) || '-'}</td>
             <td>${o.Destino || '-'}</td>
             <td>${o.Total_Camiones || 0}</td>
             <td>${formatNumeroAR(o.Total_Kg || 0, 0)} kg</td>
             <td>
+                <button type="button" class="btn-accion control" title="Hacer el Control de Transporte de un camión" onclick="ocIniciarControl('${o.Id_OC}')"><i class="fas fa-truck-loading"></i></button>
                 <button type="button" class="btn-accion pdf" title="Descargar el informe para planta" onclick="ocGenerarPDF('${o.Id_OC}')"><i class="fas fa-file-pdf"></i></button>
                 <button type="button" class="btn-accion editar" title="Editar" onclick="ocEditarOrden('${o.Id_OC}')"><i class="fas fa-edit"></i></button>
                 <button type="button" class="btn-accion eliminar" title="Eliminar" onclick="ocEliminarOrden('${o.Id_OC}')"><i class="fas fa-trash-alt"></i></button>
@@ -1688,4 +1748,103 @@ function ocPdfResumenLotes(doc, orden, y) {
         { fontSize: 8.5, alturaFila: 6 });
 
     return y;
+}
+
+// =========================================================================
+// --- 9. ENGANCHE CON CONTROL DE TRANSPORTE --------------------------------
+// =========================================================================
+// Cada camión de la orden es UN Control de Transporte. Planta elige la orden y
+// el camión, y el control arranca con lo que ya decidió la oficina
+// (PREGUNTAS_PENDIENTES_LUCAS 3.1): chofer, patentes, un producto por cada lote
+// y un contrato por cada carta de porte. Planta completa lo suyo: checklist,
+// fotos, firmas, N° y archivo de la CP, Kg CP, indicaciones y correo.
+//
+// El control guarda Id_OC + Id_Camion_OC (las claves, que no cambian al editar
+// la orden) y Nro_OC + Nro_Camion_OC (lo que lee la gente). La pantalla vive en
+// app.js (sección "Vínculo con la Orden de Carga"); acá está el armado de los
+// datos, que no toca el DOM y se prueba en test_enganche_oc.js.
+
+// Lo que un camión de la orden le pasa al Control de Transporte. null si el
+// camión ya no está en la orden (la oficina lo sacó).
+//   - N° Lote = Lote BRC y Posición Planta = Lote Planta (definido con Santiago).
+//   - Kg CP va VACÍO: es el de la balanza y lo carga planta. El peso declarado
+//     en la orden viaja aparte (kg_oc) para mostrarlo como referencia.
+//   - Contrato Cliente no existe en la orden: lo completa planta.
+function ocDatosParaControl(orden, idCamion) {
+    if (!orden) return null;
+    const o = ocAdaptarOrdenVieja(orden);
+    const camiones = o.Camiones || [];
+    const i = camiones.findIndex(c => String(c.Id_Camion || '') === String(idCamion || ''));
+    if (i === -1 || !idCamion) return null;
+    const cam = camiones[i];
+
+    const productos = [];
+    const contratos = [];
+    (cam.CartasPorte || []).forEach(cp => {
+        (cp.Lotes || []).forEach(l => productos.push({
+            producto: cam.especie || '',
+            calibre: l.calibre || '',
+            tipo: l.tipo || '',
+            lote: l.lote_brc || '',
+            posicion: l.lote_planta || '',
+            envase: 'Bolsas',
+            cantidad: ocNumero(l.bolsas),
+            kg_envase: ocNumero(l.kg_bolsa)
+        }));
+        contratos.push({
+            contrato_com: cp.contrato_com || '',
+            destino: o.Destino || '',
+            // Las órdenes viejas traían el N° de CP; las nuevas no (lo carga planta).
+            carta_porte: cp.carta_porte || '',
+            // "OC 2056 (1069 BLS)": lo que hoy se tipea a mano en el control.
+            observaciones_cp: cp.observaciones || '',
+            kg_oc: ocNumero(cp.peso_neto)
+        });
+    });
+
+    return {
+        vinculo: {
+            Id_OC: o.Id_OC,
+            Nro_OC: o.Nro_OC || '',
+            Id_Camion_OC: cam.Id_Camion,
+            Nro_Camion_OC: i + 1
+        },
+        chofer: cam.chofer || '',
+        patente_chasis: cam.dominio_camion || '',
+        patente_acoplado: cam.dominio_acoplado || '',
+        productos: productos,
+        contratos: contratos
+    };
+}
+
+// { Id_Camion: control } con los controles de transporte ya hechos sobre los
+// camiones de esa orden. Si hubiera dos para el mismo camión, gana el más nuevo.
+function ocControlesPorCamion(idOC, controles) {
+    const porCamion = {};
+    (controles || [])
+        .filter(c => c && c.Id_Camion_OC && String(c.Id_OC || '') === String(idOC || ''))
+        .sort((a, b) => String(a.Fecha || '').localeCompare(String(b.Fecha || '')))
+        .forEach(c => { porCamion[String(c.Id_Camion_OC)] = c; });
+    return porCamion;
+}
+
+// "OC 2056 · Camión 2 · AB123CD · Pérez" para listas y avisos.
+function ocTextoCamion(cam, numero) {
+    return ['Camión ' + numero, cam.dominio_camion, cam.chofer].filter(Boolean).join(' · ');
+}
+
+// Todas las órdenes que conoce este dispositivo: las del Sheet (o su copia sin
+// señal) más las que todavía no subieron. Las pendientes mandan.
+async function ocOrdenesConocidas() {
+    ocRestaurarCopiaLocal();
+    const pendientes = await ocPendientesLocales();
+    const ids = new Set(pendientes.map(o => o.Id_OC));
+    return pendientes.concat(ocHistorialRemoto.filter(o => !ids.has(o.Id_OC)))
+        .sort((a, b) => String(b.Fecha || '').localeCompare(String(a.Fecha || '')));
+}
+
+// Desde el historial de órdenes: abre el Control de Transporte con esta orden
+// ya elegida; planta solo tiene que elegir el camión.
+function ocIniciarControl(idOC) {
+    if (typeof iniciarControlDesdeOC === 'function') iniciarControlDesdeOC(idOC);
 }

@@ -264,6 +264,7 @@ function guardarRegistroCompleto(data) {
       return; // ya estaba: no se duplica (el finally libera el lock igual)
     }
     insertarFilaOrden(sheetOrden, data);
+    escribirVinculoOC(sheetOrden, sheetOrden.getLastRow(), data);
     // Sin flush, la fila recién agregada puede no verla todavía el pedido que
     // entra atrás nuestro, y volveríamos a tener dos filas.
     SpreadsheetApp.flush();
@@ -314,6 +315,24 @@ function insertarFilaOrden(sheetOrden, data) {
     data.Estado_Correo || "",
     data.Tipo_Carga || ""            // Columna extra: agregarla al final de "Orden" (ver nota)
   ]);
+}
+
+// ---- Vínculo con la Orden de Carga ----
+// El control de transporte que planta hace sobre un camión de una OC. Va en
+// columnas propias al final de "Orden", y a diferencia de insertarFilaOrden()
+// se escribe y se lee POR NOMBRE de encabezado (hallazgo 9): si la columna no
+// existe la crea obtenerColumnaPorNombre(), así que no hay que tocar el Sheet a
+// mano. Un control sin OC (los de siempre) no escribe nada.
+//   Id_OC / Id_Camion_OC   → las claves técnicas (no cambian al editar la OC)
+//   Nro_OC / Nro_Camion_OC → lo que lee la gente: "OC 2056 · camión 2"
+var COLUMNAS_VINCULO_OC = ["Id_OC", "Nro_OC", "Id_Camion_OC", "Nro_Camion_OC"];
+
+function escribirVinculoOC(sheetOrden, fila, data) {
+  if (!data.Id_OC) return;
+  COLUMNAS_VINCULO_OC.forEach(function (nombre) {
+    var col = obtenerColumnaPorNombre(sheetOrden, nombre);
+    sheetOrden.getRange(fila, col).setValue(data[nombre] || "");
+  });
 }
 
 // Filas relacionadas. Van FUERA del lock: subir los archivos de Carta de Porte a
@@ -719,6 +738,9 @@ function doGet(e) {
     }
 
     var data = [];
+    // Solo las columnas del vínculo con la OC se leen por nombre (ver
+    // escribirVinculoOC): en una hoja que todavía no las tiene salen "".
+    var colOrden = indicePorNombre(rowsOrden[0]);
 
     for (var i = 1; i < rowsOrden.length; i++) {
       var row = rowsOrden[i];
@@ -758,6 +780,10 @@ function doGet(e) {
         Correo: row[34],
         Estado_Correo: row[35],
         Tipo_Carga: row[36], // requiere la columna nueva al final de "Orden" (ver nota)
+        Id_OC: valorPorNombre(row, colOrden, "Id_OC"),
+        Nro_OC: valorPorNombre(row, colOrden, "Nro_OC"),
+        Id_Camion_OC: valorPorNombre(row, colOrden, "Id_Camion_OC"),
+        Nro_Camion_OC: valorPorNombre(row, colOrden, "Nro_Camion_OC"),
         Productos: productos,
         Contratos: contratos
       });

@@ -91,6 +91,8 @@ por posición (`appendRow`), no por nombre.
 | 36 | `Estado_Correo` | `Estado_Correo` | `Sin enviar`, `Enviado <fecha> a <mail>`, etc. |
 | 37 | `Tipo_Carga` | `Tipo_Carga` | `PT` (producto terminado) o `MP` (materia prima). Columna agregada al final. |
 
+| 38-41 | `Id_OC` · `Nro_OC` · `Id_Camion_OC` · `Nro_Camion_OC` | ídem | De qué camión de qué Orden de Carga es el control. Vacías si no viene de una. **Se escriben y leen por NOMBRE** (`escribirVinculoOC`), así que aunque se muevan no se rompen. Las crea el backend solo. |
+
 > **Los nombres 3, 4, 29 y 30-34 existen pero nadie los llena.** Vienen de cuando el sistema
 > era un AppSheet. No se borran para no correr las posiciones de todo lo demás.
 
@@ -216,11 +218,11 @@ corresponda y listo.
 | `OC_CartaPorte` | Id_CP, Id_Camion, Id_OC, Nro_CP, Productor, Contrato_Comercial, CTG, Carta_Porte, Peso_Neto, Observaciones_CP |
 | `OC_Lote` | Id_Lote_OC, Id_CP, Id_OC, Nro_Lote, Lote_BRC, Lote_Planta, Tipo, Calibre, Bolsas, Kg_Bolsa, Total_Kg |
 
-> Todavia **no hay vinculo** entre estas hojas y `Orden` (Control de Transporte).
-> El enganche necesita `Id_OC` + `N° de camion` al final de `Orden`, y depende de
-> definir que campos vienen de la OC y cuales carga planta. Ver
-> [DOCUMENTACION_ORDEN_CARGA.md](DOCUMENTACION_ORDEN_CARGA.md) y
-> [PREGUNTAS_PENDIENTES_LUCAS.md](PREGUNTAS_PENDIENTES_LUCAS.md) punto 3.1.
+> **Vínculo con `Orden` (30/10/2026):** cada Control de Transporte que sale de un
+> camión de una orden guarda `Id_OC` + `Id_Camion_OC` (y `Nro_OC`,
+> `Nro_Camion_OC`) en las columnas 38-41 de `Orden`. `Id_Camion` de `OC_Camion`
+> no cambia al editar la orden. Ver
+> [DOCUMENTACION_ORDEN_CARGA.md](DOCUMENTACION_ORDEN_CARGA.md), séptimo incremento.
 
 ---
 

@@ -1,11 +1,11 @@
 # Orden de Carga — modelo de datos y vinculación con Control de Transporte
 
-> Estado: **la orden se guarda en el Sheet, genera su PDF para planta y los
-> datos se eligen en vez de escribirse**. Falta el enganche con Control de
-> Transporte.
+> Estado: **la orden se guarda en el Sheet, genera su PDF para planta, los
+> datos se eligen en vez de escribirse, y cada camión arranca su Control de
+> Transporte ya completo** (séptimo incremento). Falta mandar la OC por correo.
 > Fuentes: `Propuesta nuevas vinculaciones.docx` y el Excel real
 > `CN26-063 Orden de Carga 14-7.xlsx` (OC 2056, 14/07).
-> Última actualización: 06/10/2026.
+> Última actualización: 30/10/2026.
 >
 > **Todo lo que quedó sin confirmar está en
 > [PREGUNTAS_PENDIENTES_LUCAS.md](PREGUNTAS_PENDIENTES_LUCAS.md)**, ordenado para
@@ -170,7 +170,9 @@ La primera CP declara 26.695 kg pero sus lotes suman 26.715 — **20 kg de
 diferencia**. Las otras tres cierran exacto.
 
 **Confirmado por Lucas:** puede no coincidir y está bien. Son dos datos
-distintos y se guardan los dos; la app avisa la diferencia pero no bloquea.
+distintos y se guardan los dos, y nunca se bloquea. Hasta un 1 %
+(`OC_TOLERANCIA_PESO`) la diferencia se muestra en gris, como dato de balanza;
+más del 1 % se avisa en naranja como posible error de tipeo.
 
 ### La OC cierra en número redondo
 
@@ -474,11 +476,84 @@ sobre la tabla de arriba.
 simula una hoja vieja sin las columnas nuevas, y el del PDF audita también una
 orden con razones sociales largas.
 
+### El enganche con Control de Transporte — séptimo incremento (30/10/2026)
+
+Cada camión de la orden es **un** Control de Transporte. Planta ya no vuelve a
+cargar lo que decidió la oficina: elige la orden y el camión, y el control
+arranca completo.
+
+#### Cómo se usa
+
+- **Desde la orden:** en el historial de órdenes, el botón gris del camión abre
+  un control nuevo con esa orden ya elegida.
+- **Desde Control de Transporte (PT):** arriba del formulario, "¿Viene de una
+  Orden de Carga?". Se elige la orden, después el camión, y "Completar con este
+  camión". La lista dice cuántos camiones faltan en cada orden, y cada camión
+  dice si ya tiene control.
+- **El historial de órdenes** muestra `🚚 1/2` al lado del número: camiones con
+  control sobre el total. En verde cuando están todos.
+
+#### Qué se completa (mapeo definido con Lucas, punto 3.1, y con Santiago)
+
+| En el control | Sale de |
+|---|---|
+| Chofer, Patente chasis, Patente acoplado | El camión de la orden |
+| Un **producto** por cada lote de cada CP del camión | Producto = grano del camión · Calibre · Tipo · **N° Lote = Lote BRC** · **Posición Planta = Lote Planta** · Envase = Bolsas · Cant. = bolsas · Kg envase = kg por bolsa |
+| Un **contrato** por cada carta de porte | Contrato Comercial (CTTO de la CP) · Destino de la orden · Observaciones CP (`OC 2056 (1069 BLS)`) |
+| **Kg CP** | **Vacío**: es el de la balanza y lo carga planta. Abajo se ve "En la orden: 26.695 kg declarados" |
+| Contrato Cliente | Vacío: la orden no lo tiene; lo completa planta |
+| Checklist, fotos, firmas, ESTATUS, N° y archivo de CP, indicaciones, Kg cargados, correo | Planta |
+
+Lo que vino de la orden **se puede corregir** (puede llegar otro chofer u otra
+patente) y queda marcado en azul hasta que alguien lo toca.
+
+#### Un camión, un control
+
+- Si el camión elegido **ya tiene control**, la app avisa ("El camión 1 de la OC
+  2056 ya tiene su control…") y ofrece **abrir ese** en vez de hacer otro.
+- Si al guardar aparece **otro** control atado al mismo camión (otra persona,
+  otro celular), avisa antes y deja decidir. No bloquea: puede que el primero
+  esté mal y haya que rehacerlo.
+- **Desvincular** saca el vínculo y deja los datos como están.
+
+#### La clave del camión ya no cambia
+
+Antes la app no mandaba ninguna clave de camión y el backend inventaba una en
+cada guardado: como editar la orden es borrarla y reinsertarla, **el mismo camión
+cambiaba de id con cada corrección** y el control habría quedado apuntando a la
+nada. Ahora la clave (`CAM-…`) nace con la tarjeta del camión y viaja con ella;
+duplicar un camión le da una nueva. Las órdenes ya guardadas conservan la que les
+puso el backend.
+
+#### En el Sheet
+
+La hoja `Orden` suma cuatro columnas **al final**: `Id_OC`, `Nro_OC`,
+`Id_Camion_OC`, `Nro_Camion_OC`. Se escriben y se leen **por nombre** (no por
+posición, ver hallazgo 9 de la auditoría) y las crea sola
+`escribirVinculoOC()` con el primer control que venga de una orden. Un control
+sin orden no escribe nada. Hay que **publicar una nueva versión** del Apps
+Script (`01_backend_principal.gs` y `05_orden_carga.gs`).
+
+#### Sin señal
+
+Las órdenes quedan copiadas en el celular (la misma copia que usan los demás
+historiales), así planta puede arrancar el control desde la orden en el silo.
+
+#### Dónde y cómo se prueba
+
+- `orden-carga.js`, sección 9: el armado de los datos (`ocDatosParaControl`,
+  `ocControlesPorCamion`). `app.js`, "Vínculo con la Orden de Carga": la pantalla.
+- `node test_enganche_oc.js` — 40 pruebas: el backend con la hoja `Orden` real
+  de 37 columnas (vínculo por nombre, reintentos, edición, desvincular, columnas
+  movidas), que la clave del camión sobreviva a editar la orden, y el mapeo de la
+  OC 2056 real.
+- Se recorrió el flujo entero en Chrome con pantalla de celular y el backend
+  simulado: desde el historial de órdenes, completar el camión 2, corregir el
+  chofer, guardar, ver la orden en 2/2, intentar de nuevo el camión 1 (abre el
+  existente), detalle, desvincular, MP sin el bloque, y sin señal.
+
 ## 9. Lo que sigue
 
-1. **El enganche**: `Id_OC` + `N° de camión` al final de la hoja `Orden`, y que
-   planta abra la orden por número, elija su camión y arranque el Control de
-   Transporte con todo cargado. Depende de cerrar el mapeo campo por campo
-   (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 3.1).
+1. **Mandar la OC por correo** (Lucas, punto 8.3): hoy el PDF solo se descarga.
 2. Datos maestros de verdad, si existen en algún lado: hoy las listas se arman
    solas con lo ya cargado (`PREGUNTAS_PENDIENTES_LUCAS.md`, punto 7.1).

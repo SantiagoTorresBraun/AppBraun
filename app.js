@@ -547,6 +547,12 @@ function abrirModuloCarga(tipo) {
     const selectElaboro = document.getElementById('elaboro');
     if (selectElaboro) poblarSelect(selectElaboro, 'elaboro', '');
 
+    // Un control nuevo arranca sin orden de carga. La lista de órdenes solo
+    // se ofrece en PT: MP es mercadería que entra, y la OC es de lo que sale.
+    vinculoOCActual = null;
+    if (tipo === 'PT') prepararVinculoOC();
+    else pintarVinculoOC();
+
     switchTab('historial');
     cambiarVista('view-modulo-carga');
 
@@ -555,6 +561,248 @@ function abrirModuloCarga(tipo) {
         initCanvasFirma("canvas-firma-control");
     }, 150);
 }
+
+// =========================================================================
+// --- VÍNCULO CON LA ORDEN DE CARGA ---------------------------------------
+// =========================================================================
+// Un Control de Transporte de PT puede salir de un camión de una Orden de
+// Carga. Planta elige la orden y el camión, y el formulario se completa con lo
+// que ya decidió la oficina (chofer, patentes, un producto por lote y un
+// contrato por carta de porte). El armado de esos datos está en orden-carga.js
+// (sección 9, ocDatosParaControl); acá está solo la pantalla.
+//
+// Lo que viene de la orden se puede corregir —puede llegar otro chofer u otra
+// patente— y queda marcado en azul hasta que alguien lo toca. El control
+// guarda Id_OC + Id_Camion_OC, que es lo que usa la orden para mostrar qué
+// camiones ya tienen control y para no dejar hacer dos sobre el mismo.
+
+// { Id_OC, Nro_OC, Id_Camion_OC, Nro_Camion_OC } del control que está en
+// pantalla, o null si no viene de una orden.
+let vinculoOCActual = null;
+// Las órdenes que se ofrecen en la lista, y la que hay que dejar elegida
+// cuando se llega desde el historial de órdenes.
+let ordenesParaVincular = [];
+let ordenOCPreseleccionada = null;
+
+// Los controles que conoce este dispositivo: lo del Sheet más lo que todavía
+// está en la cola. Lo pendiente manda, porque es lo último que se escribió.
+async function controlesDeTransporteConocidos() {
+    const locales = await obtenerRegistrosLocales();
+    const ids = new Set(locales.map(r => r.Id_Carga));
+    return locales.concat(historialGeneral.filter(r => !ids.has(r.Id_Carga)));
+}
+
+// Desde el historial de órdenes (botón del camión): abre un control nuevo con
+// esa orden ya elegida.
+function iniciarControlDesdeOC(idOC) {
+    ordenOCPreseleccionada = idOC;
+    abrirModuloCarga('PT');
+    switchTab('nuevo');
+}
+
+// Muestra la lista de órdenes (o el vínculo, si el control ya tiene uno). Pinta
+// primero con lo que hay —también sin señal, desde la copia— y si hay señal
+// vuelve a pintar con lo último del Sheet.
+async function prepararVinculoOC() {
+    pintarVinculoOC();
+    if (vinculoOCActual || typeof ocOrdenesConocidas !== 'function') return;
+    await llenarOrdenesVinculoOC();
+    if (navigator.onLine && typeof ocCargarOrdenesDesdeGoogle === 'function') {
+        await ocCargarOrdenesDesdeGoogle();
+        if (!vinculoOCActual) await llenarOrdenesVinculoOC();
+    }
+    // Ya quedó elegida: el próximo control nuevo arranca sin orden.
+    ordenOCPreseleccionada = null;
+}
+
+function pintarVinculoOC() {
+    const elegir = document.getElementById('vinculo-oc-elegir');
+    const actual = document.getElementById('vinculo-oc-actual');
+    if (!elegir || !actual) return;
+    elegir.classList.toggle('hidden', !!vinculoOCActual);
+    actual.classList.toggle('hidden', !vinculoOCActual);
+    if (vinculoOCActual) document.getElementById('vinculo-oc-texto').textContent = textoVinculoOC(vinculoOCActual);
+}
+
+function textoVinculoOC(v) {
+    return 'OC ' + (v.Nro_OC || '?') + ' · Camión ' + (v.Nro_Camion_OC || '?');
+}
+
+function atributoSeguro(valor) {
+    return escapeHtml(String(valor === undefined || valor === null ? '' : valor)).replace(/"/g, '&quot;');
+}
+
+async function llenarOrdenesVinculoOC() {
+    const sel = document.getElementById('vinculo-oc-orden');
+    if (!sel) return;
+    const elegida = ordenOCPreseleccionada || sel.value;
+    ordenesParaVincular = await ocOrdenesConocidas();
+    const controles = await controlesDeTransporteConocidos();
+
+    const opciones = ['<option value="">Sin orden de carga</option>'];
+    ordenesParaVincular.forEach(o => {
+        const camiones = o.Camiones || [];
+        const hechos = ocControlesPorCamion(o.Id_OC, controles);
+        const faltan = camiones.filter(c => !hechos[String(c.Id_Camion || '')]).length;
+        const fecha = o.Fecha ? String(o.Fecha).split('-').reverse().slice(0, 2).join('/') : '';
+        // El avance va antes que el destino: en el celular el final se corta.
+        const estado = !camiones.length ? ''
+            : (faltan ? 'falta' + (faltan === 1 ? '' : 'n') + ' ' + faltan + ' de ' + camiones.length : 'todos controlados');
+        const texto = ['OC ' + (o.Nro_OC || '?'), estado, fecha, o.Destino].filter(Boolean).join(' · ');
+        opciones.push(`<option value="${atributoSeguro(o.Id_OC)}">${escapeHtml(texto)}</option>`);
+    });
+    sel.innerHTML = opciones.join('');
+    sel.value = ordenesParaVincular.some(o => o.Id_OC === elegida) ? elegida : '';
+    await pintarCamionesVinculoOC();
+}
+
+function elegirOrdenVinculoOC() {
+    ordenOCPreseleccionada = null;   // la eligió a mano: ya no hay que forzar ninguna
+    pintarCamionesVinculoOC();
+}
+
+// Los camiones de la orden elegida. Los que ya tienen control lo dicen, y queda
+// elegido el primero que todavía no lo tiene.
+async function pintarCamionesVinculoOC() {
+    const selOrden = document.getElementById('vinculo-oc-orden');
+    const selCamion = document.getElementById('vinculo-oc-camion');
+    const boton = document.getElementById('btn-vinculo-oc-aplicar');
+    if (!selOrden || !selCamion || !boton) return;
+
+    const orden = ordenesParaVincular.find(o => o.Id_OC === selOrden.value);
+    if (!orden) {
+        selCamion.innerHTML = '<option value="">Elegí primero la orden</option>';
+        selCamion.disabled = true;
+        boton.disabled = true;
+        return;
+    }
+
+    const hechos = ocControlesPorCamion(orden.Id_OC, await controlesDeTransporteConocidos());
+    const camiones = orden.Camiones || [];
+    selCamion.innerHTML = camiones.map((c, i) => {
+        const control = hechos[String(c.Id_Camion || '')];
+        const extra = control ? ' — ya tiene control (' + (control.ESTATUS || 'sin estatus') + ')' : '';
+        // Una orden guardada sin señal antes de que los camiones tuvieran clave
+        // propia no se puede vincular hasta que se vuelva a guardar.
+        const sinClave = !c.Id_Camion ? ' disabled' : '';
+        return `<option value="${atributoSeguro(c.Id_Camion)}"${sinClave}>${escapeHtml(ocTextoCamion(c, i + 1) + extra)}${sinClave ? ' (abrí y guardá la orden de nuevo)' : ''}</option>`;
+    }).join('') || '<option value="">La orden no tiene camiones</option>';
+
+    const primeroLibre = camiones.find(c => c.Id_Camion && !hechos[String(c.Id_Camion)]);
+    if (primeroLibre) selCamion.value = primeroLibre.Id_Camion;
+    selCamion.disabled = !camiones.length;
+    boton.disabled = !camiones.length;
+}
+
+// ¿El operario ya escribió algo que completar con la orden borraría?
+function formularioCargaTieneDatos() {
+    const conValor = sel => Array.from(document.querySelectorAll(sel)).some(el => String(el.value || '').trim() !== '');
+    return conValor('#chofer, #patente-chasis, #patente-acoplado')
+        || conValor('#wrapper-productos-dinamicos [data-field="lote"]')
+        || conValor('#wrapper-contratos-dinamicos [data-field="contrato_com"]');
+}
+
+async function aplicarOCAlControl() {
+    const orden = ordenesParaVincular.find(o => o.Id_OC === document.getElementById('vinculo-oc-orden').value);
+    const idCamion = document.getElementById('vinculo-oc-camion').value;
+    const datos = ocDatosParaControl(orden, idCamion);
+    if (!datos) { alert('Ese camión ya no está en la orden. Elegí de nuevo.'); llenarOrdenesVinculoOC(); return; }
+
+    // Un camión, un control: si ya lo tiene, se abre ese en vez de hacer otro.
+    const existente = ocControlesPorCamion(orden.Id_OC, await controlesDeTransporteConocidos())[String(idCamion)];
+    if (existente) {
+        if (confirm('El camión ' + datos.vinculo.Nro_Camion_OC + ' de la OC ' + datos.vinculo.Nro_OC +
+                    ' ya tiene su control de transporte (' + (existente.Fecha || 'sin fecha') + ', ' +
+                    (existente.ESTATUS || 'sin estatus') + ').\n\n¿Lo abrís para revisarlo o corregirlo?')) {
+            cargarRegistroParaEditar(existente);
+        }
+        return;
+    }
+
+    if (formularioCargaTieneDatos() && !confirm('Ya hay datos escritos en este control. Si seguís, el chofer, las patentes, ' +
+            'los productos y los contratos se reemplazan por los de la orden.\n\n¿Seguís?')) return;
+
+    volcarOCEnFormulario(datos);
+}
+
+// Pasa al formulario lo que trae ocDatosParaControl() y marca en azul lo que
+// vino de la orden.
+function volcarOCEnFormulario(datos) {
+    [['chofer', datos.chofer], ['patente-chasis', datos.patente_chasis], ['patente-acoplado', datos.patente_acoplado]]
+        .forEach(([id, valor]) => {
+            const el = document.getElementById(id);
+            el.value = valor;
+            el.classList.toggle('desde-oc', !!valor);
+        });
+
+    const wrapperProd = document.getElementById('wrapper-productos-dinamicos');
+    wrapperProd.innerHTML = '';
+    (datos.productos.length ? datos.productos : [{}]).forEach(p => {
+        const valores = Object.assign({}, p, {
+            tipo: p.tipo || 'PT',
+            cantidad: valorPlanoParaEditar(p.cantidad),
+            kg_envase: valorPlanoParaEditar(p.kg_envase)
+        });
+        marcarTarjetaDesdeOC(agregarFilaProducto({ valores: valores }), 'prod-item', valores);
+    });
+    if (datos.productos.length > 1) wrapperProd.querySelectorAll('.dynamic-item-card').forEach(colapsarTarjeta);
+
+    const wrapperCont = document.getElementById('wrapper-contratos-dinamicos');
+    wrapperCont.innerHTML = '';
+    (datos.contratos.length ? datos.contratos : [{}]).forEach(c => {
+        // Kg CP va vacío: es el de la balanza y lo carga planta. El declarado en
+        // la orden se muestra abajo, de referencia.
+        const valores = Object.assign({}, c, { kg_cp: '' });
+        delete valores.kg_oc;
+        const card = agregarFilaContrato({ valores: valores });
+        marcarTarjetaDesdeOC(card, 'cont-item', valores);
+        if (c.kg_oc) {
+            const ref = document.createElement('small');
+            ref.className = 'ref-oc';
+            ref.textContent = 'En la orden: ' + formatNumeroAR(c.kg_oc, 0) + ' kg declarados';
+            card.querySelector('.campo-kgcp').closest('.form-group').appendChild(ref);
+        }
+    });
+    if (datos.contratos.length > 1) wrapperCont.querySelectorAll('.dynamic-item-card').forEach(colapsarTarjeta);
+
+    vinculoOCActual = datos.vinculo;
+    pintarVinculoOC();
+}
+
+function marcarTarjetaDesdeOC(card, claseItem, valores) {
+    card.querySelectorAll('.' + claseItem).forEach(el => {
+        const v = valores[el.dataset.field];
+        if (v !== undefined && v !== null && String(v).trim() !== '' && el.type !== 'hidden') el.classList.add('desde-oc');
+    });
+}
+
+function desvincularOC() {
+    if (!vinculoOCActual) return;
+    if (!confirm('¿Desvincular este control de la ' + textoVinculoOC(vinculoOCActual) + '?\n\n' +
+                 'Lo que ya está cargado queda como está; solo deja de figurar como el control de ese camión.')) return;
+    vinculoOCActual = null;
+    document.querySelectorAll('#form-carga .desde-oc').forEach(el => el.classList.remove('desde-oc'));
+    prepararVinculoOC();
+}
+
+// Antes de guardar: si OTRO control ya está atado a este mismo camión (otra
+// persona, otro celular), se avisa. No se bloquea: puede ser que el primero
+// esté mal y haya que rehacerlo.
+async function confirmarCamionSinOtroControl(idCarga) {
+    if (!vinculoOCActual) return true;
+    const otro = (await controlesDeTransporteConocidos()).find(c => c.Id_Carga !== idCarga
+        && String(c.Id_OC || '') === String(vinculoOCActual.Id_OC)
+        && String(c.Id_Camion_OC || '') === String(vinculoOCActual.Id_Camion_OC));
+    if (!otro) return true;
+    return confirm('Ojo: la ' + textoVinculoOC(vinculoOCActual) + ' ya tiene otro control de transporte (' +
+                   (otro.Fecha || 'sin fecha') + ', ' + (otro.ESTATUS || 'sin estatus') + ').\n\n' +
+                   'Si guardás, ese camión va a quedar con dos controles. ¿Guardás igual?');
+}
+
+// Lo que el operario toca deja de estar marcado como "viene de la orden".
+['input', 'change'].forEach(evento => document.getElementById('form-carga').addEventListener(evento, e => {
+    if (e.target && e.target.classList) e.target.classList.remove('desde-oc');
+}));
 
 // =========================================================================
 // --- 3. TARJETAS DINÁMICAS (PRODUCTOS Y CONTRATOS) -----------------------
@@ -2179,7 +2427,7 @@ document.getElementById("form-carga").addEventListener("invalid", function(e) {
     }
 }, true);
 
-document.getElementById("form-carga").addEventListener("submit", function(e) {
+document.getElementById("form-carga").addEventListener("submit", async function(e) {
     e.preventDefault();
 
     if (fotosEnProceso > 0) {
@@ -2189,6 +2437,7 @@ document.getElementById("form-carga").addEventListener("submit", function(e) {
 
     const esEdicion = !!idRegistroEnEdicion;
     const idParaGuardar = idRegistroEnEdicion || ("BC-" + Date.now());
+    if (!(await confirmarCamionSinOtroControl(idParaGuardar))) return;
     const registro = construirRegistroDesdeFormulario(idParaGuardar);
 
     if (esEdicion) {
@@ -2235,6 +2484,13 @@ function construirRegistroDesdeFormulario(idParaGuardar) {
 
         Productos: listaProductos,
         Contratos: listaContratos,
+
+        // De qué camión de qué Orden de Carga es este control ("" si no viene
+        // de ninguna). Ver "Vínculo con la Orden de Carga".
+        Id_OC: vinculoOCActual ? vinculoOCActual.Id_OC : "",
+        Nro_OC: vinculoOCActual ? vinculoOCActual.Nro_OC : "",
+        Id_Camion_OC: vinculoOCActual ? vinculoOCActual.Id_Camion_OC : "",
+        Nro_Camion_OC: vinculoOCActual ? vinculoOCActual.Nro_Camion_OC : "",
 
         Aplica_Etiqueta: soloPTRadio("aplica_etiqueta"),
         Lona_Protege: soloPTRadio("lona_protege"),
@@ -2617,7 +2873,10 @@ async function filtrarYRenderizarTabla(opciones) {
         const textoProductos = productos.map(p => (p.producto || '')).join(' ').toLowerCase();
         const textoContratos = contratos.map(c => (c.contrato_com || '')).join(' ').toLowerCase();
  
-        if (txt && !textoProductos.includes(txt) && !textoContratos.includes(txt)) return false;
+        // "oc 2056" o "2056" encuentra los controles de esa orden de carga
+        const textoOC = item.Nro_OC ? ('oc ' + item.Nro_OC) : '';
+
+        if (txt && !textoProductos.includes(txt) && !textoContratos.includes(txt) && !textoOC.includes(txt)) return false;
 
         // Filtro por N° Lote y Posición Planta (campos de los productos de la carga:
         // la carga aparece si ALGÚN producto coincide)
@@ -2832,6 +3091,17 @@ function cargarRegistroParaEditar(base64Data) {
             restaurarFirmaEnCanvas("canvas-firma-control", item.Firma_Control);
         }, 200);
 
+        // --- Vínculo con la Orden de Carga ---
+        vinculoOCActual = item.Id_OC ? {
+            Id_OC: item.Id_OC,
+            Nro_OC: item.Nro_OC || '',
+            Id_Camion_OC: item.Id_Camion_OC || '',
+            Nro_Camion_OC: item.Nro_Camion_OC || ''
+        } : null;
+        document.querySelectorAll('#form-carga .desde-oc').forEach(el => el.classList.remove('desde-oc'));
+        if (tipoCargaActual === 'PT') prepararVinculoOC();
+        else pintarVinculoOC();
+
         // --- Activar modo edición ---
         idRegistroEnEdicion = item.Id_Carga;
         document.getElementById('btn-guardar-control').textContent = "Guardar Cambios";
@@ -3008,6 +3278,15 @@ for (const campo of camposImagen) {
         doc.text("Fecha:", margenX, yCurrent);
         doc.setFont("helvetica", "normal");
         doc.text(`${item.Fecha || '-'}`, margenX + 16, yCurrent);
+
+        // Si el control salió de una Orden de Carga, el cliente y planta lo
+        // identifican por ese número (antes iba tipeado en Observaciones CP).
+        if (item.Id_OC) {
+            doc.setFont("helvetica", "bold");
+            doc.text("Orden de Carga:", 70, yCurrent);
+            doc.setFont("helvetica", "normal");
+            doc.text(textoVinculoOC(item), 100, yCurrent);
+        }
 
         doc.setFont("helvetica", "bold");
         doc.text("Total Kg:", 150, yCurrent);
@@ -3465,6 +3744,7 @@ function abrirDetalleCarga(registro) {
     document.getElementById('det-tipo').textContent = registro.Tipo_Carga || '-';
     document.getElementById('det-estado').innerHTML = `<span class="badge ${registro.ESTATUS ? String(registro.ESTATUS).toLowerCase() : 'sin-dato'}">${registro.ESTATUS || '—'}</span>`;
     document.getElementById('det-kg').textContent = fmtKg(registro.Kg_Cargados) + ' kg';
+    document.getElementById('det-oc').textContent = registro.Id_OC ? textoVinculoOC(registro) : '-';
     
     // Llenar productos
     const detProductos = document.getElementById('det-productos');

@@ -1159,7 +1159,29 @@
                 <form id="form-carga">
                     <h3>Datos Generales (<span id="lbl-tipo-carga-actual">PT</span>)</h3>
                     <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
- 
+
+                    <!-- Vínculo con la Orden de Carga (solo PT). Al elegir la orden
+                         y el camión se completa lo que ya decidió la oficina; planta
+                         carga lo suyo. Ver app.js, "Vínculo con la Orden de Carga". -->
+                    <div id="bloque-vinculo-oc" class="vinculo-oc solo-pt">
+                        <div id="vinculo-oc-elegir">
+                            <h4><i class="fas fa-link"></i> ¿Viene de una Orden de Carga?</h4>
+                            <p class="vinculo-oc-ayuda">Elegí la orden y el camión: se completan solos el chofer, las patentes, los lotes y los contratos. Vos completás el checklist, las fotos, las firmas y los datos de la carta de porte.</p>
+                            <!-- Uno debajo del otro: en el celular, lado a lado se
+                                 cortaba el texto y no se veía qué se elegía. -->
+                            <div class="form-group"><label for="vinculo-oc-orden">Orden de Carga</label><select id="vinculo-oc-orden" onchange="elegirOrdenVinculoOC()"></select></div>
+                            <div class="form-group"><label for="vinculo-oc-camion">Camión</label><select id="vinculo-oc-camion" disabled></select></div>
+                            <button type="button" class="btn-vinculo-oc" id="btn-vinculo-oc-aplicar" onclick="aplicarOCAlControl()" disabled>
+                                <i class="fas fa-truck-loading"></i> Completar con este camión
+                            </button>
+                        </div>
+                        <div id="vinculo-oc-actual" class="hidden">
+                            <div class="vinculo-oc-titulo"><i class="fas fa-link"></i> <strong id="vinculo-oc-texto"></strong></div>
+                            <p class="vinculo-oc-ayuda">Los campos marcados en azul vienen de la orden. Si algo cambió (otro chofer, otra patente), corregilo acá.</p>
+                            <button type="button" class="btn-clear" onclick="desvincularOC()"><i class="fas fa-unlink"></i> Desvincular de la orden</button>
+                        </div>
+                    </div>
+
                     <div class="section-dynamic-header">
                         <h3>Cargar de Mercadería <span class="contador-items" id="contador-productos">1</span></h3>
                         <div class="section-actions-group">
@@ -1347,6 +1369,10 @@
                         <div class="detalle-item">
                             <label>Total Kg</label>
                             <div class="detalle-value" id="det-kg">-</div>
+                        </div>
+                        <div class="detalle-item">
+                            <label>Orden de Carga</label>
+                            <div class="detalle-value" id="det-oc">-</div>
                         </div>
                     </div>
                 </div>
