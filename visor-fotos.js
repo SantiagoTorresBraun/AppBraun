@@ -128,7 +128,10 @@ document.addEventListener('click', e => {
     if (!img) return;
     const grilla = img.closest('.detalle-foto-grid') || img.parentElement;
     const imgs = Array.from(grilla.querySelectorAll('.detalle-foto-img'));
-    const fotos = imgs.map(i => ({ src: i.currentSrc || i.src, nombre: i.alt || 'Foto' }));
+    // La miniatura de Drive viene a 800 px; para el zoom se pide la versión
+    // grande (lh3 no agranda: si la original es más chica, devuelve la original).
+    const enAlta = s => String(s).replace(/(lh3\.googleusercontent\.com\/d\/[\w-]+)=w\d+/, '$1=w2400');
+    const fotos = imgs.map(i => ({ src: enAlta(i.currentSrc || i.src), nombre: i.alt || 'Foto' }));
     abrirVisorFotos(fotos, Math.max(0, imgs.indexOf(img)));
 });
 

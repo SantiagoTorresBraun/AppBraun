@@ -339,13 +339,23 @@ function configurarFotoCalidad(inputId, previewId, keyName) {
             const img = new Image();
             img.onload = function() {
                 try {
+                    // ALTA RESOLUCIÓN A PROPÓSITO (03/11/2026): en estas fotos
+                    // se evalúa el grano y comercial las usa para vender. Antes
+                    // se bajaban a 600 px y JPEG 50% (igual que Carga) y en el
+                    // PDF no se distinguía nada. Ahora: lado mayor 2048 px y
+                    // calidad 88% (~0,5-1 MB por foto). Es seguro: la cola
+                    // offline usa IndexedDB, el historial local no guarda
+                    // fotos y el backend las pasa a Drive al guardar.
                     const canvas = document.createElement("canvas");
-                    const max_width = 600;
+                    const LADO_MAX = 2048;
                     let width = img.width, height = img.height;
-                    if (width > max_width) { height *= max_width / width; width = max_width; }
+                    const escala = Math.min(1, LADO_MAX / Math.max(width, height));
+                    width = Math.round(width * escala); height = Math.round(height * escala);
                     canvas.width = width; canvas.height = height;
-                    canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-                    const compressed = canvas.toDataURL("image/jpeg", 0.5);
+                    const ctx = canvas.getContext("2d");
+                    ctx.imageSmoothingQuality = "high";
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const compressed = canvas.toDataURL("image/jpeg", 0.88);
                     fotosCalidad[keyName] = compressed;
                     previewDiv.innerHTML = '';
                     previewDiv.style.backgroundImage = `url(${compressed})`;
@@ -1347,7 +1357,7 @@ function cargarImagenParaPDF(src) {
         if (!v.startsWith('http')) return resolve(null);
 
         const id = extraerIdDrive(v);
-        const urlDirecta = id ? `https://lh3.googleusercontent.com/d/${id}=w1200` : v;
+        const urlDirecta = id ? `https://lh3.googleusercontent.com/d/${id}=w2048` : v;
         bajar(urlDirecta)
             .then(resolve)
             .catch(() => {
@@ -1368,7 +1378,9 @@ function cargarImagenParaPDF(src) {
 //
 // Devuelve { data, ancho, alto } para no tener que releer las medidas después.
 function prepararImagenPDF(dataUrl, ladoMaximo) {
-    const MAX = ladoMaximo || 1400;
+    // 2048 px: a 87 mm de ancho da ~600 dpi, así al hacer zoom con los dedos
+    // en el PDF el grano se sigue viendo nítido.
+    const MAX = ladoMaximo || 2048;
     return new Promise(resolve => {
         if (!dataUrl) return resolve(null);
         const img = new Image();
@@ -1391,7 +1403,7 @@ function prepararImagenPDF(dataUrl, ladoMaximo) {
                 ctx.fillRect(0, 0, w, h);
                 ctx.drawImage(img, 0, 0, w, h);
 
-                resolve({ data: c.toDataURL('image/jpeg', 0.82), ancho: w, alto: h });
+                resolve({ data: c.toDataURL('image/jpeg', 0.88), ancho: w, alto: h });
             } catch (e) { resolve(null); }
         };
         img.onerror = () => resolve(null);
@@ -1715,12 +1727,27 @@ async function generarPDFCalidad(base64Data, modo) {
 
         // ================= PÁGINA 2: FOTOS =================
         const etiquetasFotos = ["MUESTRA GENERAL 1:", "FOTO EN MANO 2:", "CALIBRES 3:", "DAÑOS 4:"];
+        // Link de cada foto: si está en Drive, tocarla en el PDF la abre en
+        // tamaño completo (como hacía el PDF de AppSheet). Las que todavía son
+        // base64 (control sin sincronizar) no tienen link, pero van embebidas
+        // en alta y se pueden ampliar con los dedos.
         const fotosDisponibles = fotosCargadas
-            .map((f, i) => f ? Object.assign({}, f, { titulo: etiquetasFotos[i] }) : null)
+            .map((f, i) => {
+                if (!f) return null;
+                const idDrive = extraerIdDrive(item[`imagen ${i + 1}`]);
+                const link = idDrive ? `https://drive.google.com/file/d/${idDrive}/view` : '';
+                return Object.assign({}, f, { titulo: etiquetasFotos[i], link: link });
+            })
             .filter(Boolean);
 
         if (fotosDisponibles.length > 0) {
             doc.addPage();
+            if (fotosDisponibles.some(f => f.link)) {
+                doc.setTextColor(120, 120, 120);
+                doc.setFontSize(8.5);
+                doc.setFont(undefined, 'italic');
+                doc.text("Tocá cualquier foto para abrirla en tamaño completo.", 105, 11, { align: 'center' });
+            }
 
             const anchoCelda = 87;   // 87 + 8 + 87 = 182 = ancho útil de la hoja
             const gap = 8;
@@ -1776,7 +1803,10 @@ async function generarPDFCalidad(base64Data, modo) {
                     const ox = fx + (anchoCelda - w) / 2;
                     const oy = yCelda + (altoFila - h) / 2;
 
-                    try { doc.addImage(f.data, 'JPEG', ox, oy, w, h); }
+                    try {
+                        doc.addImage(f.data, 'JPEG', ox, oy, w, h);
+                        if (f.link) doc.link(ox, oy, w, h, { url: f.link });
+                    }
                     catch (e) {
                         doc.setTextColor(120, 120, 120);
                         doc.setFontSize(9);

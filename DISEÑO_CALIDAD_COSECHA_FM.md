@@ -6,7 +6,7 @@ Origen: sección 4 de *Propuesta nuevas vinculaciones.docx*. Decisiones tomadas 
 
 | # | Punto | Estado |
 |---|---|---|
-| 5 | Fotos que se agrandan al tocarlas | ✅ Hecho (`visor-fotos.js`) — falta probar en el teléfono |
+| 5 | Fotos que se agrandan al tocarlas | ✅ En la app (`visor-fotos.js`, 16/10). ✅ **En el PDF** (03/11): cada foto tiene link a Drive y al tocarla se abre en tamaño completo, como el PDF de AppSheet. ✅ **Fotos en HD** (03/11): la captura pasó de 600 px / JPEG 50% a 2048 px / JPEG 88%; el PDF las embebe a 2048 px. Las fotos sacadas antes del 03/11 quedan en 600 px (no se recuperan). Falta probar en el teléfono. |
 | 1 | Dividir en Control de Cosecha y Control de Flujo de Masa | ✅ Hecho (16/10) — las columnas del Sheet las crea el backend (sección 3) |
 | 3 | Campos propios de Cosecha | ✅ Hecho (16/10) |
 | 4 | Campos propios de Flujo de Masa | ✅ Hecho (16/10) |
