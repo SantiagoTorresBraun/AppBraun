@@ -3452,6 +3452,8 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
 .agente-mensajes {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;   /* una tabla ancha se desplaza en su caja, no empuja el panel */
+    min-width: 0;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -3535,6 +3537,8 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
     border: 1px solid var(--color-border);
     border-radius: 8px;
     overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
 }
 .agente-tabla-titulo {
     padding: 7px 10px;
@@ -3578,8 +3582,13 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
     border-radius: 18px;
     padding: 9px 14px;
     font-family: inherit;
-    font-size: 0.9rem;
+    /* 16px MÍNIMO a propósito: con menos, el iPhone hace zoom solo al tocar
+       el cuadro, no vuelve atrás, y el panel quedaba cortado a la derecha
+       (tabla y botón de enviar). No se usa maximum-scale=1 porque eso
+       también bloquea el zoom con los dedos, que hace falta para las fotos. */
+    font-size: 16px;
     line-height: 1.4;
+    min-width: 0;
     max-height: 120px;
     outline: none;
     transition: border-color 0.15s ease;
@@ -3608,6 +3617,13 @@ body.agente-abierto .agente-overlay { opacity: 1; pointer-events: auto; }
 /* Con el chat abierto, el FAB se esconde para no tapar el panel */
 body.agente-abierto .fab-agente-ia { opacity: 0; pointer-events: none; }
 .fab-agente-ia { transition: opacity 0.2s ease; }
+
+/* Sin sesión iniciada no hay asistente: ni botón ni panel (app.js pone
+   "con-sesion" en el body al entrar y la saca al volver al login). Va por la
+   negativa para que tampoco se vea un instante mientras carga la página. */
+body:not(.con-sesion) .fab-agente-ia,
+body:not(.con-sesion) #agente-panel,
+body:not(.con-sesion) #agente-overlay { display: none !important; }
 
 /* =====================================================================
    CONTROL DE CARGA — MATERIA PRIMA (MP)

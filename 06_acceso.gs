@@ -52,6 +52,49 @@ var ACCIONES_PUBLICAS = {
   auth_reset_confirmar: true
 };
 
+// Lo que pide token AUNQUE el modo sea "registrar". Ningún celular depende de
+// esto para trabajar en el día a día, y abierto deja hacer daño de verdad:
+// agregarse como usuario era el primer paso para quedarse con una cuenta que
+// sobrevive al paso a "exigir" (SEC-01 de la segunda auditoría del 30/10), y
+// agente_consulta gasta la clave de Groq. En "abierto" tampoco se pide.
+var ACCIONES_SIEMPRE_CON_TOKEN = {
+  agregar_usuario: true,
+  eliminar_usuario: true,
+  agente_consulta: true
+};
+
+// ---------------------------------------------------------------------------
+// QUÉ CORREOS PUEDEN SER USUARIOS
+// ---------------------------------------------------------------------------
+// El código de recuperación prueba que alguien controla ESE correo, no que
+// trabaja en Braun. Sin este filtro, cualquiera se agregaba con su Gmail, se
+// mandaba el código a sí mismo y tenía una sesión válida.
+//
+// Propiedades del script (opcionales):
+//   DOMINIOS_PERMITIDOS  → separados por coma. Si no existe, solo el de Braun.
+//   CORREOS_PERMITIDOS   → excepciones puntuales de otros dominios (un
+//                          contador, un fletero), separadas por coma.
+var DOMINIO_PERMITIDO_POR_DEFECTO = "braunrelacionescomerciales.com.ar";
+
+function listaDePropiedad(nombre) {
+  var valor = "";
+  try { valor = PropertiesService.getScriptProperties().getProperty(nombre) || ""; }
+  catch (err) { Logger.log("No se pudo leer " + nombre + ": " + err); }
+  return String(valor).split(",")
+    .map(function (x) { return x.trim().toLowerCase(); })
+    .filter(function (x) { return x; });
+}
+
+function emailPermitido(email) {
+  email = String(email || "").trim().toLowerCase();
+  var arroba = email.lastIndexOf("@");
+  if (arroba < 1) return false;
+  if (listaDePropiedad("CORREOS_PERMITIDOS").indexOf(email) !== -1) return true;
+  var dominios = listaDePropiedad("DOMINIOS_PERMITIDOS");
+  if (!dominios.length) dominios = [DOMINIO_PERMITIDO_POR_DEFECTO];
+  return dominios.indexOf(email.slice(arroba + 1)) !== -1;
+}
+
 function modoAcceso() {
   var modo = "";
   try {
@@ -74,6 +117,7 @@ function controlarAcceso(accion, token, usuarioDeclarado) {
 
   var modo = modoAcceso();
   if (modo === "abierto") return { email: "", rechazo: null };
+  if (ACCIONES_SIEMPRE_CON_TOKEN[accion]) modo = "exigir";
 
   var email = "";
   try {
@@ -152,6 +196,9 @@ function emailDeToken(token) {
 
   // Un usuario quitado de la lista pierde el acceso aunque su token no venció.
   if (email && buscarFilaUsuario(obtenerHojaUsuarios(), email) === -1) email = "";
+  // Y uno de un dominio no permitido también: corta las cuentas que se hayan
+  // creado antes de existir el filtro.
+  if (email && !emailPermitido(email)) email = "";
 
   // Lo inválido se recuerda poco: un token recién emitido tiene que andar ya.
   cache.put(claveCache, email || "-", email ? SESION_CACHE_SEG : 60);

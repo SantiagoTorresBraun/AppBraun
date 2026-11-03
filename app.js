@@ -365,6 +365,17 @@ function cambiarVista(idDestino) {
         idDestino = 'view-login';
     }
 
+    // El asistente de IA solo existe con la sesión iniciada (style.css esconde
+    // el botón y el panel sin la clase "con-sesion"). Al volver al login se
+    // cierra el chat y se borra la conversación del usuario anterior.
+    const conSesion = idDestino !== 'view-login';
+    document.body.classList.toggle('con-sesion', conSesion);
+    if (!conSesion) {
+        // Primero limpiar (agenteLimpiarChat reabre el panel) y después cerrar.
+        if (typeof agenteLimpiarChat === 'function') agenteLimpiarChat();
+        if (typeof cerrarAgenteIA === 'function') cerrarAgenteIA();
+    }
+
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     const vistaDestino = document.getElementById(idDestino);
     vistaDestino.classList.remove('hidden');

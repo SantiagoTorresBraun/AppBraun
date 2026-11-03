@@ -137,7 +137,7 @@ function authLogin(body) {
   var fila = buscarFilaUsuario(hoja, body.email);
   // Mensaje único a propósito: no se distingue "no existe" de "clave incorrecta".
   var generico = { ok: false, error: "Correo o contraseña incorrectos." };
-  if (fila === -1) return respuestaAuth(generico);
+  if (fila === -1 || !correoAdmitido(body.email)) return respuestaAuth(generico);
 
   var guardado = leerCampoUsuario(hoja, fila, COL_AUTH.verificador);
   if (!guardado) return respuestaAuth({ ok: false, sinClave: true, error: "Este usuario todavía no definió su contraseña." });
@@ -166,6 +166,12 @@ function tokenParaRespuesta(email) {
     Logger.log("No se pudo emitir el token de sesión: " + err);
     return "";
   }
+}
+
+// El filtro de dominios de 06_acceso.gs. Sin ese archivo no se filtra nada,
+// igual que el token: este módulo no puede depender de que esté.
+function correoAdmitido(email) {
+  return typeof emailPermitido !== "function" || emailPermitido(email);
 }
 
 function revocarSesionesSiSePuede(email) {
@@ -226,7 +232,9 @@ function authResetPedir(body) {
   var email = String(body.email || "").trim().toLowerCase();
   var hoja = obtenerHojaUsuarios();
   var fila = buscarFilaUsuario(hoja, email);
-  if (fila === -1) return respuestaAuth({ ok: false, error: "Ese correo no está registrado en la app." });
+  // Un correo de afuera no recibe código aunque esté en la hoja: así se
+  // quedaba alguien con una cuenta (SEC-01 de la segunda auditoría del 30/10).
+  if (fila === -1 || !correoAdmitido(email)) return respuestaAuth({ ok: false, error: "Ese correo no está registrado en la app." });
 
   // Freno de pedidos: sin esto se le puede llenar la casilla a alguien.
   var cache = CacheService.getScriptCache();
@@ -265,7 +273,7 @@ function authResetConfirmar(body) {
   var email = String(body.email || "").trim().toLowerCase();
   var hoja = obtenerHojaUsuarios();
   var fila = buscarFilaUsuario(hoja, email);
-  if (fila === -1) return respuestaAuth({ ok: false, error: "Ese correo no está registrado en la app." });
+  if (fila === -1 || !correoAdmitido(email)) return respuestaAuth({ ok: false, error: "Ese correo no está registrado en la app." });
 
   if (!body.salt || !body.verificador) {
     return respuestaAuth({ ok: false, error: "Faltan datos para guardar la contraseña." });

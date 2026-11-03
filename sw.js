@@ -53,7 +53,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v27';
+const VERSION = 'v28';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

@@ -129,7 +129,8 @@ const hash = t => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
 // Beto todavía entra con la genérica.
 function reiniciar() {
   Object.keys(HOJAS).forEach(k => delete HOJAS[k]);
-  cache = new Map(); correos = []; propiedades = {}; sheetRoto = false;
+  // Los usuarios de prueba son @braun.com: ese es el dominio permitido acá.
+  cache = new Map(); correos = []; propiedades = { DOMINIOS_PERMITIDOS: 'braun.com' }; sheetRoto = false;
   const u = HOJAS['Usuarios'] = new Hoja('Usuarios');
   u.appendRow(['nombre', 'email', 'salt', 'verificador_hash', 'reset_hash', 'reset_vence', 'reset_intentos', 'password_actualizada']);
   u.appendRow(['Ana Pérez', 'ana@braun.com', 'sal-ana', hash('verif-ana'), '', '', '', '']);
@@ -280,6 +281,62 @@ ok(!html.includes('<script>'), 'la respuesta no mete código');
 ok(html.includes('Alta</span>'), 'la prioridad se sigue viendo con su etiqueta de color');
 ok(t10.length === 64, '(sesión de prueba)');
 
+// SEC-01 y SEC-03(a) de la segunda auditoría del 30/10: en "registrar" un
+// desconocido se agregaba con su Gmail, se mandaba el código y quedaba con un
+// token que seguía andando después de pasar a "exigir".
+console.log('\n--- 11. Nadie de afuera se crea una cuenta (ni siquiera en "registrar") ---');
+reiniciar();
+const filasUsuarios = () => HOJAS['Usuarios'].filas.length;
+const antes11 = filasUsuarios();
+r = post({ _accion: 'agregar_usuario', nombre: 'X', email: 'atacante@gmail.com' });
+ok(r.noAutorizado === true && filasUsuarios() === antes11, 'en "registrar", agregar un usuario sin token: rechazado');
+r = post({ _accion: 'eliminar_usuario', email: 'beto@braun.com' });
+ok(r.noAutorizado === true && filasUsuarios() === antes11, 'en "registrar", quitar un usuario sin token: rechazado');
+r = post({ _accion: 'agente_consulta', mensajes: [] });
+ok(r.noAutorizado === true, 'en "registrar", usar la clave de Groq sin token: rechazado');
+r = post({ _accion: 'guardar_oc', Id_OC: 'OC-11', Camiones: [] });
+ok(r.status === 'success', 'pero guardar sin token sigue andando (los celulares viejos no se cortan)');
+
+const t11 = login().token;
+r = post({ _accion: 'agregar_usuario', _token: t11, nombre: 'X', email: 'atacante@gmail.com' });
+ok(r.ok === false && filasUsuarios() === antes11, 'con token, agregar un correo de otro dominio: rechazado');
+r = post({ _accion: 'agregar_usuario', _token: t11, nombre: 'Caro', email: 'caro@braun.com' });
+ok(r.ok === true && filasUsuarios() === antes11 + 1, 'con token, agregar uno de la empresa: anda');
+propiedades.CORREOS_PERMITIDOS = 'contador@estudio.com';
+r = post({ _accion: 'agregar_usuario', _token: t11, nombre: 'Contador', email: 'Contador@Estudio.com' });
+ok(r.ok === true, 'una excepción puesta en CORREOS_PERMITIDOS sí se puede agregar');
+delete propiedades.CORREOS_PERMITIDOS;
+
+// Una cuenta de afuera que alguien llegó a crear antes de este arreglo
+HOJAS['Usuarios'].appendRow(['Intruso', 'intruso@gmail.com', 's', hash('verif-intruso'), '', '', '', '']);
+correos = [];
+r = post({ _accion: 'auth_reset_pedir', email: 'intruso@gmail.com' });
+ok(r.ok === false && correos.length === 0, 'un correo de afuera que ya estaba en la hoja no recibe código');
+r = post({ _accion: 'auth_login', email: 'intruso@gmail.com', verificador: 'verif-intruso' });
+ok(r.ok === false && !r.token, 'ni puede entrar con su clave');
+const tokenIntruso = emitirTokenSesion('intruso@gmail.com');   // el que pudo haber sacado antes
+propiedades.ACCESO_MODO = 'exigir';
+ok(get({ action: 'read_oc', _token: tokenIntruso }).noAutorizado === true, 'y el token que haya sacado antes ya no sirve');
+ok(Array.isArray(get({ action: 'read_oc', _token: t11 })), 'el de Ana sí');
+
+HOJAS['Usuarios'].appendRow(['Melisa Braun', 'melisa.braun@braunrelacionescomerciales.com.ar', '', '', '', '', '', '']);
+const antesSemilla = filasUsuarios();
+r = post({ _accion: 'eliminar_usuario', _token: t11, email: 'Melisa.Braun@braunrelacionescomerciales.com.ar' });
+ok(r.ok === false && filasUsuarios() === antesSemilla, 'un usuario original no se puede borrar con un POST a mano');
+
+correos = [];
+const filasOrden11 = HOJAS['Orden'].filas.length;
+r = post({ _accion: 'enviar_correo', _token: t11, Id_Carga: 'Z', Correo: 'a@x.com,b@x.com' });
+ok(r.status === 'error' && correos.length === 0 && HOJAS['Orden'].filas.length === filasOrden11,
+  'la acción vieja "enviar_correo" ya no existe: no manda nada ni escribe en Orden');
+
+delete propiedades.DOMINIOS_PERMITIDOS;   // sin la propiedad: solo el dominio de Braun
+ok(emailPermitido('lucas.ramis@braunrelacionescomerciales.com.ar'), 'sin configurar nada, el dominio de Braun pasa');
+ok(!emailPermitido('ana@braun.com'), 'y cualquier otro no');
+ok(!emailPermitido('x@braunrelacionescomerciales.com.ar.evil.com') && !emailPermitido('x@evil.braunrelacionescomerciales.com.ar'),
+  'ni uno que lo imite al principio o al final');
+ok(!emailPermitido('') && !emailPermitido('@braunrelacionescomerciales.com.ar'), 'ni un correo vacío o sin nombre');
+
 // ---------------------------------------------------------------------------
 //  FRONTEND
 // ---------------------------------------------------------------------------
@@ -315,7 +372,7 @@ vm.runInContext(['escapeHtml', 'argJs', 'urlSegura', 'enviarAlBackend', 'urlBack
   .map(n => extraerFuncion(appJs, n)).join('\n'), ctx);
 
 (async () => {
-  console.log('\n--- 11. escapeHtml / argJs / urlSegura ---');
+  console.log('\n--- 12. escapeHtml / argJs / urlSegura ---');
   ok(ctx.escapeHtml('Planta "Norte" <b>') === 'Planta &quot;Norte&quot; &lt;b&gt;', 'escapeHtml escapa < > y comillas');
   ok(ctx.escapeHtml("O'Higgins") === 'O&#39;Higgins', 'y la comilla simple');
   ok(ctx.escapeHtml('Garbanzo 7mm') === 'Garbanzo 7mm', 'un dato normal queda igual');
@@ -343,7 +400,7 @@ vm.runInContext(['escapeHtml', 'argJs', 'urlSegura', 'enviarAlBackend', 'urlBack
   ok(ctx.urlSegura('data:image/svg+xml,<svg onload=x>') === '', 'un SVG (que puede correr código) no pasa');
   ok(ctx.urlSegura('https://x.com/a"onerror="b') === 'https://x.com/a&quot;onerror=&quot;b', 'una comilla no rompe el atributo');
 
-  console.log('\n--- 12. enviarAlBackend y las lecturas llevan el token ---');
+  console.log('\n--- 13. enviarAlBackend y las lecturas llevan el token ---');
   enviados = [];
   await ctx.enviarAlBackend({ _accion: 'guardar_oc', Id_OC: 'OC-9' });
   ok(enviados[0].cuerpo._token === 'tok-123' && enviados[0].cuerpo.Id_OC === 'OC-9', 'el POST lleva _token y los datos intactos');
@@ -356,7 +413,7 @@ vm.runInContext(['escapeHtml', 'argJs', 'urlSegura', 'enviarAlBackend', 'urlBack
   ok(ctx.urlBackend('read') === 'https://script.google.com/macros/s/FALSO/exec?action=read', 'sin token (sesión vieja) la URL es la de siempre');
   tokenEnSesion = 'tok-123';
 
-  console.log('\n--- 13. "No autorizado" no pierde nada ---');
+  console.log('\n--- 14. "No autorizado" no pierde nada ---');
   enviados = []; avisos = 0;
   respuestaServidor = '{"status":"error","ok":false,"noAutorizado":true,"message":"Tu sesión no está habilitada"}';
   let error = null;

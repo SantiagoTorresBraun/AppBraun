@@ -182,11 +182,9 @@ function doPost(e) {
       return respuestaOk();
     }
 
-    if (accion === "enviar_correo") {
-      guardarRegistroCompleto(data); // si no existía, lo guarda; si existía, igual lo actualizamos abajo con "actualizar" desde el front
-      enviarCorreoReporte(data);
-      return respuestaOk();
-    }
+    // (La acción vieja "enviar_correo" se borró el 30/10/2026: ningún .js la
+    // usaba, y mandaba correos a cualquier lista de destinatarios sin el tope
+    // ni la constancia de enviar_correo_reporte. SEC-03 de la segunda auditoría.)
 
     // ==================== ENVÍO DEL REPORTE CON PDF ADJUNTO ====================
     // Lo usa correo.js como plan B cuando no puede mandar el mail desde el Gmail
@@ -413,18 +411,6 @@ function borrarFilasPorColumna(sheet, indiceColumna, valorBuscado) {
       sheet.deleteRow(i + 1); // +1 porque las filas de sheet arrancan en 1, no en 0
     }
   }
-}
-
-// --- Envío de correo simple con los datos del reporte ---
-function enviarCorreoReporte(data) {
-  if (!data.Correo) return;
-  var asunto = "Reporte de Carga - " + (data.Id_Carga || "");
-  var cuerpo = "Chofer: " + (data.Nombre_Chofer || "-") + "\n" +
-               "Fecha: " + (data.Fecha || "-") + "\n" +
-               "Patente Chasis: " + (data.Patente_Chasis || "-") + "\n" +
-               "Kg Cargados: " + (data.Kg_Cargados || "0") + "\n" +
-               "Estatus: " + (data.ESTATUS || "-");
-  MailApp.sendEmail(data.Correo, asunto, cuerpo);
 }
 
 // ============================================================================
@@ -1755,6 +1741,11 @@ function agregarUsuario(body) {
   if (!body.email || !body.nombre) return respuestaJsonCalidad({ ok: false, error: "Faltan nombre o email" });
   var hoja = obtenerHojaUsuarios();
   var email = String(body.email).trim().toLowerCase();
+  // Solo correos de la empresa (o las excepciones de 06_acceso.gs): con un
+  // Gmail propio, el código de recuperación le daba una cuenta a cualquiera.
+  if (typeof emailPermitido === "function" && !emailPermitido(email)) {
+    return respuestaJsonCalidad({ ok: false, error: "Solo se pueden agregar correos de la empresa. Para una excepción, pedile al administrador que la sume en CORREOS_PERMITIDOS." });
+  }
   var valores = hoja.getDataRange().getDisplayValues();
   for (var f = 1; f < valores.length; f++) {
     if (String(valores[f][1]).trim().toLowerCase() === email) {
@@ -1769,6 +1760,11 @@ function eliminarUsuario(body) {
   if (!body.email) return respuestaJsonCalidad({ ok: false, error: "Falta el email" });
   var hoja = obtenerHojaUsuarios();
   var email = String(body.email).trim().toLowerCase();
+  // Los usuarios originales no se borran desde la app. La pantalla ya lo
+  // impedía con un candado, pero el backend no, y el candado se saltea con
+  // un POST a mano.
+  var esSemilla = USUARIOS_SEMILLA.some(function (u) { return u[1].toLowerCase() === email; });
+  if (esSemilla) return respuestaJsonCalidad({ ok: false, error: "Ese usuario es de los originales y no se puede quitar desde la app." });
   var valores = hoja.getDataRange().getDisplayValues();
   for (var f = valores.length - 1; f >= 1; f--) {
     if (String(valores[f][1]).trim().toLowerCase() === email) hoja.deleteRow(f + 1);

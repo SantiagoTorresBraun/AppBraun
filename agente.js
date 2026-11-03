@@ -1004,6 +1004,9 @@ function agenteResponder(pregunta) {
 // =========================================================================
 
 function abrirAgenteIA() {
+    // Sin sesión no hay asistente (además de esconder el botón, por si se
+    // llama desde otro lado, por ejemplo una versión vieja cacheada del HTML).
+    if (typeof haySesionActiva === "function" && !haySesionActiva()) return;
     const panel = document.getElementById("agente-panel");
     if (!panel) return;
     panel.classList.add("abierto");

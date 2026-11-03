@@ -91,7 +91,7 @@ El email del usuario logueado viaja automáticamente en cada **creación y modif
 
 | Módulo | Dónde se inyecta | Acciones del backend que lo reciben |
 |---|---|---|
-| Control de Carga | `app.js` → `construirRegistroDesdeFormulario()` | `guardar` (sync de cola offline), `actualizar`, `enviar_correo` |
+| Control de Carga | `app.js` → `construirRegistroDesdeFormulario()` | `guardar` (sync de cola offline), `actualizar` |
 | Control de Calidad | `calidad.js` → `construirRegistroCalidad()` | `guardar_calidad`, `actualizar_calidad` |
 | Ticketera | `app.js` → objeto `ticket` del submit de `#form-ticketera` | `crear_ticket` |
 
