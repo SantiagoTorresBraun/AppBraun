@@ -635,3 +635,16 @@ body[data-vista="view-menu-principal"] #header-title { visibility: hidden; }
 .header-subtitle { font-size: 0.85rem; color: rgba(255, 255, 255, 0.8); letter-spacing: 0; }
 .btn-nuevo-registro-floating { border-radius: 10px; padding: 10px 18px; font-weight: 600; letter-spacing: 0; box-shadow: none; font-size: 0.9rem; }
 .btn-nuevo-registro-floating:hover { transform: none; box-shadow: none; background: #fdf2f2; }
+
+/* -----------------------------------------------------------------------------
+   ASISTENTE: el gaucho (gaucho.svg) en el botón flotante y en el chat
+   ----------------------------------------------------------------------------- */
+.fab-agente-ia { width: 64px; height: 64px; background: #fbe3b8; }
+.fab-agente-ia .avatar-ia-svg { display: block; object-fit: cover; }
+.agente-header-avatar {
+    width: 40px;
+    height: 40px;
+    background: #fff;
+    padding: 2px;
+}
+.agente-header-avatar img { width: 100%; height: 100%; border-radius: 50%; display: block; }

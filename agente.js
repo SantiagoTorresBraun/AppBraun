@@ -1017,7 +1017,7 @@ function abrirAgenteIA() {
         if (cuerpo && !cuerpo.children.length) {
             agentePintarMensaje("assistant",
                 "¡Hola! Soy el asistente de App Braun.\n\n" +
-                "Puedo responderte sobre todo lo que se cargo en la app: controles de carga, " +
+                "Puedo responderte sobre todo lo que se cargó en la app: controles de carga, " +
                 "productos, contratos, control de calidad, muestreos a campo y tickets.\n\n" +
                 "Probá con alguna de estas:");
             agentePintarSugerencias([

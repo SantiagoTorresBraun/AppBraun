@@ -14,6 +14,17 @@
 
 const NOVEDADES = [
     {
+        id: 33,
+        version: 'v33',
+        fecha: '2026-11-11',
+        titulo: 'El asistente tiene cara nueva',
+        importante: false,
+        items: [
+            'El Asistente Braun ahora es un gaucho, con su poncho y su mate.',
+            'Tocalo abajo a la derecha para preguntarle cualquier dato de la app.'
+        ]
+    },
+    {
         id: 32,
         version: 'v32',
         fecha: '2026-11-11',
