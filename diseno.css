@@ -544,3 +544,94 @@ body[data-vista="view-menu-principal"] #header-title { visibility: hidden; }
     padding: 0 4px;
 }
 .aviso-version-cerrar:hover { color: #fff; }
+
+/* -----------------------------------------------------------------------------
+   MÓDULOS (11/11/2026, variante "A" elegida por el usuario)
+   -----------------------------------------------------------------------------
+   La franja roja de cada módulo se mantiene, pero en rojo liso y más baja.
+   Filtros: misma estructura y funcionamiento; solo letra, bordes y foco.
+   Carpetas de Calidad: tarjetas como las del menú, sin el borde amarillo.
+   Son clases compartidas: valen para Orden de Carga, Transporte, Calidad,
+   Producción, Informes, Ticketera y Contratos.
+   ----------------------------------------------------------------------------- */
+.modulo-carga-header { top: 60px; }
+.modulo-carga-container { background: var(--fondo); padding: 28px 20px 40px; }
+.filters-section {
+    border: 1px solid var(--linea);
+    border-radius: 14px;
+    box-shadow: var(--sombra-1);
+    padding: 20px 22px 22px;
+    margin-bottom: 24px;
+    animation: none;
+}
+.filters-title {
+    color: var(--tinta);
+    font-size: 0.95rem;
+    font-weight: 650;
+    border-bottom: 1px solid var(--linea);
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+}
+.filters-title i { color: var(--rojo); font-size: 0.9rem; }
+.filter-group label { font-size: 0.75rem; font-weight: 600; color: var(--tinta-3); letter-spacing: 0.05em; }
+.filter-group input,
+.filter-group select {
+    font-family: inherit;
+    height: 44px;
+    padding: 0 14px;
+    border: 1px solid #d0d5dd;
+    border-radius: 10px;
+    color: var(--tinta);
+    box-shadow: var(--sombra-1);
+}
+.filter-group input:focus,
+.filter-group select:focus { border-color: var(--rojo); box-shadow: var(--foco); }
+.filter-group input::placeholder { color: #9ca3af; opacity: 1; }
+
+.cal-vista-toggle {
+    background: #eceef1;
+    border: 0;
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+}
+.cal-vista-toggle button {
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    color: var(--tinta-3);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.cal-vista-toggle button.activo {
+    background: #fff;
+    color: var(--tinta);
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+.cal-carpetas { gap: 14px; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.cal-carpeta {
+    border: 1px solid var(--linea);
+    border-left: 1px solid var(--linea);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: var(--sombra-1);
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.cal-carpeta:hover { border-color: rgba(183, 28, 28, 0.35); box-shadow: var(--sombra-2); transform: translateY(-2px); }
+.cal-carpeta.sin-contrato { border-left-color: var(--linea); background: #fafbfc; }
+.cal-carpeta-cab { align-items: center; margin-bottom: 10px; }
+.cal-carpeta-nombre { font-size: 1rem; font-weight: 650; color: var(--tinta); display: inline-flex; align-items: center; gap: 8px; }
+.cal-carpeta-titulo .fa-folder-open,
+.cal-carpeta-nombre .fa-folder { color: var(--rojo); opacity: 0.85; }
+.cal-carpeta.sin-contrato .cal-carpeta-nombre .fa-folder { color: #9ca3af; }
+.cal-carpeta.sin-contrato .cal-carpeta-nombre { font-style: normal; color: var(--tinta-3); }
+.cal-carpeta-cantidad { background: #f3f4f6; color: var(--tinta-2); font-weight: 600; font-size: 0.72rem; padding: 3px 9px; }
+.cal-carpeta-dato { font-size: 0.82rem; color: var(--tinta-3); line-height: 1.6; }
+.cal-carpeta-dato b { color: var(--tinta-2); font-weight: 600; }
+.modulo-carga-header { background: var(--rojo); padding: 20px; box-shadow: none; }
+.modulo-carga-header .header-content { max-width: 1160px; }
+.header-title-section h2 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; }
+.header-subtitle { font-size: 0.85rem; color: rgba(255, 255, 255, 0.8); letter-spacing: 0; }
+.btn-nuevo-registro-floating { border-radius: 10px; padding: 10px 18px; font-weight: 600; letter-spacing: 0; box-shadow: none; font-size: 0.9rem; }
+.btn-nuevo-registro-floating:hover { transform: none; box-shadow: none; background: #fdf2f2; }

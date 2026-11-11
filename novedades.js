@@ -14,6 +14,18 @@
 
 const NOVEDADES = [
     {
+        id: 32,
+        version: 'v32',
+        fecha: '2026-11-11',
+        titulo: 'Módulos con el estilo nuevo',
+        importante: false,
+        items: [
+            'Calidad, Transporte, Orden de Carga, Producción e Informes con la misma imagen que el inicio.',
+            'Los filtros de búsqueda funcionan igual que antes, ahora más fáciles de leer.',
+            'Las carpetas de contratos de Calidad, más claras.'
+        ]
+    },
+    {
         id: 31,
         version: 'v31',
         fecha: '2026-11-11',

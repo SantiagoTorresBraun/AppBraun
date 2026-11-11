@@ -28,6 +28,8 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v32: módulos con el estilo nuevo (franja roja lisa, filtros y carpetas de
+// Calidad; diseno.css y novedades.js).
 // v31: nueva imagen (diseno.css, fuente Inter en vendor/inter, logo sin
 // fondo), campanita de novedades (novedades.js) y la versión nueva se aplica
 // sola en la pantalla de login (offline.js).
@@ -63,7 +65,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v31';
+const VERSION = 'v32';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
