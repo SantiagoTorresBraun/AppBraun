@@ -28,6 +28,10 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v29: pérdidas silenciosas de la sincronización: una edición sobre un alta
+// sin confirmar viaja como edición (app.js, calidad.js, cola-sync.js),
+// Producción solo marca sincronizado lo confirmado (produccion*.js), editar
+// Calidad no borra el PDF de AppSheet, y urlSegura rechaza "//otro-sitio".
 // v26: seguridad (AUDITORIA_2026-10-30.md): token de sesión en cada pedido,
 // la primera contraseña con código por correo y escape contra XSS (app.js,
 // auth.js, agente.js, calidad.js, correo.js, orden-carga.js, produccion*.js).
@@ -53,7 +57,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v28';
+const VERSION = 'v29';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

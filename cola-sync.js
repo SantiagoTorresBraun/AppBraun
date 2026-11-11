@@ -44,7 +44,9 @@
 //
 //  Producción NO usa este archivo: sincronizarMuestreosPendientes() ya recorre
 //  con getAll() + forEach, así que cada muestreo va por su cuenta y un fallo
-//  nunca frenó a los demás. Ese módulo no tenía el bug.
+//  nunca frenó a los demás. Ese módulo no tenía el bug. Ojo: tiene su propia
+//  marca _synced y tiene que respetar a mano el "sin confirmar" de
+//  enviarAlBackend (hasta el 10/11/2026 no lo hacía).
 // ============================================================================
 
 // Cuántas veces se reintenta un registro que el BACKEND rechazó.
@@ -287,6 +289,20 @@ async function colaAnotarSinConfirmar(cfg, item) {
     console.warn('[cola] ' + cfg.etiqueta + ' ' + cfg.idVisible(item) +
         ' se envió sin confirmación (' + envios + '). Se conserva y se reenvía en ' + espera + ' min.');
     await colaGuardar(cfg.store, registro);
+}
+
+// El _accion que tiene que llevar un ítem de la cola que el usuario acaba de
+// editar. Si ya era una edición, sigue siéndolo. Si era un alta que salió pero
+// no se confirmó, puede que el servidor ya la tenga: mandada como alta, el
+// backend contestaría "ya existía" (o colaConfirmarPorServidor la borraría al
+// ver el id) y la corrección no llegaría nunca. Por eso pasa a ser edición;
+// el backend la da de alta si no la encuentra. Un alta que nunca salió sigue
+// siendo alta (undefined).
+function colaAccionAlEditar(itemEnCola, accionEdicion) {
+    if (!itemEnCola) return undefined;
+    if (itemEnCola._accion) return itemEnCola._accion;
+    if (itemEnCola._sinConfirmar || itemEnCola._enviosSinConfirmar) return accionEdicion;
+    return undefined;
 }
 
 // Cuando un módulo baja su historial del servidor, le pasa acá los ids que

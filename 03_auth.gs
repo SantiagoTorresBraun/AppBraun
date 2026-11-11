@@ -376,7 +376,11 @@ function borrarClaveDeUsuario() {
   escribirCampoUsuario(hoja, fila, COL_AUTH.salt, "");
   escribirCampoUsuario(hoja, fila, COL_AUTH.verificador, "");
   limpiarReset(hoja, fila);
-  Logger.log("Clave borrada. " + EMAIL_A_RESETEAR + " vuelve a entrar con la genérica y define una nueva.");
+  // Es lo que se usa ante una cuenta comprometida: sin esto, quien tuviera el
+  // token seguía adentro hasta 30 días aunque la clave ya no existiera.
+  revocarSesionesDeUsuario(EMAIL_A_RESETEAR);
+  Logger.log("Clave borrada y sesiones cortadas. " + EMAIL_A_RESETEAR +
+             " define una nueva con el código que le llega por correo (Olvidé mi contraseña).");
 }
 
 // =========================================================================

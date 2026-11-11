@@ -166,7 +166,7 @@ function emitirTokenSesion(email) {
   var vence = new Date(Date.now() + SESION_DIAS * 86400000);
   var hoja = obtenerHojaConEncabezados(HOJA_SESIONES, COLS_SESIONES);
   limpiarSesionesVencidas(hoja);
-  hoja.appendRow([sha256Hex(token), email, new Date(), vence.toISOString()]);
+  hoja.appendRow(filaSegura([sha256Hex(token), email, new Date(), vence.toISOString()]));
   return token;
 }
 
@@ -240,7 +240,7 @@ function registrarAccesoSinToken(accion, motivo, usuarioDeclarado) {
     if (cache.get(clave)) return;
     cache.put(clave, "1", 900);
     obtenerHojaConEncabezados(HOJA_ACCESOS_SIN_TOKEN, COLS_ACCESOS_SIN_TOKEN)
-      .appendRow([new Date(), accion, motivo, usuario]);
+      .appendRow(filaSegura([new Date(), accion, motivo, usuario]));
   } catch (err) {
     Logger.log("No se pudo registrar el acceso sin token: " + err);
   }
@@ -273,7 +273,7 @@ function problemaDelCorreo(data) {
 
 function registrarCorreoEnviado(data, emailAutenticado) {
   try {
-    obtenerHojaConEncabezados(HOJA_CORREOS_ENVIADOS, COLS_CORREOS_ENVIADOS).appendRow([
+    obtenerHojaConEncabezados(HOJA_CORREOS_ENVIADOS, COLS_CORREOS_ENVIADOS).appendRow(filaSegura([
       new Date(),
       emailAutenticado || String(data.usuario_registro || ""),
       emailAutenticado ? "sí" : "no",
@@ -282,7 +282,7 @@ function registrarCorreoEnviado(data, emailAutenticado) {
       String(data.Correo_Asunto || ""),
       String(data.Tipo_Reporte || "carga"),
       String(data.Id_Carga || data.Id_Calidad || data.Id_OC || "")
-    ]);
+    ]));
   } catch (err) {
     Logger.log("El correo salió pero no se pudo registrar en Correos_Enviados: " + err);
   }

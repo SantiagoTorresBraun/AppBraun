@@ -181,7 +181,7 @@ function cargarBackendCalidad() {
     return 'Control de Calidad_Images/' + id + '.jpg';
   };
   vm.createContext(c);
-  vm.runInContext(extraerFuncion(gs, 'buscarFilaPorIdCalidad') + '\n' + extraerFuncion(gs, 'guardarCalidad') +
+  vm.runInContext(['celdaSegura', 'filaSegura', 'buscarFilaPorIdCalidad', 'guardarCalidad'].map(n => extraerFuncion(gs, n)).join('\n') +
     '\nthis.guardarCalidad = guardarCalidad;', c);
   return c;
 }

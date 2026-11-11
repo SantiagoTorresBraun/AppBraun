@@ -11,3 +11,13 @@ trabajo
 
 # PDF que deja la prueba del informe de la orden de carga
 orden_*.pdf
+
+# Documentos con datos reales (Carta de Porte con CUIT, presentaciones
+# internas). Mismo motivo que los .xlsx de arriba: el repo es público.
+*.pdf
+*.pptx
+*.ppt
+
+# Auditorías con vulnerabilidades abiertas descriptas en detalle. Se suben
+# recién cuando estén cerrados los hallazgos críticos.
+AUDITORIA_2026-10-30*.md

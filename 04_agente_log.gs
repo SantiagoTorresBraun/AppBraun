@@ -70,7 +70,7 @@ function obtenerHojaAgenteLog() {
   var hoja = ss.getSheetByName(HOJA_AGENTE_LOG);
   if (!hoja) {
     hoja = ss.insertSheet(HOJA_AGENTE_LOG);
-    hoja.appendRow(COLUMNAS_AGENTE_LOG);
+    hoja.appendRow(filaSegura(COLUMNAS_AGENTE_LOG));
     hoja.setFrozenRows(1);
     // Sin esto la columna Pregunta/Respuesta estira la fila a lo ancho de la
     // pantalla y la planilla se vuelve ilegible.
@@ -93,7 +93,7 @@ function registrarConsultaAgente(data) {
       return respuestaAgente({ status: "ok", nota: "ya estaba" });
     }
 
-    hoja.appendRow([
+    hoja.appendRow(filaSegura([
       data.Id_Consulta || Utilities.getUuid(),
       data.Fecha_Hora || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss"),
       data.Usuario || "(sin sesión)",
@@ -108,7 +108,7 @@ function registrarConsultaAgente(data) {
       data.Duracion_ms || "",
       recortarParaCelda(data.Error),
       "", "", "", ""   // Voto, Comentario_Voto, Revision, Nota_Revision
-    ]);
+    ]));
 
     return respuestaAgente({ status: "ok" });
   } catch (err) {

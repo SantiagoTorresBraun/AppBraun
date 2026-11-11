@@ -2643,6 +2643,9 @@ function archivoCpLinkHtml(valor) {
 // Devuelve '' si no es una URL aceptable.
 function urlSegura(valor) {
     const texto = String(valor || '').trim();
+    // "//otro-sitio.com/x" no tiene esquema pero el navegador lo abre como
+    // https://otro-sitio.com: no es una ruta relativa.
+    if (/^[\/\\]{2}/.test(texto)) return '';
     if (/^https?:\/\//i.test(texto)) return escapeHtml(texto);
     if (/^data:/i.test(texto) && !/^data:[^,;]*(html|svg|xml|javascript)/i.test(texto)) return escapeHtml(texto);
     // Ruta relativa (las de AppSheet): sin esquema no puede correr nada.
@@ -2745,10 +2748,11 @@ function actualizarRegistroExistente(registro) {
             if (cursor.value.Id_Carga === registro.Id_Carga) {
                 encontradoEnColaLocal = true;
                 const registroActualizado = Object.assign({}, registro, { id: cursor.value.id });
-                // Si lo que estaba en cola era una edición, sigue siéndolo: sin
-                // el _accion viajaría como alta, el backend diría "ya existe" y
-                // la edición no llegaría.
-                if (cursor.value._accion) registroActualizado._accion = cursor.value._accion;
+                // Si lo que estaba en cola era una edición (o un alta que salió
+                // sin confirmar), viaja como edición: como alta, el backend
+                // diría "ya existe" y la corrección no llegaría.
+                const accion = colaAccionAlEditar(cursor.value, "actualizar");
+                if (accion) registroActualizado._accion = accion;
                 cursor.update(registroActualizado);
             }
             cursor.continue();

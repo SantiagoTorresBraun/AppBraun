@@ -83,6 +83,21 @@ function obtenerCarpetaApp(idCarpeta, nombreRespaldo, idCarpetaPadre) {
 }
 
 // ========================================================
+// TEXTO QUE VIENE DE LA APP → CELDA
+// ========================================================
+// appendRow/setValue interpretan un texto que empieza con "=" como fórmula:
+// un "Nombre_Chofer" =IMPORTDATA("https://...") se ejecutaría en el Sheet. El
+// apóstrofo adelante lo deja como texto (no se ve y getValues lo devuelve sin
+// él). Solo "=": "+" y "-" son números negativos o teléfonos y Sheets ya los
+// guarda como corresponde.
+function celdaSegura(v) {
+  return (typeof v === "string" && v.charAt(0) === "=") ? "'" + v : v;
+}
+function filaSegura(fila) {
+  return fila.map(celdaSegura);
+}
+
+// ========================================================
 // CONFIGURACIÓN DE HOJAS
 // ========================================================
 var NOMBRE_HOJA_ORDEN = "Orden";
@@ -289,7 +304,7 @@ function insertarFilaOrden(sheetOrden, data) {
   // Mapeo EXACTO al orden real de columnas de tu hoja "Orden".
   // Archivo, PDF, CP1-CP5 y "Estado" no los envía el frontend hoy: quedan vacíos.
   // Tipo_Carga se agrega al FINAL (columna 37) — ver nota más abajo sobre agregarla en la hoja.
-  sheetOrden.appendRow([
+  sheetOrden.appendRow(filaSegura([
     data.Id_Carga || "",
     data.Fecha || "",
     "",                              // Archivo (no usado por el front actualmente)
@@ -323,7 +338,7 @@ function insertarFilaOrden(sheetOrden, data) {
     data.Correo || "",
     data.Estado_Correo || "",
     data.Tipo_Carga || ""            // Columna extra: agregarla al final de "Orden" (ver nota)
-  ]);
+  ]));
 }
 
 // ---- Vínculo con la Orden de Carga ----
@@ -351,7 +366,7 @@ function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
   // ---- Productos ----
   if (data.Productos && Array.isArray(data.Productos)) {
     data.Productos.forEach(function(p) {
-      sheetProducto.appendRow([
+      sheetProducto.appendRow(filaSegura([
         Utilities.getUuid(),
         data.Id_Carga || "",
         p.producto || "",
@@ -363,7 +378,7 @@ function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
         p.cantidad || "",
         p.kg_envase || "",
         p.total_kg || ""
-      ]);
+      ]));
     });
   }
 
@@ -378,7 +393,7 @@ function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
       if (archivoCp.indexOf("data:") === 0) {
         archivoCp = guardarArchivoContratoEnDrive(idContrato, archivoCp);
       }
-      sheetContrato.appendRow([
+      sheetContrato.appendRow(filaSegura([
         idContrato,
         data.Id_Carga || "",
         c.contrato_com || "",
@@ -389,7 +404,7 @@ function guardarProductosYContratos(sheetProducto, sheetContrato, data) {
         c.observaciones_cp || "", // Observaciones CP — se usa sobre todo en cargas MP
         c.kg_descarga || "",
         archivoCp                 // Columna "CP" real = archivo adjunto Carta de Porte (NO diferencia_carga)
-      ]);
+      ]));
     });
   }
 }
@@ -753,7 +768,7 @@ function doGet(e) {
         // La diferencia NO se guarda en el Sheet, se calcula acá.
         // (La columna 9, "CP", es el archivo adjunto de la Carta de Porte, no una diferencia)
         diferencia_carga: (kgDescargaValor - kgCpValor).toFixed(2),
-        archivo_cp: resolverArchivoDrive(rowsContrato[c][9] || "")
+        archivo_cp: resolverArchivoDrive(rowsContrato[c][9] || "", ID_CARPETA_CONTRATO_FILES, CARPETA_ARCHIVOS_CONTRATO)
       });
     }
 
@@ -925,6 +940,25 @@ function leerCalidad() {
   return respuestaJsonCalidad(registros.reverse()); // más recientes primero
 }
 
+// Busca un archivo por nombre SOLO dentro de la carpeta de la app que le
+// corresponde. Antes se buscaba con DriveApp.getFilesByName, que recorre TODO
+// el Drive del dueño del script: con escribir "Sueldos 2026.xlsx" en una celda
+// de foto, el backend encontraba ese archivo, lo dejaba público con el enlace y
+// devolvía su URL. Acá no se crea la carpeta si falta (es una lectura).
+function buscarArchivoEnCarpetaApp(nombreArchivo, idCarpeta, nombreCarpeta) {
+  var carpeta = null;
+  if (idCarpeta) {
+    try { carpeta = DriveApp.getFolderById(idCarpeta); } catch (err) { }
+  }
+  if (!carpeta) {
+    var encontradas = DriveApp.getFoldersByName(nombreCarpeta);
+    if (!encontradas.hasNext()) return null;
+    carpeta = encontradas.next();
+  }
+  var archivos = carpeta.getFilesByName(nombreArchivo);
+  return archivos.hasNext() ? archivos.next() : null;
+}
+
 // Convierte "Control de Calidad_Images/xxx.jpg" en una URL visible.
 // Si ya es una URL o base64 (registro creado desde la app), se devuelve igual.
 function resolverImagenDrive(valor) {
@@ -941,11 +975,11 @@ function resolverImagenDrive(valor) {
   if (cacheado) return cacheado === "NO_ENCONTRADO" ? "" : cacheado;
 
   try {
-    var archivos = DriveApp.getFilesByName(nombreArchivo);
-    if (archivos.hasNext()) {
-      var archivo = archivos.next();
+    var archivo = buscarArchivoEnCarpetaApp(nombreArchivo, ID_CARPETA_CALIDAD_IMAGES, CARPETA_FOTOS_CALIDAD);
+    if (archivo) {
       // Nos aseguramos de que sea visible: las fotos subidas por AppSheet (o por
       // versiones viejas de esta app) pueden estar privadas y devolver 403.
+      // Solo llega acá un archivo de la carpeta de fotos de la app.
       try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) { }
       var url = "https://drive.google.com/thumbnail?id=" + archivo.getId() + "&sz=w600";
       cache.put(clave, url, 21600); // 6 horas
@@ -959,6 +993,77 @@ function resolverImagenDrive(valor) {
   // invisible el resto del día.
   cache.put(clave, "NO_ENCONTRADO", 600);
   return "";
+}
+
+// --- DIAGNÓSTICO (correr a mano desde el editor; solo lee, no cambia nada) ---
+// Desde que las fotos y archivos se buscan solo dentro de la carpeta de la app
+// (ver buscarArchivoEnCarpetaApp), una ruta vieja cuyo archivo esté en otro
+// lugar del Drive deja de verse. Esto lista esas rutas para moverlas a mano.
+// Si el log dice "0 rutas sin resolver", no hay nada que hacer.
+function diagnosticoRutasDrive() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var faltantes = [];
+  var revisadas = 0;
+  // Nombres de cada carpeta, leídos una sola vez: buscar fila por fila en Drive
+  // con miles de fotos pasaría el límite de 6 minutos.
+  var nombresPorCarpeta = {};
+
+  function nombresDe(idCarpeta, nombreCarpeta) {
+    if (nombresPorCarpeta[nombreCarpeta]) return nombresPorCarpeta[nombreCarpeta];
+    var nombres = {};
+    var carpeta = null;
+    if (idCarpeta) { try { carpeta = DriveApp.getFolderById(idCarpeta); } catch (err) { } }
+    if (!carpeta) {
+      var encontradas = DriveApp.getFoldersByName(nombreCarpeta);
+      if (encontradas.hasNext()) carpeta = encontradas.next();
+    }
+    if (carpeta) {
+      var archivos = carpeta.getFiles();
+      while (archivos.hasNext()) nombres[archivos.next().getName()] = true;
+    }
+    nombresPorCarpeta[nombreCarpeta] = nombres;
+    return nombres;
+  }
+
+  function revisar(donde, valor, idCarpeta, nombreCarpeta) {
+    var v = String(valor || "").trim();
+    if (!v || v.indexOf("http") === 0 || v.indexOf("data:") === 0) return;
+    revisadas++;
+    if (!nombresDe(idCarpeta, nombreCarpeta)[v.split("/").pop()]) faltantes.push(donde + ": " + v);
+  }
+
+  Object.keys(HOJAS_CALIDAD_POR_GRANO).forEach(function (grano) {
+    var hoja = obtenerHojaCalidad(grano);
+    if (!hoja) return;
+    var valores = hoja.getDataRange().getDisplayValues();
+    var encabezados = valores[0].map(function (h) { return String(h).trim(); });
+    COLUMNAS_IMAGEN_CALIDAD.forEach(function (col) {
+      var c = encabezados.indexOf(col);
+      if (c === -1) return;
+      for (var f = 1; f < valores.length; f++) {
+        revisar(hoja.getName() + " fila " + (f + 1), valores[f][c], ID_CARPETA_CALIDAD_IMAGES, CARPETA_FOTOS_CALIDAD);
+      }
+    });
+  });
+
+  var hojaContrato = ss.getSheetByName(NOMBRE_HOJA_CONTRATO);
+  if (hojaContrato) {
+    var filasC = hojaContrato.getDataRange().getValues();
+    for (var i = 1; i < filasC.length; i++) {
+      revisar(NOMBRE_HOJA_CONTRATO + " fila " + (i + 1), filasC[i][9], ID_CARPETA_CONTRATO_FILES, CARPETA_ARCHIVOS_CONTRATO);
+    }
+  }
+
+  var hojaPuntos = ss.getSheetByName(NOMBRE_HOJA_MUESTREO_PUNTOS);
+  if (hojaPuntos) {
+    var filasP = hojaPuntos.getDataRange().getValues();
+    for (var j = 1; j < filasP.length; j++) {
+      revisar(NOMBRE_HOJA_MUESTREO_PUNTOS + " fila " + (j + 1), filasP[j][16], ID_CARPETA_PRODUCCION_FILES, CARPETA_FOTOS_MUESTREO);
+    }
+  }
+
+  Logger.log("Rutas revisadas: " + revisadas + " — " + faltantes.length + " rutas sin resolver dentro de la carpeta de la app.");
+  if (faltantes.length) Logger.log(faltantes.join("\n"));
 }
 
 // --- MANTENIMIENTO (correr UNA vez a mano desde el editor de Apps Script) ---
@@ -1075,7 +1180,7 @@ function guardarCalidad(body) {
       // duplica.
       return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
     }
-    hoja.appendRow(fila);
+    hoja.appendRow(filaSegura(fila));
     aplicarFormatoPorcentajeCalidad(hoja, hoja.getLastRow(), encabezados, null);
     // Sin flush, la fila recién agregada puede no verla todavía el pedido que
     // entra atrás nuestro, y volveríamos a tener dos filas.
@@ -1089,7 +1194,14 @@ function guardarCalidad(body) {
 // --- ACTUALIZACIÓN (_accion: "actualizar_calidad") ---
 function actualizarCalidad(body) {
   var ubicacion = buscarRegistroCalidad(body);
-  if (!ubicacion) return respuestaJsonCalidad({ ok: false, error: "Id_Calidad no encontrado" });
+  // No está: era un alta que salió sin confirmar y nunca llegó, y el usuario la
+  // corrigió antes de que se reenviara (colaAccionAlEditar en cola-sync.js).
+  // Se guarda como alta con los datos ya corregidos. Antes respondía "no
+  // encontrado" y el control quedaba trabado en la cola.
+  if (!ubicacion) {
+    if (!body["Id_Calidad"]) return respuestaJsonCalidad({ ok: false, error: "Id_Calidad no encontrado" });
+    return guardarCalidad(body);
+  }
   var hoja = ubicacion.hoja;
   var filaIdx = ubicacion.fila;
 
@@ -1114,7 +1226,7 @@ function actualizarCalidad(body) {
       valor = valor / 100;
     }
 
-    hoja.getRange(filaIdx, c + 1).setValue(valor);
+    hoja.getRange(filaIdx, c + 1).setValue(celdaSegura(valor));
     columnasEscritas.push(c);
   }
 
@@ -1212,7 +1324,9 @@ function guardarArchivoContratoEnDrive(idContrato, base64) {
 // Convierte la ruta guardada en la celda ("Contrato Comercial_Files_/xxx.pdf")
 // en un link de descarga directa de Drive. Si ya es una URL o un data:
 // (archivo recién elegido, todavía no guardado en el Sheet), se devuelve igual.
-function resolverArchivoDrive(valor) {
+// idCarpeta/nombreCarpeta: la carpeta de la app donde se busca (Carta de Porte
+// o fotos de muestreo); fuera de ella no se busca nada.
+function resolverArchivoDrive(valor, idCarpeta, nombreCarpeta) {
   if (!valor) return "";
   var v = String(valor).trim();
   if (v.indexOf("http") === 0 || v.indexOf("data:") === 0) return v;
@@ -1226,9 +1340,8 @@ function resolverArchivoDrive(valor) {
   if (cacheado) return cacheado === "NO_ENCONTRADO" ? "" : cacheado;
 
   try {
-    var archivos = DriveApp.getFilesByName(nombreArchivo);
-    if (archivos.hasNext()) {
-      var archivo = archivos.next();
+    var archivo = buscarArchivoEnCarpetaApp(nombreArchivo, idCarpeta, nombreCarpeta);
+    if (archivo) {
       try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) {
         Logger.log("No se pudo compartir " + nombreArchivo + ": " + permErr);
       }
@@ -1283,9 +1396,8 @@ function convertirArchivosCPAFormatoEstable() {
     if (!nombreArchivo) continue;
 
     try {
-      var archivos = DriveApp.getFilesByName(nombreArchivo);
-      if (archivos.hasNext()) {
-        var archivo = archivos.next();
+      var archivo = buscarArchivoEnCarpetaApp(nombreArchivo, ID_CARPETA_CONTRATO_FILES, CARPETA_ARCHIVOS_CONTRATO);
+      if (archivo) {
         try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (permErr) {
           Logger.log("No se pudo compartir " + nombreArchivo + ": " + permErr);
         }
@@ -1331,7 +1443,7 @@ function obtenerHojaConEncabezados(nombre, columnas) {
   var hoja = ss.getSheetByName(nombre);
   if (!hoja) {
     hoja = ss.insertSheet(nombre);
-    hoja.appendRow(columnas);
+    hoja.appendRow(filaSegura(columnas));
     hoja.setFrozenRows(1);
   }
   return hoja;
@@ -1356,30 +1468,49 @@ function guardarMuestreo(data) {
     return respuestaOk();
   }
 
-  hojaM.appendRow([
+  // Las fotos van a Drive ANTES de escribir nada: si una falla, el error corta
+  // acá y en el Sheet no queda una cabecera sin puntos (que el reintento daría
+  // por "ya existe").
+  subirFotosDeMuestreo(data);
+
+  hojaM.appendRow(filaSegura([
     data.Id_Muestreo || "", data.Fecha || "", data.Establecimiento || "", data.Lote || "",
     data.Campania || "", data.Cultivo || "", data.Variedad || "", data.Responsable || "",
     data.Matricula || "", data.Observaciones || "", data.usuario_registro || "",
     data.Estado || "Cerrado"
-  ]);
+  ]));
 
   if (data.Puntos && Array.isArray(data.Puntos)) {
     data.Puntos.forEach(function (p, i) {
       var idPunto = p.Id_Punto || Utilities.getUuid();
       var foto = p.Foto || "";
-      if (String(foto).indexOf("data:") === 0) foto = guardarFotoMuestreoEnDrive(idPunto, foto);
-      hojaP.appendRow([
+      hojaP.appendRow(filaSegura([
         idPunto, data.Id_Muestreo || "", (p.Orden || (i + 1)), p.Lat || "", p.Long || "",
         p.Precision_m || "", p.Timestamp || "", p.Cultivo || "", p.Estado_Fenologico || "",
         p.Tipo_Observacion || "", p.Objetivo || "", p.Severidad || "", p.Incidencia_pct || "",
         p.Conteo_Valor || "", p.Conteo_Unidad || "", p.Nota || "", foto
-      ]);
+      ]));
     });
   }
   return respuestaOk();
 }
 
+// Reemplaza en data.Puntos cada foto base64 por su ruta en Drive. Si una falla,
+// guardarFotoMuestreoEnDrive lanza el error y no se toca el Sheet.
+function subirFotosDeMuestreo(data) {
+  if (!data.Puntos || !Array.isArray(data.Puntos)) return;
+  data.Puntos = data.Puntos.map(function (p) {
+    if (String(p.Foto || "").indexOf("data:") !== 0) return p;
+    var copia = Object.assign({}, p);
+    copia.Id_Punto = p.Id_Punto || Utilities.getUuid();
+    copia.Foto = guardarFotoMuestreoEnDrive(copia.Id_Punto, p.Foto);
+    return copia;
+  });
+}
+
 function actualizarMuestreo(data) {
+  // Antes del borrado: si Drive falla, el muestreo anterior queda entero.
+  subirFotosDeMuestreo(data);
   eliminarMuestreoInterno(data.Id_Muestreo);
   return guardarMuestreo(data);
 }
@@ -1422,7 +1553,7 @@ function leerMuestreos() {
           Precision_m: rowsP[p][5], Timestamp: rowsP[p][6], Cultivo: rowsP[p][7],
           Estado_Fenologico: rowsP[p][8], Tipo_Observacion: rowsP[p][9], Objetivo: rowsP[p][10],
           Severidad: rowsP[p][11], Incidencia_pct: rowsP[p][12], Conteo_Valor: rowsP[p][13],
-          Conteo_Unidad: rowsP[p][14], Nota: rowsP[p][15], Foto: resolverArchivoDrive(rowsP[p][16] || "")
+          Conteo_Unidad: rowsP[p][14], Nota: rowsP[p][15], Foto: resolverArchivoDrive(rowsP[p][16] || "", ID_CARPETA_PRODUCCION_FILES, CARPETA_FOTOS_MUESTREO)
         });
       }
     }
@@ -1455,8 +1586,11 @@ function guardarFotoMuestreoEnDrive(idPunto, base64) {
     archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return CARPETA_FOTOS_MUESTREO + "/" + nombre;
   } catch (err) {
+    // Igual que en guardarFotoCalidadEnDrive: antes devolvía "" y el punto se
+    // guardaba sin foto respondiendo "ok", así que el celular la daba por
+    // sincronizada y se perdía. Con el error, la app la conserva y reintenta.
     Logger.log("No se pudo guardar la foto del muestreo: " + err);
-    return "";
+    throw new Error("No se pudo guardar la foto del punto en Drive: " + err);
   }
 }
 
@@ -1554,7 +1688,7 @@ function obtenerHojaTickets() {
   var hoja = ss.getSheetByName(HOJA_TICKETS);
   if (!hoja) {
     hoja = ss.insertSheet(HOJA_TICKETS);
-    hoja.appendRow(COLUMNAS_TICKETS);
+    hoja.appendRow(filaSegura(COLUMNAS_TICKETS));
     hoja.setFrozenRows(1);
   }
   return hoja;
@@ -1592,7 +1726,7 @@ function crearTicket(body) {
     if (col === "archivo_adjunto" && String(v).length > 45000) return "(adjunto demasiado grande: viajó por correo)";
     return v;
   });
-  hoja.appendRow(fila);
+  hoja.appendRow(filaSegura(fila));
 
   // Notificación al responsable
   if (body.correo_responsable) {
@@ -1690,7 +1824,7 @@ function leerFilaTicket(hoja, filaIdx) {
 function aplicarPatchTicket(hoja, filaIdx, body) {
   COLUMNAS_TICKETS.forEach(function (col, i) {
     if (col === "id_ticket") return;
-    if (body[col] !== undefined) hoja.getRange(filaIdx, i + 1).setValue(body[col]);
+    if (body[col] !== undefined) hoja.getRange(filaIdx, i + 1).setValue(celdaSegura(body[col]));
   });
 }
 
@@ -1719,9 +1853,9 @@ function obtenerHojaUsuarios() {
   var hoja = ss.getSheetByName(HOJA_USUARIOS);
   if (!hoja) {
     hoja = ss.insertSheet(HOJA_USUARIOS);
-    hoja.appendRow(["nombre", "email"]);
+    hoja.appendRow(filaSegura(["nombre", "email"]));
     hoja.setFrozenRows(1);
-    USUARIOS_SEMILLA.forEach(function (u) { hoja.appendRow(u); });
+    USUARIOS_SEMILLA.forEach(function (u) { hoja.appendRow(filaSegura(u)); });
   }
   return hoja;
 }
@@ -1752,7 +1886,7 @@ function agregarUsuario(body) {
       return respuestaJsonCalidad({ ok: true, nota: "ya existía" });
     }
   }
-  hoja.appendRow([String(body.nombre).trim(), email]);
+  hoja.appendRow(filaSegura([String(body.nombre).trim(), email]));
   return respuestaJsonCalidad({ ok: true });
 }
 
@@ -2235,22 +2369,22 @@ function guardarInformeCampo(data) {
     return respuestaOk();
   }
 
-  hojaI.appendRow([
+  hojaI.appendRow(filaSegura([
     data.Id_Informe || "", data.Fecha || "", data.Tipo || "", data.Id_Contrato || "",
     data.Codigo || "", data.Descripcion || "", data.Campania || "", data.Cultivo || "",
     data.Variedad || "", data.Responsable || "", data.Matricula || "",
     data.Textos_Plano || "", data.Mensaje || "", data.Estado || "Borrador",
     data.usuario_registro || ""
-  ]);
+  ]));
 
   if (data.Lotes && Array.isArray(data.Lotes)) {
     data.Lotes.forEach(function (l, i) {
       if (!l || !l.Lote) return; // un lote sin nombre es una fila a medio cargar
-      hojaL.appendRow([
+      hojaL.appendRow(filaSegura([
         Utilities.getUuid(), data.Id_Informe || "", (i + 1), l.Lote || "",
         l.sem_m || "", l.plantas_m || "", l.prof_cm || "", l.dano_pct || "", l.kg || "",
         l.distribucion || "", l.humedad || "", l.estadio || "", l.nota || ""
-      ]);
+      ]));
     });
   }
   return respuestaOk();

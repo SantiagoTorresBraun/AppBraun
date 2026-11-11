@@ -529,11 +529,15 @@ function actualizarCalidadExistente(registro) {
         if (cursor) {
             if (cursor.value["Id_Calidad"] === registro["Id_Calidad"]) {
                 encontradoEnColaLocal = true;
-                // Se conserva el _accion: si lo que estaba en cola era una
-                // edición ("actualizar_calidad") y se pierde, se mandaría como
-                // alta, el backend diría "ya existía" y la edición no llegaría.
+                // Si lo que estaba en cola era una edición (o un alta que salió
+                // sin confirmar), viaja como edición: como alta, el backend
+                // diría "ya existía" y la corrección no llegaría.
                 const actualizado = Object.assign({}, registro, { id: cursor.value.id });
-                if (cursor.value._accion) actualizado._accion = cursor.value._accion;
+                const accion = colaAccionAlEditar(cursor.value, "actualizar_calidad");
+                if (accion) {
+                    actualizado._accion = accion;
+                    sinCamposDeAppSheet(actualizado);
+                }
                 cursor.update(actualizado);
             }
             cursor.continue();
@@ -557,9 +561,18 @@ function actualizarCalidadExistente(registro) {
     };
 }
 
+// "Archivo2" y "PDF Control Calidad" son de AppSheet: la app los manda vacíos
+// en el alta, pero en una edición pisaban el link al PDF de los controles
+// viejos (actualizarCalidad escribe todo lo que no sea undefined).
+function sinCamposDeAppSheet(registro) {
+    delete registro["Archivo2"];
+    delete registro["PDF Control Calidad"];
+    return registro;
+}
+
 function encolarEdicionCalidad(registro) {
     const tx = db.transaction(["controles_calidad"], "readwrite");
-    const req = tx.objectStore("controles_calidad").add(Object.assign({}, registro, { _accion: "actualizar_calidad" }));
+    const req = tx.objectStore("controles_calidad").add(sinCamposDeAppSheet(Object.assign({}, registro, { _accion: "actualizar_calidad" })));
     req.onsuccess = function() {
         alert("¡Cambios del control de calidad guardados en este celular!\n\n" +
               "Se envían solos al servidor. Mientras no lleguen, el control figura como \"Pendiente\".");

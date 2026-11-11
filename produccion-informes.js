@@ -938,12 +938,18 @@ function sincronizarInformesPendientes() {
             payload.Mensaje = generarMensajeInforme(item);
 
             enviarAlBackend(payload)
-                .then(function () {
+                .then(function (r) {
+                    // enviarAlBackend resuelve también cuando NO pudo leer la
+                    // respuesta (sinConfirmar): eso no es una confirmación.
+                    if (!r || !r.confirmado) return;
                     const up = db.transaction(['informes_campo'], 'readwrite');
                     const store = up.objectStore('informes_campo');
                     store.get(item.id).onsuccess = function (ev) {
                         const rec = ev.target.result;
                         if (!rec) return;
+                        // Si se editó mientras viajaba el envío, lo confirmado es la
+                        // versión vieja: queda pendiente y la nueva sale en la próxima pasada.
+                        if (JSON.stringify(rec) !== JSON.stringify(item)) return;
                         rec._synced = true;
                         store.put(rec);
                         if (informeActual && informeActual.id === item.id) informeActual._synced = true;

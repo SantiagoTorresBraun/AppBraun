@@ -733,12 +733,18 @@ function sincronizarMuestreosPendientes() {
             // (por ejemplo, no puede subir la foto del punto a Drive), queda con
             // _synced:false y se reintenta en la próxima pasada.
             enviarAlBackend(payload)
-            .then(function () {
+            .then(function (r) {
+                // enviarAlBackend resuelve también cuando NO pudo leer la
+                // respuesta (sinConfirmar): eso no es una confirmación.
+                if (!r || !r.confirmado) return;
                 const up = db.transaction(['muestreos'], 'readwrite');
                 const store = up.objectStore('muestreos');
                 store.get(item.id).onsuccess = function (ev) {
                     const rec = ev.target.result;
                     if (!rec) return;
+                    // Si se editó mientras viajaba el envío, lo confirmado es la
+                    // versión vieja: queda pendiente y la nueva sale en la próxima pasada.
+                    if (JSON.stringify(rec) !== JSON.stringify(item)) return;
                     rec._synced = true;
                     store.put(rec);
                 };

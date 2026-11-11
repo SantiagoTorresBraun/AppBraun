@@ -1,0 +1,30 @@
+# Corre todas las suites test_*.js en cada push y en cada pull request.
+# No necesitan instalar nada: usan solo node y lo que está en vendor/.
+# Si una falla, el commit queda en rojo en GitHub (la app se publica igual:
+# GitHub Pages no espera a este paso, así que mirar el resultado).
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Correr las suites
+        run: |
+          fallaron=0
+          for t in test_*.js; do
+            echo "::group::$t"
+            node "$t" || fallaron=$((fallaron + 1))
+            echo "::endgroup::"
+          done
+          if [ "$fallaron" -ne 0 ]; then
+            echo "::error::$fallaron suite(s) con fallas"
+            exit 1
+          fi

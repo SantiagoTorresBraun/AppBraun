@@ -250,7 +250,9 @@ function obtenerHojaOC(nombre, columnas) {
 function filaDesdeColumnas(columnas, valores) {
   return columnas.map(function (col) {
     var v = valores[col];
-    return (v === undefined || v === null) ? "" : v;
+    // celdaSegura (01_backend_principal.gs): un texto que empieza con "=" no
+    // se guarda como fórmula.
+    return (v === undefined || v === null) ? "" : celdaSegura(v);
   });
 }
 

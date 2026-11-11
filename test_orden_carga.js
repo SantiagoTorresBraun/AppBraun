@@ -90,6 +90,13 @@ global.respuestaOk = () => ({ status: 'success' });
 global.respuestaJsonCalidad = obj => ({ _json: obj, getContent: () => JSON.stringify(obj) });
 
 // --- Cargar el archivo bajo prueba ---------------------------------------
+// celdaSegura vive en 01_backend_principal.gs (en Apps Script todo comparte el
+// mismo ámbito): se carga la real, no una copia.
+{
+  const gs = fs.readFileSync(path.join(RAIZ, '01_backend_principal.gs'), 'utf8');
+  const ini = gs.indexOf('function celdaSegura(');
+  eval(gs.slice(ini, gs.indexOf('\n}', ini) + 2).replace('function celdaSegura', 'global.celdaSegura = function'));
+}
 const codigo = fs.readFileSync(path.join(RAIZ, '05_orden_carga.gs'), 'utf8');
 eval(codigo);   // deja sus `var` y `function` a mano, como en Apps Script
 
