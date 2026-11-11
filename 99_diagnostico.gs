@@ -399,3 +399,26 @@ function limpiarFilasSinIdCarga() {
   Logger.log(out.join("\n"));
   return out.join("\n");
 }
+
+// --------------------------------------------------------
+// ¿LO QUE ESTÁ EN EL EDITOR ES IGUAL A LO DEL REPO?
+//    Imprime una huella (SHA-256 recortado) de las funciones que
+//    cambiaron en el último bloque. Se compara con las mismas huellas
+//    calculadas sobre los .gs de git: si alguna no coincide, esa función
+//    quedó vieja o se pegó mal en el editor.
+// --------------------------------------------------------
+function diagVerificarCodigoPegado() {
+  var fns = [buscarArchivoEnCarpetaApp, resolverImagenDrive, resolverArchivoDrive,
+    subirFotosDeMuestreo, guardarFotoMuestreoEnDrive, actualizarCalidad, celdaSegura,
+    diagnosticoRutasDrive, borrarClaveDeUsuario, registrarConsultaAgente,
+    filaDesdeColumnas, emitirTokenSesion, registrarCorreoEnviado];
+  var out = [];
+  fns.forEach(function (fn) {
+    var s = fn.toString().replace(/\r\n/g, "\n");
+    var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8);
+    var hex = d.map(function (b) { return ((b + 256) % 256).toString(16).padStart(2, "0"); }).join("");
+    out.push(fn.name + " " + hex.slice(0, 12));
+  });
+  Logger.log(out.join("\n"));
+  return out.join("\n");
+}
