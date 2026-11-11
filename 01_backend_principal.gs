@@ -149,10 +149,10 @@ function doPost(e) {
     // ===================================================================
 
     // ==================== NUEVO: TICKETERA ====================
-    if (accion === "crear_ticket")          return crearTicket(data);
-    if (accion === "actualizar_ticket")     return actualizarTicket(data);
-    if (accion === "responder_ticket")      return responderTicket(data);
-    if (accion === "notificar_responsable") return actualizarTicket(data.ticket || data); // compat versión vieja
+    if (accion === "crear_ticket")          return crearTicket(data, acceso.email);
+    if (accion === "actualizar_ticket")     return actualizarTicket(data, acceso.email);
+    if (accion === "responder_ticket")      return responderTicket(data, acceso.email);
+    if (accion === "notificar_responsable") return actualizarTicket(data.ticket || data, acceso.email); // compat versión vieja
     // ==================== NUEVO: USUARIOS ======================
     if (accion === "agregar_usuario")  return agregarUsuario(data);
     if (accion === "eliminar_usuario") return eliminarUsuario(data);
@@ -486,6 +486,20 @@ function enviarReportePorCorreo(data, emailAutenticado) {
   if (emailAutenticado) data.Correo_Reply_To = emailAutenticado;
   data._emailAutenticado = emailAutenticado || "";
 
+  // Lo que el servidor decide y no el pedido (06_acceso.gs): remitente, HTML
+  // permitido, adjunto PDF de verdad y tope diario.
+  if (typeof sanearHtmlCorreo === "function") {
+    data.Correo_Nombre_Remitente = nombreRemitenteCorreo(emailAutenticado);
+    data.Correo_Cuerpo_Html = sanearHtmlCorreo(data.Correo_Cuerpo_Html);
+    if (data.Pdf_Base64 && !esPdfBase64(data.Pdf_Base64)) {
+      return respuestaErrorCorreo("El adjunto no es un PDF.");
+    }
+    if (emailAutenticado && correosEnviadosHoy(emailAutenticado) >= CORREO_MAX_POR_DIA) {
+      return respuestaErrorCorreo("Llegaste al máximo de " + CORREO_MAX_POR_DIA +
+        " correos por día enviados desde el servidor. Mandalo desde tu Gmail o probá mañana.");
+    }
+  }
+
   var cache = CacheService.getScriptCache();
   var clave = claveEnvioCorreo(data);
 
@@ -537,7 +551,8 @@ function enviarReportePorCorreoInterno(data) {
     if (data.Pdf_Base64) {
       var b64 = String(data.Pdf_Base64);
       if (b64.indexOf("data:") === 0) b64 = b64.substring(b64.indexOf(",") + 1);
-      var nombrePdf = data.Pdf_Nombre || ("Reporte_Carga_" + (data.Id_Carga || "Braun") + ".pdf");
+      var nombrePdf = String(data.Pdf_Nombre || ("Reporte_Carga_" + (data.Id_Carga || "Braun")))
+        .replace(/[\\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\.pdf$/i, "") + ".pdf";
       opciones.attachments = [Utilities.newBlob(Utilities.base64Decode(b64), "application/pdf", nombrePdf)];
     }
 
@@ -1711,7 +1726,7 @@ function leerTickets() {
 }
 
 // --- CREAR (_accion: "crear_ticket") → guarda la fila y notifica al responsable ---
-function crearTicket(body) {
+function crearTicket(body, emailAutenticado) {
   var hoja = obtenerHojaTickets();
 
   // Evitar duplicados si el dispositivo reintenta la sincronización
@@ -1737,14 +1752,15 @@ function crearTicket(body) {
       "<b>" + escaparHtmlCorreo(body.nombre_solicitante || "") + "</b> te asignó un ticket. Estos son los datos:",
       body,
       body.correo_solicitante,
-      body.archivo_adjunto
+      body.archivo_adjunto,
+      emailAutenticado
     );
   }
   return respuestaJsonCalidad({ ok: true });
 }
 
 // --- ACTUALIZAR (_accion: "actualizar_ticket") → reasignación / cambio de estado ---
-function actualizarTicket(body) {
+function actualizarTicket(body, emailAutenticado) {
   var hoja = obtenerHojaTickets();
   var filaIdx = buscarFilaTicket(hoja, body.id_ticket);
   if (filaIdx === -1) return respuestaJsonCalidad({ ok: false, error: "id_ticket no encontrado" });
@@ -1762,7 +1778,8 @@ function actualizarTicket(body) {
       "Te acaban de asignar este ticket:",
       actual,
       actual.correo_solicitante,
-      null
+      null,
+      emailAutenticado
     );
   }
 
@@ -1775,14 +1792,15 @@ function actualizarTicket(body) {
       "Tu ticket fue marcado como <b>Cerrado</b> por el equipo:",
       actual,
       actual.correo_responsable,
-      null
+      null,
+      emailAutenticado
     );
   }
   return respuestaJsonCalidad({ ok: true });
 }
 
 // --- RESPONDER (_accion: "responder_ticket") → guarda la respuesta y avisa al solicitante ---
-function responderTicket(body) {
+function responderTicket(body, emailAutenticado) {
   var hoja = obtenerHojaTickets();
   var filaIdx = buscarFilaTicket(hoja, body.id_ticket);
   if (filaIdx === -1) return respuestaJsonCalidad({ ok: false, error: "id_ticket no encontrado" });
@@ -1798,7 +1816,8 @@ function responderTicket(body) {
       "<b>" + escaparHtmlCorreo(actual.responsable_asignado || "El responsable") + "</b> respondió tu ticket:",
       actual,
       actual.correo_responsable,
-      null
+      null,
+      emailAutenticado
     );
   }
   return respuestaJsonCalidad({ ok: true });
@@ -1917,7 +1936,17 @@ function escaparHtmlCorreo(texto) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjuntoBase64) {
+// La Ticketera es interna: el correo sale solo si el destinatario está en la
+// hoja Usuarios. Antes iba a cualquier correo_responsable que mandara el
+// pedido, con cualquier adjunto y sin constancia (SEC-03 de la segunda
+// auditoría): servía para mandar un archivo a un tercero desde Braun.
+function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjuntoBase64, emailAutenticado) {
+  destinatario = String(destinatario || "").trim().toLowerCase();
+  if (typeof esUsuarioDeLaApp === "function" && !esUsuarioDeLaApp(destinatario)) {
+    Logger.log("Correo de ticket NO enviado: " + destinatario + " no está en la hoja Usuarios.");
+    return;
+  }
+  if (replyTo && typeof esUsuarioDeLaApp === "function" && !esUsuarioDeLaApp(replyTo)) replyTo = "";
   try {
     var colorPrio = t.prioridad === "Alta" ? "#c62828" : (t.prioridad === "Media" ? "#ef6c00" : "#2e7d32");
     // val va escapado; valHtml es para las celdas que arma este mismo código.
@@ -1954,17 +1983,31 @@ function enviarMailTicket(destinatario, asunto, titulo, intro, t, replyTo, adjun
     var opciones = { htmlBody: html, name: "Ticketera Braun" };
     if (replyTo) opciones.replyTo = replyTo;
 
-    // Adjunto (si el ticket se creó con archivo)
+    // Adjunto (si el ticket se creó con archivo). Solo PDF, PNG o JPG y hasta
+    // ADJUNTO_TICKET_MAX_BYTES (06_acceso.gs); otro tipo no se adjunta.
     if (adjuntoBase64 && String(adjuntoBase64).indexOf("data:") === 0) {
       try {
         var partes = String(adjuntoBase64).split(",");
-        var mime = (partes[0].match(/data:([^;]+)/) || [null, "application/octet-stream"])[1];
-        var ext = mime.indexOf("pdf") !== -1 ? "pdf" : (mime.indexOf("png") !== -1 ? "png" : "jpg");
-        opciones.attachments = [Utilities.newBlob(Utilities.base64Decode(partes[1]), mime, "adjunto-" + (t.id_ticket || "ticket") + "." + ext)];
+        var mime = ((partes[0].match(/data:([^;]+)/) || [null, ""])[1]).toLowerCase();
+        if (mime === "image/jpg") mime = "image/jpeg";
+        var ext = (typeof TIPOS_ADJUNTO_TICKET === "object") ? TIPOS_ADJUNTO_TICKET[mime] : null;
+        var bytes = Utilities.base64Decode(partes[1]);
+        if (ext && bytes.length <= ADJUNTO_TICKET_MAX_BYTES) {
+          opciones.attachments = [Utilities.newBlob(bytes, mime, "adjunto-" + (t.id_ticket || "ticket") + "." + ext)];
+        } else {
+          Logger.log("Adjunto del ticket descartado: tipo " + mime + ", " + bytes.length + " bytes.");
+        }
       } catch (errAdj) { Logger.log("No se pudo adjuntar el archivo: " + errAdj); }
     }
 
     MailApp.sendEmail(destinatario, asunto, "Abrí este correo con un cliente que soporte HTML.", opciones);
+
+    // Constancia en Correos_Enviados, igual que los reportes (06_acceso.gs).
+    if (typeof registrarCorreoEnviado === "function") {
+      registrarCorreoEnviado({ Correo: destinatario, Correo_Asunto: asunto, Tipo_Reporte: "ticket",
+                               Id_Carga: t.id_ticket, usuario_registro: t.correo_solicitante },
+                             emailAutenticado || "");
+    }
   } catch (err) {
     Logger.log("No se pudo enviar el correo del ticket: " + err);
   }

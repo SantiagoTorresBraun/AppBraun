@@ -88,7 +88,7 @@ global.Utilities = {
   Charset: { UTF_8: 'utf8' },
   computeDigest: (alg, texto) => firmados(crypto.createHash(alg).update(String(texto), 'utf8').digest()),
   getUuid: () => crypto.randomUUID(),
-  formatDate: d => new Date(d).toISOString().slice(0, 16),
+  formatDate: (d, zona, formato) => new Date(d).toISOString().slice(0, formato === 'yyyy-MM-dd' ? 10 : 16),
   base64Decode: b => Buffer.from(b, 'base64'),
   newBlob: (datos, tipo, nombre) => ({ datos, tipo, nombre })
 };
@@ -259,11 +259,12 @@ ok(correos[0].opciones.replyTo === 'ana@braun.com', 'las respuestas van a quien 
 const reg = HOJAS['Correos_Enviados'].filas[1];
 ok(reg[1] === 'ana@braun.com' && reg[2] === 'sí' && reg[3] === 'planta@cliente.com' && reg[4] === 'otro@cliente.com',
   'queda constancia en Correos_Enviados: quién, a quién, con copia');
+// Hasta el 11/11/2026 esto salía (en "registrar" no se pedía token): era el
+// relay abierto del hallazgo 2. Ahora enviar_correo_reporte pide token siempre.
 r = post({ _accion: 'enviar_correo_reporte', Correo: 'planta@cliente.com', Correo_Asunto: 'Otro', Id_Carga: 'C',
   usuario_registro: 'beto@braun.com', Correo_Reply_To: 'beto@braun.com' });
-ok(r.status === 'success' && correos[1].opciones.replyTo === 'beto@braun.com',
-  'en "registrar", un celular viejo sin token sigue mandando como antes');
-ok(HOJAS['Correos_Enviados'].filas[2][2] === 'no', 'y la constancia dice que no venía autenticado');
+ok(r.noAutorizado === true && correos.length === 1, 'sin token no sale, aunque el modo sea "registrar"');
+ok(HOJAS['Correos_Enviados'].filas.length === 2, 'y no queda constancia de un envío que no hubo');
 
 console.log('\n--- 10. Los mails de la Ticketera escapan lo que escribe el usuario ---');
 reiniciar();
@@ -280,6 +281,69 @@ ok(html.includes('&lt;a href=') && !html.includes('<a href="http://phish"'), 'el
 ok(!html.includes('<script>'), 'la respuesta no mete código');
 ok(html.includes('Alta</span>'), 'la prioridad se sigue viendo con su etiqueta de color');
 ok(t10.length === 64, '(sesión de prueba)');
+
+console.log('\n--- 10b. SEC-03: la Ticketera es interna y el reporte lo arma el servidor ---');
+reiniciar();
+const t10b = login().token;
+const PDF_OK = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4 prueba').toString('base64');
+const PNG_OK = 'data:image/png;base64,' + Buffer.from('png').toString('base64');
+const EXE = 'data:application/x-msdownload;base64,' + Buffer.from('MZ').toString('base64');
+correos = [];
+r = post({ _accion: 'crear_ticket', _token: t10b, id_ticket: 'T-9', nombre_solicitante: 'Ana',
+  correo_solicitante: 'ana@braun.com', correo_responsable: 'victima@otraempresa.com', archivo_adjunto: PDF_OK });
+ok(r.ok === true && correos.length === 0, 'un ticket a un correo que no está en Usuarios: se guarda pero no sale ningún mail');
+r = post({ _accion: 'crear_ticket', _token: t10b, id_ticket: 'T-10', nombre_solicitante: 'Ana',
+  correo_solicitante: 'desvio@malo.com', correo_responsable: 'beto@braun.com', archivo_adjunto: EXE });
+ok(correos.length === 1 && correos[0].para === 'beto@braun.com', 'a un usuario de la app sí sale');
+ok(!correos[0].opciones.replyTo, 'el reply-to a un correo de afuera se descarta');
+ok(!correos[0].opciones.attachments, 'un adjunto que no es PDF/PNG/JPG no se adjunta');
+ok(HOJAS['Correos_Enviados'].filas.some(f => f[6] === 'ticket' && f[3] === 'beto@braun.com' && f[1] === 'ana@braun.com'),
+  'queda constancia en Correos_Enviados, con quién lo disparó');
+correos = [];
+post({ _accion: 'crear_ticket', _token: t10b, id_ticket: 'T-11', nombre_solicitante: 'Ana',
+  correo_solicitante: 'ana@braun.com', correo_responsable: 'Beto@Braun.com', archivo_adjunto: PNG_OK });
+ok(correos.length === 1 && correos[0].opciones.attachments && correos[0].opciones.attachments[0].nombre === 'adjunto-T-11.png',
+  'un PNG sí se adjunta (y el correo en mayúsculas se reconoce)');
+
+correos = [];
+const HTML_APP = '<div style="font-family:Arial"><div style="background:#a31e1e;color:#ffffff">Braun — Control de Transporte</div>' +
+  '<p style="margin-top:0">Buen día,<br>a &lt;b&gt; ver</p><table style="width:100%"><tr><td style="color:#777777">Estatus</td>' +
+  '<td><b><span style="background:#2e7d32;color:#ffffff">Aprobado</span></b></td></tr></table><p><i>Se adjunta el PDF.</i></p></div>';
+r = post({ _accion: 'enviar_correo_reporte', _token: t10b, Correo: 'planta@cliente.com', Correo_Asunto: 'Reporte',
+  Id_Carga: 'H1', Correo_Cuerpo_Html: HTML_APP, Correo_Nombre_Remitente: 'Braun Tesorería', Pdf_Base64: PDF_OK, Pdf_Nombre: 'Reporte_H1.pdf' });
+ok(r.status === 'success' && correos[0].opciones.htmlBody === HTML_APP, 'el HTML que arma la app llega idéntico');
+ok(correos[0].opciones.name === 'Ana Pérez (App Braun)', 'el remitente sale del usuario autenticado, no del pedido');
+ok(correos[0].opciones.attachments[0].nombre === 'Reporte_H1.pdf', 'el PDF se adjunta con su nombre');
+
+correos = [];
+const HTML_MALO = '<p>Pague acá: <a href="http://phish">Pagar</a></p><form action="http://phish"><input name="clave"></form>' +
+  '<img src="http://rastreo/x.gif"><script>alert(1)</script><div style="background:url(http://x)" onclick="y()">z</div><a href="http://sin-cerrar"';
+post({ _accion: 'enviar_correo_reporte', _token: t10b, Correo: 'planta@cliente.com', Correo_Asunto: 'Factura',
+  Id_Carga: 'H2', Correo_Cuerpo_Html: HTML_MALO });
+const saneado = correos[0].opciones.htmlBody;
+ok(!/<a\b|<form|<input|<img|<script|onclick|url\(/i.test(saneado), 'links, formularios, imágenes, scripts y eventos no llegan');
+ok(saneado.includes('Pague acá: Pagar') && saneado.includes('<div>z</div>'), 'el texto queda, sin las etiquetas peligrosas');
+ok(saneado.includes('&lt;a href="http://sin-cerrar"'), 'una etiqueta sin cerrar pasa a texto');
+
+correos = [];
+r = post({ _accion: 'enviar_correo_reporte', _token: t10b, Correo: 'planta@cliente.com', Correo_Asunto: 'Otro',
+  Id_Carga: 'H3', Pdf_Base64: EXE, Pdf_Nombre: 'Reporte.pdf' });
+ok(r.status === 'error' && correos.length === 0, 'un adjunto que no es PDF de verdad: no sale');
+correos = [];
+post({ _accion: 'enviar_correo_reporte', _token: t10b, Correo: 'planta@cliente.com', Correo_Asunto: 'Otro2',
+  Id_Carga: 'H4', Pdf_Base64: PDF_OK, Pdf_Nombre: '../factura.exe' });
+ok(/\.pdf$/.test(correos[0].opciones.attachments[0].nombre) && !correos[0].opciones.attachments[0].nombre.includes('/'),
+  'el nombre del adjunto siempre termina en .pdf y sin barras');
+
+// Tope diario: se completa la constancia de hoy hasta el máximo.
+for (let i = 0; correosEnviadosHoy('ana@braun.com') < CORREO_MAX_POR_DIA; i++) {
+  HOJAS['Correos_Enviados'].appendRow([new Date(), 'ana@braun.com', 'sí', 'x@y.com', '', 'relleno ' + i, 'carga', 'R' + i]);
+}
+ok(correosEnviadosHoy('beto@braun.com') === 0, 'el tope es por usuario: lo de Ana no le cuenta a Beto');
+correos = [];
+r = post({ _accion: 'enviar_correo_reporte', _token: t10b, Correo: 'planta@cliente.com', Correo_Asunto: 'Uno más', Id_Carga: 'H5' });
+ok(r.status === 'error' && /máximo/.test(r.message || r.error || '') && correos.length === 0,
+  'pasado el tope diario por usuario: no sale');
 
 // SEC-01 y SEC-03(a) de la segunda auditoría del 30/10: en "registrar" un
 // desconocido se agregaba con su Gmail, se mandaba el código y quedaba con un

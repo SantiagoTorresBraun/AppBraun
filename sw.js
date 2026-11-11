@@ -28,6 +28,9 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v30: sin sesión la app no le pide nada al servidor (antes leía y mandaba la
+// cola desde la pantalla de login, sin token), y al entrar baja todo y sube lo
+// pendiente (app.js y cola-sync.js). Preparación para ACCESO_MODO "exigir".
 // v29: pérdidas silenciosas de la sincronización: una edición sobre un alta
 // sin confirmar viaja como edición (app.js, calidad.js, cola-sync.js),
 // Producción solo marca sincronizado lo confirmado (produccion*.js), editar
@@ -57,7 +60,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v29';
+const VERSION = 'v30';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.

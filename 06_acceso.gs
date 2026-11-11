@@ -60,7 +60,12 @@ var ACCIONES_PUBLICAS = {
 var ACCIONES_SIEMPRE_CON_TOKEN = {
   agregar_usuario: true,
   eliminar_usuario: true,
-  agente_consulta: true
+  agente_consulta: true,
+  // Manda correos a destinatarios de afuera desde la cuenta de Braun: sin
+  // token era un relay abierto para cualquiera con la URL (hallazgo 2). Es el
+  // plan B de correo.js (el normal sale del Gmail del usuario), así que nadie
+  // depende de él sin sesión.
+  enviar_correo_reporte: true
 };
 
 // ---------------------------------------------------------------------------
@@ -270,6 +275,97 @@ function problemaDelCorreo(data) {
   }
   return "";
 }
+
+// --- Reportes (enviar_correo_reporte): van a plantas, clientes y fleteros, así
+// que los destinatarios no se pueden limitar a una lista. Lo que sí se fija en
+// el servidor (SEC-03 de la segunda auditoría): el nombre del remitente, qué
+// HTML puede llevar el cuerpo, que el adjunto sea un PDF y cuántos por día.
+var CORREO_MAX_POR_DIA = 60;   // por usuario, solo los que salen por el backend
+
+// Nombre con el que sale el correo. Antes lo elegía el pedido ("Braun
+// Tesorería" pasaba igual); ahora sale del usuario autenticado.
+function nombreRemitenteCorreo(emailAutenticado) {
+  var nombre = "";
+  if (emailAutenticado) {
+    try {
+      var valores = obtenerHojaUsuarios().getDataRange().getDisplayValues();
+      for (var f = 1; f < valores.length; f++) {
+        if (String(valores[f][1]).trim().toLowerCase() === emailAutenticado) { nombre = String(valores[f][0]).trim(); break; }
+      }
+    } catch (err) { Logger.log("No se pudo leer el nombre del remitente: " + err); }
+  }
+  return nombre ? nombre + " (App Braun)" : "App Braun";
+}
+
+// Deja pasar SOLO las etiquetas que usa cuerpoHtmlReporte (correo.js) con su
+// atributo style, y escapa todo lo demás. Un link, un formulario o una imagen
+// remota que venga en el pedido no llega al destinatario; el reporte de la app
+// se ve igual que antes.
+var ETIQUETAS_HTML_CORREO = { div: true, p: true, table: true, tbody: true, tr: true, td: true, b: true, i: true, br: true, span: true };
+
+function sanearHtmlCorreo(html) {
+  var s = String(html || "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style|head|title|iframe|object|embed|form|template|svg|math|textarea|select|noscript)\b[\s\S]*?<\/\1\s*>/gi, "");
+  var etiquetas = [];
+  s = s.replace(/<\s*(\/?)\s*([a-z0-9]+)\b([^>]*)>/gi, function (m, cierre, tag, attrs) {
+    tag = tag.toLowerCase();
+    if (!ETIQUETAS_HTML_CORREO[tag]) return "";
+    var armada;
+    if (cierre) {
+      armada = "</" + tag + ">";
+    } else {
+      var estilo = (attrs.match(/\sstyle\s*=\s*"([^"]*)"/i) || [])[1] || "";
+      if (/url\s*\(|expression|javascript:|@import|behavior|position\s*:/i.test(estilo)) estilo = "";
+      armada = "<" + tag + (estilo ? ' style="' + estilo + '"' : "") + ">";
+    }
+    etiquetas.push(armada);
+    return "\u0000" + (etiquetas.length - 1) + "\u0000";
+  });
+  // Lo que quedó suelto ("<a href=..." sin cerrar, "<!DOCTYPE") pasa a texto.
+  s = s.replace(/\u0000/g, "\u0001").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/\u0001(\d+)\u0001/g, function (m, i) { return etiquetas[Number(i)]; });
+}
+
+// Base64 de un PDF de verdad (empieza con "%PDF", que en base64 es "JVBER").
+// Sin esto, cualquier archivo viajaba como "reporte.pdf".
+function esPdfBase64(b64) {
+  b64 = String(b64 || "");
+  if (b64.indexOf("data:") === 0) b64 = b64.substring(b64.indexOf(",") + 1);
+  return b64.indexOf("JVBER") === 0;
+}
+
+// Cuántos correos mandó hoy este usuario por el backend, según la constancia.
+// Se cuenta en la hoja y no en CacheService porque la caché dura 6 horas como
+// mucho y el tope es por día.
+function correosEnviadosHoy(usuario) {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_CORREOS_ENVIADOS);
+  if (!usuario || !hoja || hoja.getLastRow() < 2) return 0;
+  var zona = Session.getScriptTimeZone();
+  var hoy = Utilities.formatDate(new Date(), zona, "yyyy-MM-dd");
+  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLS_CORREOS_ENVIADOS.length).getValues();
+  var total = 0;
+  for (var f = filas.length - 1; f >= 0; f--) {
+    var fecha = filas[f][0];
+    if (!(fecha instanceof Date)) continue;
+    var dia = Utilities.formatDate(fecha, zona, "yyyy-MM-dd");
+    if (dia < hoy) break;   // la hoja crece hacia abajo: lo de antes ya no cuenta
+    if (filas[f][6] === "ticket") continue;   // los avisos internos de la Ticketera no cuentan
+    if (dia === hoy && String(filas[f][1]).trim().toLowerCase() === usuario) total++;
+  }
+  return total;
+}
+
+// --- Ticketera: es interna. Solo se le escribe a alguien de la hoja Usuarios.
+function esUsuarioDeLaApp(email) {
+  email = String(email || "").trim().toLowerCase();
+  if (!email) return false;
+  try { return buscarFilaUsuario(obtenerHojaUsuarios(), email) !== -1; }
+  catch (err) { Logger.log("No se pudo consultar Usuarios: " + err); return false; }
+}
+
+var TIPOS_ADJUNTO_TICKET = { "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg" };
+var ADJUNTO_TICKET_MAX_BYTES = 10 * 1024 * 1024;
 
 function registrarCorreoEnviado(data, emailAutenticado) {
   try {

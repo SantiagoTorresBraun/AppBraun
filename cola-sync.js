@@ -218,6 +218,11 @@ async function sincronizarCola(cfg) {
     if (!cfg) return;                     // colaPorStore() no encontro esa cola
     if (!db || !navigator.onLine) return;
     if (typeof WEB_APP_URL === 'undefined' || WEB_APP_URL.indexOf('AQUÍ_VA') !== -1) return;
+    // Sin sesión (pantalla de login, o venció la de 24 h) no se manda nada: iría
+    // sin token, y con ACCESO_MODO "exigir" el servidor lo rechazaría y saldría
+    // el cartel de "sesión no habilitada" en la pantalla de login. Queda en la
+    // cola y sale apenas entra alguien (cargarYSincronizarTodo, en app.js).
+    if (typeof haySesionActiva === 'function' && !haySesionActiva()) return;
     if (colaEnCurso[cfg.store]) return;
 
     colaEnCurso[cfg.store] = true;

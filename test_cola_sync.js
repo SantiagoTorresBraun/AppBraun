@@ -213,6 +213,16 @@ const cola = () => ctx.colaPorStore(CAL);
   ok(lecturas === 1, 'se vuelve a leer el historial del servidor');
   ok(enviados[0].accion === 'guardar_calidad' && enviados[0].cuerpo.id === undefined, 'viaja como guardar_calidad y sin id local');
 
+  console.log('\n1b. Sin sesión no se manda nada (pantalla de login, ACCESO_MODO "exigir")');
+  d = preparar([control(30)]); modo = 'ok';
+  ctx.haySesionActiva = () => false;
+  await ctx.sincronizarCola(cola());
+  ok(enviados.length === 0 && !!d.stores[CAL][30], 'no sale ningún pedido y el control queda en la cola');
+  ctx.haySesionActiva = () => true;
+  await ctx.sincronizarCola(cola());
+  ok(enviados.length === 1 && !d.stores[CAL][30], 'apenas hay sesión, sale y se confirma');
+  delete ctx.haySesionActiva;
+
   console.log('\n2. Servidor contesta HTML (Apps Script caído / timeout)');
   d = preparar([control(2)]); modo = 'html';
   await ctx.sincronizarCola(cola());

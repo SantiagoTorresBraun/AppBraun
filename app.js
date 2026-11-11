@@ -53,6 +53,16 @@ request.onsuccess = function(e) {
     // Reintento automático cada minuto y aviso de lo que quedó trabado.
     if (typeof arrancarLatidoCola === 'function') arrancarLatidoCola();
     if (typeof actualizarAvisoCola === 'function') actualizarAvisoCola();
+    cargarYSincronizarTodo();
+};
+
+// Baja todo del servidor y sube lo pendiente. Solo con sesión: antes corría
+// también en la pantalla de login, sin token (la sesión local dura 24 h, así
+// que pasaba todos los días), y después de entrar no se volvía a leer nada.
+// Con ACCESO_MODO "exigir" eso dejaba las listas con la copia vieja.
+// Se llama al abrir la base local y al iniciar sesión.
+function cargarYSincronizarTodo() {
+    if (!db || !haySesionActiva()) return;
     cargarHistorialDesdeGoogle();
     if (typeof cargarHistorialCalidadDesdeGoogle === 'function') cargarHistorialCalidadDesdeGoogle();
     if (typeof sincronizarCalidadPendientes === 'function' && navigator.onLine) sincronizarCalidadPendientes();
@@ -62,7 +72,9 @@ request.onsuccess = function(e) {
     if (typeof cargarMuestreosDesdeGoogle === 'function') cargarMuestreosDesdeGoogle();
     if (typeof ocCargarOrdenesDesdeGoogle === 'function') ocCargarOrdenesDesdeGoogle();
     if (typeof sincronizarMuestreosPendientes === 'function' && navigator.onLine) sincronizarMuestreosPendientes();
-};
+    if (typeof sincronizarInformesPendientes === 'function' && navigator.onLine) sincronizarInformesPendientes();
+    if (typeof sincronizarTodasLasColas === 'function' && navigator.onLine) sincronizarTodasLasColas();
+}
 request.onerror = function(e) { console.error("Error IndexedDB", e); };
 
 // --- CONFIGURACIÓN DE CONEXIÓN Y VARIABLES GLOBALES ---
@@ -1506,6 +1518,8 @@ document.getElementById('form-login').addEventListener('submit', async function(
 
     if (resultado.ok) {
         document.getElementById('form-login').reset();
+        // Ahora sí hay token: se baja todo y sale lo que quedó en cola.
+        cargarYSincronizarTodo();
         // Si venía del link de un correo de la ticketera, retomamos ese destino
         if ((location.hash || '').startsWith('#/ticketera')) {
             abrirTicketera();
@@ -1729,6 +1743,8 @@ function updateOnlineStatus() {
     if (navigator.onLine) {
         badge.textContent = "Online";
         badge.className = "online";
+        // Sin sesión no se pide nada al servidor (ver cargarYSincronizarTodo).
+        if (!haySesionActiva()) return;
         sincronizarDatosPendientes();
         cargarHistorialDesdeGoogle();
         sincronizarTicketsPendientes();

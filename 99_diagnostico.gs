@@ -403,15 +403,16 @@ function limpiarFilasSinIdCarga() {
 // --------------------------------------------------------
 // ¿LO QUE ESTÁ EN EL EDITOR ES IGUAL A LO DEL REPO?
 //    Imprime una huella (SHA-256 recortado) de las funciones que
-//    cambiaron en el último bloque. Se compara con las mismas huellas
+//    cambiaron en los últimos bloques. Se compara con las mismas huellas
 //    calculadas sobre los .gs de git: si alguna no coincide, esa función
 //    quedó vieja o se pegó mal en el editor.
 // --------------------------------------------------------
 function diagVerificarCodigoPegado() {
-  var fns = [buscarArchivoEnCarpetaApp, resolverImagenDrive, resolverArchivoDrive,
-    subirFotosDeMuestreo, guardarFotoMuestreoEnDrive, actualizarCalidad, celdaSegura,
-    diagnosticoRutasDrive, borrarClaveDeUsuario, registrarConsultaAgente,
-    filaDesdeColumnas, emitirTokenSesion, registrarCorreoEnviado];
+  var fns = [doPost, buscarArchivoEnCarpetaApp, resolverImagenDrive, subirFotosDeMuestreo,
+    actualizarCalidad, celdaSegura, borrarClaveDeUsuario, registrarConsultaAgente,
+    filaDesdeColumnas, enviarReportePorCorreo, enviarMailTicket, crearTicket,
+    controlarAcceso, sanearHtmlCorreo, nombreRemitenteCorreo, correosEnviadosHoy,
+    esUsuarioDeLaApp, registrarCorreoEnviado];
   var out = [];
   fns.forEach(function (fn) {
     var s = fn.toString().replace(/\r\n/g, "\n");
