@@ -14,6 +14,20 @@
 
 const NOVEDADES = [
     {
+        id: 34,
+        version: 'v34',
+        fecha: '2026-11-11',
+        titulo: 'Correcciones en fechas y números',
+        importante: false,
+        items: [
+            'Después de las 21 h, la fecha que se completa sola ya es la de hoy y no la de mañana.',
+            'En los Informes de campo, "14.3" se lee como 14,3 (antes salía 143).',
+            'Un control de calidad viejo se puede volver a editar aunque la muestra dé 99,99 %.',
+            'Los valores en 0 (por ejemplo, 0 % de daño) ya no se borran al guardar.',
+            'Editar una Orden de Carga ya no le cambia la fecha de alta.'
+        ]
+    },
+    {
         id: 33,
         version: 'v33',
         fecha: '2026-11-11',

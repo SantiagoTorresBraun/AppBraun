@@ -204,7 +204,12 @@ console.log('\n--- 4. ACTUALIZAR (se saca un camion) ---');
 const editada = JSON.parse(JSON.stringify(OC));
 editada.Camiones.pop();
 editada.Total_Camiones = 1;
+const colFechaReg = HOJAS['Orden_Carga'].filas[0].indexOf('Fecha_Registro');
+const fechaAlta = new Date('2026-07-14T10:00:00Z');
+HOJAS['Orden_Carga'].filas[1][colFechaReg] = fechaAlta;   // como si se hubiera dado de alta ese día
 actualizarOrdenCarga(editada);
+chequear('la edición conserva la fecha de alta (P3-06)',
+  HOJAS['Orden_Carga'].filas[1][colFechaReg] instanceof Date && HOJAS['Orden_Carga'].filas[1][colFechaReg].getTime(), fechaAlta.getTime());
 chequear('sigue habiendo 1 orden', HOJAS['Orden_Carga'].filas.length - 1, 1);
 chequear('ahora 1 camion', HOJAS['OC_Camion'].filas.length - 1, 1);
 chequear('ahora 2 cartas de porte', HOJAS['OC_CartaPorte'].filas.length - 1, 2);

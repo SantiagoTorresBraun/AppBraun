@@ -275,6 +275,28 @@ function parseNumeroAR(valor) {
     return isNaN(num) ? 0 : num;
 }
 
+// Para campos de texto libre donde la gente escribe "14,3" o "14.3" (en el
+// celular el teclado numérico a veces solo trae punto). parseNumeroAR toma el
+// punto como separador de miles y leía "14.3" como 143 (DAT-09 de la auditoría
+// del 30/10). Acá: con coma, formato argentino; solo con puntos, es de miles
+// únicamente si tiene la forma 1.234 o 1.234.567; si no, es decimal.
+function parseNumeroUsuario(valor) {
+    if (valor === null || valor === undefined || valor === '') return 0;
+    if (typeof valor === 'number') return valor;
+    const t = String(valor).trim();
+    if (t.indexOf(',') !== -1 || /^-?\d{1,3}(\.\d{3})+$/.test(t)) return parseNumeroAR(t);
+    const num = parseFloat(t);
+    return isNaN(num) ? 0 : num;
+}
+
+// Fecha de hoy "AAAA-MM-DD" en la hora del celular. Asignar valueAsDate con la fecha actual
+// usa la fecha UTC: desde las 21:00 (hora argentina) ponía la de mañana, y el
+// turno noche cargaba con la fecha corrida (DAT-05 de la auditoría del 30/10).
+function hoyLocalISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function formatNumeroAR(valor, maxDecimales) {
     const num = typeof valor === 'number' ? valor : (parseFloat(valor) || 0);
     return num.toLocaleString('es-AR', { maximumFractionDigits: maxDecimales === undefined ? 2 : maxDecimales });
@@ -584,7 +606,7 @@ function abrirModuloCarga(tipo) {
 
     // Reset TOTAL del formulario para que el operario arranque limpio (punto 1 del pedido)
     document.getElementById('form-carga').reset();
-    document.getElementById("fecha").valueAsDate = new Date();
+    document.getElementById("fecha").value = hoyLocalISO();
     document.querySelectorAll(".preview").forEach(div => {
         div.innerHTML = "📸 Sin foto";
         div.style.backgroundImage = '';
@@ -4180,7 +4202,7 @@ document.addEventListener("DOMContentLoaded", () => {
         cambiarVista('view-login');
     }
     
-    document.getElementById("fecha").valueAsDate = new Date();
+    document.getElementById("fecha").value = hoyLocalISO();
     
     configurarFoto("f-frente", "p-frente", "Foto_Frente");
     configurarFoto("f-culo", "p-culo", "Foto_Culo");

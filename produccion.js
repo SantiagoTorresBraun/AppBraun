@@ -65,7 +65,7 @@ function resetFormMuestreo() {
     const f = document.getElementById('form-muestreo');
     if (f) f.reset();
     const fecha = document.getElementById('mu-fecha');
-    if (fecha) fecha.valueAsDate = new Date();
+    if (fecha) fecha.value = hoyLocalISO();
     poblarSelect(document.getElementById('mu-cultivo'), 'cultivoCampo', '');
     const respSel = document.getElementById('mu-responsable');
     poblarSelect(respSel, 'personal', '');

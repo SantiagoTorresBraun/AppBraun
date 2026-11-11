@@ -143,10 +143,12 @@ let informesRemotos = [];        // lo que devolvió el backend
 let informesRenderizados = [];   // la lista filtrada que se está viendo
 let tipoInformeSel = 'siembra';  // tipo elegido en el formulario de arranque
 
-const escInf = (typeof escapeHtml === 'function')
-    ? escapeHtml
-    : (s => (s === undefined || s === null) ? '' : String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
+// Conserva el 0: escapeHtml(0) devuelve '' y un "% de daño = 0" aparecía vacío
+// al volver a abrir el informe (DAT-11 de la auditoría del 30/10).
+const escInf = s => (s === 0 ? '0' : (typeof escapeHtml === 'function')
+    ? escapeHtml(s)
+    : ((s === undefined || s === null) ? '' : String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')));
 
 function tipoInforme(id) {
     return TIPOS_INFORME.find(t => t.id === id) || TIPOS_INFORME[2];
@@ -333,7 +335,7 @@ function resetFormInforme() {
     const f = document.getElementById('form-informe');
     if (f) f.reset();
     const fecha = document.getElementById('inf-fecha');
-    if (fecha) fecha.valueAsDate = new Date();
+    if (fecha) fecha.value = hoyLocalISO();
     const resp = document.getElementById('inf-responsable');
     poblarSelect(resp, 'personal', '');
     const sesion = (typeof obtenerSesion === 'function') ? obtenerSesion() : null;
@@ -513,6 +515,10 @@ function eliminarLoteInforme(i) {
 
 function setCampoLote(i, campo, valor) {
     if (!informeActual || !informeActual.Lotes[i]) return;
+    // Los numéricos se guardan como número: antes quedaba el texto tal cual, y
+    // "14.3" se leía después como 143 (parseNumeroUsuario, en app.js).
+    const def = CAMPOS_LOTE[campo];
+    if (def && def.tipo === 'num' && String(valor).trim() !== '') valor = parseNumeroUsuario(valor);
     informeActual.Lotes[i][campo] = valor;
     // Sin re-render: el usuario puede estar tipeando en el campo de al lado.
     guardarInformeLocal();
@@ -637,7 +643,7 @@ function etiquetaSugerida() {
     const t = tipoInforme(inf.Tipo);
     const claveNum = t.camposLote.find(k => CAMPOS_LOTE[k] && CAMPOS_LOTE[k].tipo === 'num');
     const dato = claveNum && l[claveNum]
-        ? ` · ${numAR(parseNumeroAR(l[claveNum]))} ${claveNum === 'sem_m' ? 'sem/m' : (claveNum === 'plantas_m' ? 'pl/m' : (CAMPOS_LOTE[claveNum].unidad || ''))}`
+        ? ` · ${numAR(parseNumeroUsuario(l[claveNum]))} ${claveNum === 'sem_m' ? 'sem/m' : (claveNum === 'plantas_m' ? 'pl/m' : (CAMPOS_LOTE[claveNum].unidad || ''))}`
         : '';
     return `${l.Lote}${dato}`;
 }
@@ -770,13 +776,13 @@ function generarMensajeInforme(inf) {
 
         const principal = campos[0];
         const defP = CAMPOS_LOTE[principal];
-        const valP = defP.tipo === 'num' ? numAR(parseNumeroAR(l[principal])) : l[principal];
+        const valP = defP.tipo === 'num' ? numAR(parseNumeroUsuario(l[principal])) : l[principal];
         L.push('');
         L.push(`🔹 ${l.Lote} • ${defP.etiquetaMsg || defP.label}: ${conUnidad(valP, defP.unidad)}`);
 
         campos.slice(1).forEach(k => {
             const def = CAMPOS_LOTE[k];
-            const val = def.tipo === 'num' ? numAR(parseNumeroAR(l[k])) : l[k];
+            const val = def.tipo === 'num' ? numAR(parseNumeroUsuario(l[k])) : l[k];
             const etiqueta = def.etiquetaMsg || def.label;
             L.push(etiqueta ? `* ${etiqueta}: ${conUnidad(val, def.unidad)}` : `* ${val}`);
         });

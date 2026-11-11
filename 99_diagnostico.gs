@@ -412,7 +412,8 @@ function diagVerificarCodigoPegado() {
     actualizarCalidad, celdaSegura, borrarClaveDeUsuario, registrarConsultaAgente,
     filaDesdeColumnas, enviarReportePorCorreo, enviarMailTicket, crearTicket,
     controlarAcceso, sanearHtmlCorreo, nombreRemitenteCorreo, correosEnviadosHoy,
-    esUsuarioDeLaApp, registrarCorreoEnviado];
+    esUsuarioDeLaApp, registrarCorreoEnviado, numeroOVacio, guardarMuestreo,
+    guardarInformeCampo, actualizarOrdenCarga, fechaRegistroDeOC, cabeceraOCaFila];
   var out = [];
   fns.forEach(function (fn) {
     var s = fn.toString().replace(/\r\n/g, "\n");

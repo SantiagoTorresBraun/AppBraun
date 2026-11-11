@@ -28,6 +28,8 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v34: fecha local por defecto, decimales en Informes, margen al editar
+// Calidad, ceros en Informes; si el sitio responde con error se usa la copia.
 // v33: el asistente es un gaucho (gaucho.svg) en el botón y en el chat
 // (index.html, diseno.css, agente.js).
 // v32: módulos con el estilo nuevo (franja roja lisa, filtros y carpetas de
@@ -67,7 +69,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v33';
+const VERSION = 'v34';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
@@ -259,6 +261,12 @@ async function redPrimero(pedido, evento) {
             clearTimeout(reloj);
             if (resp && resp.ok && resp.type === 'basic') {
                 await guardarEnCache(evento, pedido, resp.clone());
+            }
+            // GitHub Pages caído o un archivo que no está (404/5xx): mejor la
+            // copia guardada que una página de error (P3-09 de la auditoría).
+            if (resp && !resp.ok && resp.type === 'basic') {
+                const guardado = await caches.match(pedido, { ignoreSearch: true });
+                if (guardado) { responder(guardado); return; }
             }
             responder(await sinRedireccion(resp, pedido));
         }).catch(async () => {

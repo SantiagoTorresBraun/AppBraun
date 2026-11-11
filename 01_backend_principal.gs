@@ -97,6 +97,13 @@ function filaSegura(fila) {
   return fila.map(celdaSegura);
 }
 
+// Un número que puede ser 0. "valor || ''" convertía el 0 en celda vacía: un
+// "% de daño = 0" o una incidencia 0 se perdían al guardar (DAT-11 de la
+// auditoría del 30/10).
+function numeroOVacio(v) {
+  return (v === undefined || v === null) ? "" : v;
+}
+
 // ========================================================
 // CONFIGURACIÓN DE HOJAS
 // ========================================================
@@ -1500,10 +1507,10 @@ function guardarMuestreo(data) {
       var idPunto = p.Id_Punto || Utilities.getUuid();
       var foto = p.Foto || "";
       hojaP.appendRow(filaSegura([
-        idPunto, data.Id_Muestreo || "", (p.Orden || (i + 1)), p.Lat || "", p.Long || "",
-        p.Precision_m || "", p.Timestamp || "", p.Cultivo || "", p.Estado_Fenologico || "",
-        p.Tipo_Observacion || "", p.Objetivo || "", p.Severidad || "", p.Incidencia_pct || "",
-        p.Conteo_Valor || "", p.Conteo_Unidad || "", p.Nota || "", foto
+        idPunto, data.Id_Muestreo || "", (p.Orden || (i + 1)), numeroOVacio(p.Lat), numeroOVacio(p.Long),
+        numeroOVacio(p.Precision_m), p.Timestamp || "", p.Cultivo || "", p.Estado_Fenologico || "",
+        p.Tipo_Observacion || "", p.Objetivo || "", numeroOVacio(p.Severidad), numeroOVacio(p.Incidencia_pct),
+        numeroOVacio(p.Conteo_Valor), p.Conteo_Unidad || "", p.Nota || "", foto
       ]));
     });
   }
@@ -2425,8 +2432,8 @@ function guardarInformeCampo(data) {
       if (!l || !l.Lote) return; // un lote sin nombre es una fila a medio cargar
       hojaL.appendRow(filaSegura([
         Utilities.getUuid(), data.Id_Informe || "", (i + 1), l.Lote || "",
-        l.sem_m || "", l.plantas_m || "", l.prof_cm || "", l.dano_pct || "", l.kg || "",
-        l.distribucion || "", l.humedad || "", l.estadio || "", l.nota || ""
+        numeroOVacio(l.sem_m), numeroOVacio(l.plantas_m), numeroOVacio(l.prof_cm), numeroOVacio(l.dano_pct), numeroOVacio(l.kg),
+        l.distribucion || "", numeroOVacio(l.humedad), l.estadio || "", l.nota || ""
       ]));
     });
   }

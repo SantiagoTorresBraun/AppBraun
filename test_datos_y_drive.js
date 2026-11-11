@@ -315,6 +315,82 @@ function probarSyncMuestreo(respuesta, editarMientrasViaja) {
   ok(urlSegura('Control de Calidad_Images/a.jpg') === 'Control de Calidad_Images/a.jpg', 'una ruta relativa de AppSheet sigue pasando');
   ok(urlSegura('https://drive.google.com/x') === 'https://drive.google.com/x', 'una https sigue pasando');
 
+  // ==========================================================================
+  console.log('\n8. DAT-05: la fecha de hoy es la del celular, no la UTC');
+  {
+    // 22:30 del 10/11 en Argentina = 01:30 del 11/11 en UTC.
+    const instante = Date.parse('2026-11-11T01:30:00Z');
+    class RelojFijo extends Date {
+      constructor(...a) { if (a.length) super(...a); else super(instante); }
+      // El celular está en Argentina (UTC-3), sin depender de la zona de quien corre la prueba.
+      getFullYear() { return new Date(this.getTime() - 3 * 3600000).getUTCFullYear(); }
+      getMonth() { return new Date(this.getTime() - 3 * 3600000).getUTCMonth(); }
+      getDate() { return new Date(this.getTime() - 3 * 3600000).getUTCDate(); }
+    }
+    const ctxF = vm.createContext({ Date: RelojFijo, String });
+    vm.runInContext(extraerFuncion(appJs, 'hoyLocalISO'), ctxF);
+    ok(vm.runInContext('hoyLocalISO()', ctxF) === '2026-11-10', 'a las 22:30 del 10/11 la fecha por defecto es el 10/11 (antes salía 11/11)');
+    const archivos = ['app.js', 'calidad.js', 'orden-carga.js', 'produccion.js', 'produccion-informes.js'];
+    const conUTC = archivos.filter(a => /valueAsDate\s*=\s*new Date\(\)/.test(fs.readFileSync(path.join(RAIZ, a), 'utf8')));
+    ok(conUTC.length === 0, 'ningún formulario usa valueAsDate = new Date() ' + (conUTC.length ? '(quedan: ' + conUTC.join(', ') + ')' : ''));
+  }
+
+  // ==========================================================================
+  console.log('\n9. DAT-09: "14.3" es 14,3 y no 143');
+  {
+    const ctxN = vm.createContext({ String, parseFloat, isNaN });
+    vm.runInContext(extraerFuncion(appJs, 'parseNumeroAR') + '\n' + extraerFuncion(appJs, 'parseNumeroUsuario'), ctxN);
+    const pn = vm.runInContext('parseNumeroUsuario', ctxN);
+    ok(pn('14.3') === 14.3 && pn('14,3') === 14.3, '"14.3" y "14,3" dan 14,3');
+    ok(pn('1.500') === 1500 && pn('1.234,5') === 1234.5 && pn('1.234.567') === 1234567, 'el punto de miles se sigue entendiendo');
+    ok(pn('143') === 143 && pn('') === 0 && pn(0) === 0 && pn('0,5') === 0.5, 'enteros, vacío, cero y "0,5"');
+
+    const infJs2 = fs.readFileSync(path.join(RAIZ, 'produccion-informes.js'), 'utf8');
+    const iniCampos = infJs2.indexOf('const CAMPOS_LOTE = {');
+    const camposSrc = infJs2.slice(iniCampos, infJs2.indexOf('\n};', iniCampos) + 3).replace('const CAMPOS_LOTE', 'var CAMPOS_LOTE');
+    let guardados = 0;
+    const ctxI = vm.createContext({ String, parseFloat, isNaN, informeActual: { Lotes: [{ Lote: 'L1' }] }, guardarInformeLocal: () => { guardados++; } });
+    vm.runInContext(camposSrc + '\n' + extraerFuncion(appJs, 'parseNumeroAR') + '\n' + extraerFuncion(appJs, 'parseNumeroUsuario') + '\n' + extraerFuncion(infJs2, 'setCampoLote'), ctxI);
+    vm.runInContext("setCampoLote(0, 'sem_m', '14.3'); setCampoLote(0, 'humedad', 'Buena'); setCampoLote(0, 'dano_pct', '0')", ctxI);
+    const lote = vm.runInContext('informeActual.Lotes[0]', ctxI);
+    ok(lote.sem_m === 14.3, 'un campo numérico del informe se guarda como número 14,3');
+    ok(lote.humedad === 'Buena' && lote.dano_pct === 0, 'los de opción quedan como texto y el 0 queda como 0');
+    ok(/numAR\(parseNumeroUsuario\(l\[/.test(infJs2) && !/parseNumeroAR\(l\[/.test(infJs2),
+      'el mensaje y la etiqueta leen con parseNumeroUsuario (los informes viejos con "14.3" también se ven bien)');
+  }
+
+  // ==========================================================================
+  console.log('\n10. DAT-08: editar un control de Calidad que da 99,99 %');
+  {
+    const ctxC = vm.createContext({ Math });
+    const iniMargen = calJs.indexOf('const MARGEN_MUESTRA_EDICION_PCT');
+    vm.runInContext(calJs.slice(iniMargen, calJs.indexOf('\n', iniMargen)).replace('const ', 'var ') + '\n' + extraerFuncion(calJs, 'muestraDescuadrada'), ctxC);
+    const md = vm.runInContext('muestraDescuadrada', ctxC);
+    ok(md(99.99, true) === false && md(100.04, true) === false, 'al editar, 99,99 % y 100,04 % se aceptan');
+    ok(md(99.9, true) === true, 'al editar, 99,9 % sigue sin cerrar');
+    ok(md(99.99, false) === true && md(100, false) === false, 'un control nuevo exige el 100 % exacto');
+    ok((calJs.match(/muestraDescuadrada\([^)]*!!idCalidadEnEdicion\)/g) || []).length === 2,
+      'el guardado y el aviso en pantalla usan el margen solo en edición');
+  }
+
+  // ==========================================================================
+  console.log('\n11. DAT-11: el 0 no se pierde al guardar en el servidor');
+  reiniciar();
+  guardarMuestreo({ Id_Muestreo: 'M-0', Puntos: [{ Id_Punto: 'P-0', Incidencia_pct: 0, Conteo_Valor: 0, Severidad: 0 }] });
+  const punto0 = HOJAS[NOMBRE_HOJA_MUESTREO_PUNTOS].filas[1];
+  ok(punto0[12] === 0 && punto0[13] === 0 && punto0[11] === 0, 'incidencia, conteo y severidad en 0 se guardan como 0');
+  guardarInformeCampo({ Id_Informe: 'I-0', Lotes: [{ Lote: 'L1', dano_pct: 0, plantas_m: 12.5 }] });
+  const lote0 = HOJAS[NOMBRE_HOJA_INFORMES_LOTES].filas[1];
+  ok(lote0[7] === 0 && lote0[5] === 12.5 && lote0[4] === '', '"% de daño = 0" se guarda como 0; lo que no vino queda vacío');
+  {
+    const infJs3 = fs.readFileSync(path.join(RAIZ, 'produccion-informes.js'), 'utf8');
+    const iniEsc = infJs3.indexOf('const escInf =');
+    const ctxE = vm.createContext({ String });
+    vm.runInContext(extraerFuncion(appJs, 'escapeHtml') + '\n' + infJs3.slice(iniEsc, infJs3.indexOf(';\n', iniEsc) + 1).replace('const escInf', 'var escInf'), ctxE);
+    const esc = vm.runInContext('escInf', ctxE);
+    ok(esc(0) === '0' && esc('<b>') === '&lt;b&gt;' && esc(null) === '', 'el campo del informe muestra el 0 (y sigue escapando)');
+  }
+
   console.log(fallos ? '\n✘ ' + fallos + ' FALLA(S)' : '\n✔ Todo OK');
   process.exit(fallos ? 1 : 0);
 })();

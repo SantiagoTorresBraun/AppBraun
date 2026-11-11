@@ -95,7 +95,7 @@ function ocNuevaOrden() {
 function ocLimpiarFormulario() {
     ocIdEditando = null;
     document.getElementById('form-oc').reset();
-    document.getElementById('oc-fecha').valueAsDate = new Date();
+    document.getElementById('oc-fecha').value = hoyLocalISO();
     document.getElementById('oc-numero').value = ocProximoNumero();
     ocPrepararNumeroYFecha();
     document.getElementById('oc-validacion').classList.add('hidden');

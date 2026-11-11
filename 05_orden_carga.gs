@@ -223,7 +223,7 @@ function cabeceraOCaFila(data) {
     Total_Kg: data.Total_Kg || 0,
     Estado: data.Estado || "Generada",
     usuario_registro: data.usuario_registro || "",
-    Fecha_Registro: new Date(),
+    Fecha_Registro: data._fechaRegistroOriginal || new Date(),
     Titular_CP_CUIT: data.Titular_CP_CUIT || "",
     Correo: data.Correo || "",
     Estado_Correo: data.Estado_Correo || ""
@@ -265,8 +265,26 @@ function filaDesdeColumnas(columnas, valores) {
 // reparten de nuevo las bolsas entre lotes— y reinsertar entera evita tener que
 // resolver qué se agregó, qué se borró y qué cambió de número.
 function actualizarOrdenCarga(data) {
+  // Editar es borrar y volver a insertar: sin esto la orden quedaba con la
+  // fecha de la última edición como fecha de alta (P3-06 de la auditoría).
+  data._fechaRegistroOriginal = fechaRegistroDeOC(data.Id_OC);
   eliminarOrdenCargaInterno(data.Id_OC);
   return guardarOrdenCarga(data);
+}
+
+// Fecha_Registro de una orden ya guardada, o null si no está.
+function fechaRegistroDeOC(idOC) {
+  if (!idOC) return null;
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOMBRE_HOJA_OC);
+  if (!hoja || hoja.getLastRow() < 2) return null;
+  var valores = hoja.getDataRange().getValues();
+  var cab = valores[0].map(function (h) { return String(h).trim(); });
+  var colId = cab.indexOf("Id_OC"), colFecha = cab.indexOf("Fecha_Registro");
+  if (colId === -1 || colFecha === -1) return null;
+  for (var f = 1; f < valores.length; f++) {
+    if (String(valores[f][colId]).trim() === String(idOC).trim()) return valores[f][colFecha] || null;
+  }
+  return null;
 }
 
 function eliminarOrdenCarga(data) {

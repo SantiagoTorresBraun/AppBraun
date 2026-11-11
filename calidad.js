@@ -197,7 +197,7 @@ function resetFormularioCalidad() {
     const form = document.getElementById('form-calidad');
     if (!form) return;
     form.reset();
-    document.getElementById('cal-fecha').valueAsDate = new Date();
+    document.getElementById('cal-fecha').value = hoyLocalISO();
 
     // Poblar selects de enums (Cliente, Muestreo, Tipo, Calibre, Envase)
     document.querySelectorAll('#form-calidad select.enum-select').forEach(sel => {
@@ -289,7 +289,15 @@ function leerSumaInputs(selector) {
 // de muestra analizada, que es lo que se guarda y lo que ve el cliente en el PDF.
 // Materia Extraña es peso que sale de esa misma muestra, así que suma al total.
 // Compara a 2 decimales (lo que se ve en pantalla): 100,25 % no cierra.
-function muestraDescuadrada(pct) {
+//
+// Al EDITAR un control guardado hay ±0,05 % de margen: el Sheet guarda los
+// porcentajes redondeados a 2 decimales y al volver a pasarlos a gramos la
+// suma puede dar 99,99 %. Sin el margen, ese control no se podía volver a
+// guardar (DAT-08 de la auditoría del 30/10). Un control nuevo sigue exigiendo
+// el 100 % exacto.
+const MARGEN_MUESTRA_EDICION_PCT = 0.05;
+function muestraDescuadrada(pct, esEdicion) {
+    if (esEdicion) return Math.abs(pct - 100) > MARGEN_MUESTRA_EDICION_PCT + 1e-9;
     return Math.round(pct * 100) !== 10000;
 }
 
@@ -315,7 +323,7 @@ function recalcularTotalesCalidad() {
     const elPct = document.getElementById('total-muestra-pct');
     elPct.textContent = formatNumeroAR(totalMuestraPct, 2) + " %";
     // Alerta visual si la muestra no cierra en 100% (faltó pesar algo o se cargó de más)
-    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', muestraDescuadrada(totalMuestraPct) && totalMuestraG > 0);
+    elPct.closest('.calidad-total-card').classList.toggle('descuadrada', muestraDescuadrada(totalMuestraPct, !!idCalidadEnEdicion) && totalMuestraG > 0);
 
     return {
         pesoMuestra, buenosG, daniosG, materiaExtranaG, totalMuestraG,
@@ -483,7 +491,7 @@ document.getElementById('form-calidad').addEventListener('submit', function(e) {
         return;
     }
     // La muestra tiene que cerrar justo en 100%: si no, no se deja guardar
-    if (muestraDescuadrada(totales.totalMuestraPct)) {
+    if (muestraDescuadrada(totales.totalMuestraPct, !!idCalidadEnEdicion)) {
         alert(`No se puede guardar: cargaste ${formatNumeroAR(totales.totalMuestraG, 2)} g (calibres + defectos + materia extraña) sobre una muestra de ${formatNumeroAR(totales.pesoMuestra, 2)} g, o sea ${formatNumeroAR(totales.totalMuestraPct, 2)} %.\n\nLa muestra tiene que cerrar en 100 %. Revisá los gramos cargados.`);
         return;
     }
