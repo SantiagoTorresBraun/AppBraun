@@ -391,6 +391,8 @@ function cambiarVista(idDestino) {
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     const vistaDestino = document.getElementById(idDestino);
     vistaDestino.classList.remove('hidden');
+    // diseno.css lo usa para mostrar el logo en el encabezado solo en el menú.
+    document.body.dataset.vista = idDestino;
 
     const header = document.getElementById('main-header');
     const btnBack = document.getElementById('btn-back');
@@ -406,7 +408,8 @@ function cambiarVista(idDestino) {
             vistaHistorialNavegacion = ['view-menu-principal'];
             const welcome = document.querySelector('.welcome-text');
             const nombre = nombreUsuarioActual();
-            if (welcome && nombre) welcome.textContent = `¡Hola, ${nombre.split(' ')[0]}! Selecciona un módulo`;
+            if (welcome && nombre) welcome.textContent = `Hola, ${nombre.split(' ')[0]}`;
+            if (typeof mostrarNovedadesImportantes === 'function') mostrarNovedadesImportantes();
         } else if (idDestino === 'view-orden-carga') {
             document.getElementById('header-title').textContent = "Orden de Carga";
         } else if (idDestino === 'view-submenu-carga') {
@@ -1518,6 +1521,10 @@ document.getElementById('form-login').addEventListener('submit', async function(
 
     if (resultado.ok) {
         document.getElementById('form-login').reset();
+        // Llegó una versión nueva mientras escribía la contraseña (offline.js):
+        // se aplica ahora, que no hay nada a medio cargar. La sesión ya quedó
+        // guardada, así que vuelve directo al menú con la versión nueva.
+        if (window.braunVersionPendiente) { location.reload(); return; }
         // Ahora sí hay token: se baja todo y sale lo que quedó en cola.
         cargarYSincronizarTodo();
         // Si venía del link de un correo de la ticketera, retomamos ese destino

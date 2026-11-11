@@ -28,6 +28,9 @@
 //  a VERSION. Eso tira la cache vieja y fuerza a bajar todo de nuevo.
 // ============================================================================
 
+// v31: nueva imagen (diseno.css, fuente Inter en vendor/inter, logo sin
+// fondo), campanita de novedades (novedades.js) y la versión nueva se aplica
+// sola en la pantalla de login (offline.js).
 // v30: sin sesión la app no le pide nada al servidor (antes leía y mandaba la
 // cola desde la pantalla de login, sin token), y al entrar baja todo y sube lo
 // pendiente (app.js y cola-sync.js). Preparación para ACCESO_MODO "exigir".
@@ -60,7 +63,7 @@
 // v10: registro de consultas al agente (agente.js + style.css cambiaron).
 // Los dos se sirven CACHE PRIMERO: sin subir este numero, el navegador sigue
 // usando los archivos viejos y el registro no se activa nunca.
-const VERSION = 'v30';
+const VERSION = 'v31';
 const CACHE = 'braun-' + VERSION;
 
 // Cuanto esperamos a la red antes de servir la copia guardada.
@@ -73,6 +76,7 @@ const RECURSOS = [
     './',
     './index.html',
     './style.css',
+    './diseno.css',
     './manifest.json',
 
     './offline.js',
@@ -81,6 +85,7 @@ const RECURSOS = [
     './cola-sync.js',
     './auth.js',
     './app.js',
+    './novedades.js',
     './orden-carga.js',
     './correo.js',
     './calidad.js',
@@ -110,7 +115,9 @@ const RECURSOS = [
     './vendor/fontawesome/webfonts/fa-solid-900.woff2',
     './vendor/fontawesome/webfonts/fa-brands-400.woff2',
     './vendor/fontawesome/webfonts/fa-regular-400.woff2',
-    './vendor/fontawesome/webfonts/fa-v4compatibility.woff2'
+    './vendor/fontawesome/webfonts/fa-v4compatibility.woff2',
+    './vendor/inter/inter-latin-wght-normal.woff2',
+    './vendor/inter/inter-latin-ext-wght-normal.woff2'
 ];
 
 // ---------------------------------------------------------------------------

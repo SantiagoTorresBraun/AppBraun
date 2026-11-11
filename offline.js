@@ -83,9 +83,14 @@
     // ------------------------------------------------------------------
     // 3. Avisar cuando hay una version nueva
     // ------------------------------------------------------------------
-    // NO se recarga sola. Si un operario esta a mitad de una carga, recargarle
-    // la pagina de prepo le borra todo lo que tipeo. Se avisa y listo: la
-    // version nueva entra sola la proxima vez que abra la app.
+    // Con la sesion abierta NO se recarga sola: si un operario esta a mitad de
+    // una carga, recargarle la pagina de prepo le borra todo lo que tipeo. Se
+    // avisa y listo.
+    //
+    // En la pantalla de login, en cambio, no hay nada que perder: se aplica
+    // sola (antes aparecia el cartel "Actualizar" ahi, que no tenia sentido).
+    // Si la persona ya esta escribiendo la contraseña, no se le borra: se
+    // aplica apenas entra (app.js mira window.braunVersionPendiente).
     function vigilarActualizaciones(registro) {
         registro.addEventListener('updatefound', function () {
             var nuevo = registro.installing;
@@ -108,8 +113,25 @@
 
     // Cartelito discreto abajo. Si el proyecto ya tiene una funcion de avisos,
     // se usa esa; si no, se arma uno simple a mano.
+    function enPantallaDeLogin() {
+        var login = document.getElementById('view-login');
+        return !!login && !login.classList.contains('hidden');
+    }
+
     function avisarVersionNueva() {
         try {
+            if (enPantallaDeLogin()) {
+                var escribiendo = document.activeElement &&
+                    document.activeElement.closest && document.activeElement.closest('#form-login');
+                var clave = document.getElementById('login-password');
+                if (escribiendo || (clave && clave.value)) {
+                    window.braunVersionPendiente = true;
+                    return;
+                }
+                location.reload();
+                return;
+            }
+
             if (typeof window.mostrarToast === 'function') {
                 window.mostrarToast('Hay una version nueva. Se aplica al volver a abrir la app.');
                 return;
@@ -117,32 +139,26 @@
 
             if (document.getElementById('aviso-version-nueva')) return;
 
+            // El estilo esta en diseno.css (.aviso-version).
             var caja = document.createElement('div');
             caja.id = 'aviso-version-nueva';
+            caja.className = 'aviso-version';
             caja.setAttribute('role', 'status');
-            caja.style.cssText = [
-                'position:fixed', 'left:50%', 'bottom:20px', 'transform:translateX(-50%)',
-                'background:#2b2b2b', 'color:#fff', 'padding:10px 16px', 'border-radius:8px',
-                'font-size:13px', 'font-family:inherit', 'z-index:99999', 'max-width:90vw',
-                'box-shadow:0 4px 14px rgba(0,0,0,.3)', 'display:flex', 'gap:12px',
-                'align-items:center'
-            ].join(';');
 
             var texto = document.createElement('span');
-            texto.textContent = 'Hay una version nueva de la app.';
+            texto.textContent = 'Hay una versión nueva de la app. Guardá lo que estés cargando y actualizá.';
 
             var boton = document.createElement('button');
             boton.type = 'button';
+            boton.className = 'aviso-version-boton';
             boton.textContent = 'Actualizar';
-            boton.style.cssText = 'background:#b71c1c;color:#fff;border:0;padding:6px 12px;' +
-                'border-radius:6px;cursor:pointer;font-size:13px';
             boton.onclick = function () { location.reload(); };
 
             var cerrar = document.createElement('button');
             cerrar.type = 'button';
-            cerrar.textContent = 'x';
+            cerrar.className = 'aviso-version-cerrar';
+            cerrar.innerHTML = '&times;';
             cerrar.setAttribute('aria-label', 'Cerrar aviso');
-            cerrar.style.cssText = 'background:none;color:#bbb;border:0;cursor:pointer;font-size:16px';
             cerrar.onclick = function () { caja.remove(); };
 
             caja.appendChild(texto);

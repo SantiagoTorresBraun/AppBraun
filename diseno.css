@@ -1,0 +1,546 @@
+/* =============================================================================
+   DISEÑO — capa visual nueva (11/11/2026)
+   -----------------------------------------------------------------------------
+   Se carga DESPUÉS de style.css y pisa solo lo que hace falta: tipografía,
+   encabezado, login, menú principal, novedades y el aviso de versión nueva.
+   style.css no se tocó, así que cada módulo sigue funcionando igual; lo que
+   no esté acá se ve como antes.
+
+   Tipografía: Inter (vendor/inter, licencia OFL), guardada en la app para que
+   también se vea sin señal.
+   ============================================================================= */
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url('vendor/inter/inter-latin-wght-normal.woff2') format('woff2-variations');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+                   U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url('vendor/inter/inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+                   U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+    --tinta: #111827;          /* títulos */
+    --tinta-2: #374151;        /* texto */
+    --tinta-3: #6b7280;        /* secundario */
+    --linea: #e5e7eb;          /* bordes */
+    --fondo: #f6f7f9;          /* fondo general */
+    --rojo: #b71c1c;           /* Rojo Braun (el mismo de style.css) */
+    --rojo-suave: rgba(183, 28, 28, 0.08);
+    --radio: 12px;
+    --sombra-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --sombra-2: 0 4px 12px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --sombra-3: 0 20px 40px rgba(16, 24, 40, 0.16);
+    --foco: 0 0 0 4px rgba(183, 28, 28, 0.14);
+}
+
+* {
+    font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+body {
+    background-color: var(--fondo);
+    color: var(--tinta-2);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+}
+
+/* -----------------------------------------------------------------------------
+   ENCABEZADO: blanco, liviano; el rojo queda para las acciones.
+   ----------------------------------------------------------------------------- */
+header#main-header {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(10px);
+    -webkit-backdrop-filter: saturate(180%) blur(10px);
+    color: var(--tinta);
+    border-bottom: 1px solid var(--linea);
+    box-shadow: none;
+    padding: 10px 20px;
+    gap: 8px;
+    min-height: 60px;
+}
+header#main-header h1 {
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    color: var(--tinta);
+    flex: 1;
+    margin: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+header#main-header .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+header#main-header .nav-btn {
+    color: var(--tinta-3);
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 10px;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: background-color .15s ease, color .15s ease;
+}
+header#main-header .nav-btn:hover { background: #f3f4f6; color: var(--tinta); }
+header#main-header .nav-btn:focus-visible { outline: none; box-shadow: var(--foco); }
+
+/* Logo chico en el encabezado: solo en el menú principal (ahí reemplaza al
+   título). En los módulos se ve el nombre del módulo. */
+.header-marca { display: none; height: 30px; width: auto; }
+body[data-vista="view-menu-principal"] .header-marca { display: block; }
+body[data-vista="view-menu-principal"] #header-title { visibility: hidden; }
+
+#status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 999px;
+    margin-left: 4px;
+}
+#status-badge::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+#status-badge.online  { background: #ecfdf3; color: #067647; border: 1px solid #abefc6; }
+#status-badge.offline { background: #fffaeb; color: #b54708; border: 1px solid #fedf89; }
+
+/* En el celular, el estado queda como un punto de color (verde con señal,
+   naranja sin señal) para que entre el nombre del módulo. */
+@media (max-width: 600px) {
+    header#main-header { padding: 8px 10px; }
+    #status-badge { font-size: 0; gap: 0; padding: 7px; margin-left: 2px; }
+}
+
+/* Contador de la campanita */
+.novedades-contador {
+    position: absolute;
+    top: 4px;
+    right: 3px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--rojo);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 17px;
+    text-align: center;
+    box-shadow: 0 0 0 2px #fff;
+}
+
+/* -----------------------------------------------------------------------------
+   LOGIN: en escritorio, foto con mensaje a la izquierda y formulario a la
+   derecha. En el celular, franja de foto arriba y el formulario abajo.
+   ----------------------------------------------------------------------------- */
+#view-login {
+    background: #fff;
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    min-height: 100vh;
+}
+.login-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    width: 100%;
+    min-height: 100vh;
+}
+.login-brand {
+    position: relative;
+    background:
+        linear-gradient(160deg, rgba(110, 12, 12, 0.86) 0%, rgba(60, 10, 8, 0.55) 45%, rgba(10, 8, 6, 0.35) 100%),
+        url('fondo-login.jpg') center / cover no-repeat;
+    color: #fff;
+    padding: 56px 56px 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 40px;
+}
+.login-brand-texto { max-width: 520px; }
+.login-brand-etiqueta {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    margin-bottom: 20px;
+}
+.login-brand h2 {
+    font-size: 2.4rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+    border: 0;
+    padding: 0;
+    margin: 0 0 14px;
+}
+.login-brand p {
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.82);
+    margin: 0;
+}
+.login-brand .login-brand-pie {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.login-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 28px;
+    background: #fff;
+}
+.login-card {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    width: 100%;
+    max-width: 380px;
+    text-align: left;
+}
+.login-logo { text-align: left; margin-bottom: 36px; }
+.app-login-logo { max-width: 170px; }
+.login-titulo {
+    font-size: 1.65rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--tinta);
+    margin: 0 0 6px;
+}
+.login-hint {
+    color: var(--tinta-3);
+    font-size: 0.92rem;
+    margin-bottom: 28px;
+}
+#view-login .form-group { margin-bottom: 18px; }
+#view-login .form-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--tinta-2);
+    margin-bottom: 6px;
+}
+.campo-con-icono { position: relative; }
+.campo-con-icono > i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+#view-login .campo-con-icono input {
+    width: 100%;
+    height: 46px;
+    padding: 0 14px 0 40px;
+    border: 1px solid #d0d5dd;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    color: var(--tinta);
+    background: #fff;
+    box-shadow: var(--sombra-1);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+#view-login .campo-con-icono input::placeholder { color: #9ca3af; }
+#view-login .campo-con-icono input:focus {
+    outline: none;
+    border-color: var(--rojo);
+    box-shadow: var(--foco);
+}
+#view-login .campo-con-icono:focus-within > i { color: var(--rojo); }
+#btn-login {
+    width: 100%;
+    height: 46px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin-top: 6px;
+    background: var(--rojo);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+    transition: background-color .15s ease, transform .05s ease;
+}
+#btn-login:hover { background: #9d1717; }
+#btn-login:active { transform: translateY(1px); }
+#btn-login:focus-visible { outline: none; box-shadow: var(--foco); }
+#view-login .link-olvide {
+    display: block;
+    margin: 16px auto 0;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--rojo);
+    text-decoration: none;
+}
+#view-login .link-olvide:hover { text-decoration: underline; }
+.login-version {
+    margin-top: 40px;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    text-align: center;
+}
+
+@media (max-width: 860px) {
+    .login-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .login-brand {
+        padding: 28px 22px 44px;
+        min-height: 200px;
+        justify-content: flex-end;
+        gap: 0;
+    }
+    .login-brand h2 { font-size: 1.45rem; margin-bottom: 0; }
+    .login-brand-etiqueta { margin-bottom: 12px; font-size: 0.68rem; }
+    .login-brand p, .login-brand .login-brand-pie { display: none; }
+    .login-panel {
+        align-items: flex-start;
+        padding: 30px 22px 28px;
+        margin-top: -22px;
+        border-radius: 22px 22px 0 0;
+        position: relative;
+    }
+    .login-logo { margin-bottom: 22px; }
+    .app-login-logo { max-width: 140px; }
+    .login-titulo { font-size: 1.4rem; }
+    .login-hint { margin-bottom: 22px; }
+    .login-version { margin-top: 28px; }
+}
+
+/* -----------------------------------------------------------------------------
+   MENÚ PRINCIPAL
+   ----------------------------------------------------------------------------- */
+.menu-principal-container {
+    background: var(--fondo);
+    padding: 36px 24px 48px;
+    max-width: 1120px;
+    min-height: calc(100vh - 60px);
+}
+.menu-header { display: none; }   /* el logo ahora va en el encabezado */
+.welcome-section {
+    text-align: left;
+    margin-bottom: 28px;
+}
+.welcome-text {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--tinta);
+    margin-bottom: 4px;
+}
+.welcome-subtext {
+    font-size: 1rem;
+    color: var(--tinta-3);
+    letter-spacing: 0;
+}
+.premium-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 18px;
+}
+.menu-card {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid var(--linea);
+    border-radius: 14px;
+    box-shadow: var(--sombra-1);
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.menu-card.active { border: 1px solid var(--linea); }
+.menu-card.active:hover {
+    transform: translateY(-2px);
+    border-color: rgba(183, 28, 28, 0.35);
+    box-shadow: var(--sombra-2);
+    background: #fff;
+}
+.menu-card .card-header {
+    padding: 22px 22px 10px;
+    gap: 16px;
+    align-items: center;
+}
+.card-icon {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: 12px;
+}
+.card-icon svg { width: 36px; height: 36px; filter: none; }
+.menu-card.active:hover .card-icon { transform: none; }
+.card-title {
+    font-size: 1.05rem;
+    font-weight: 650;
+    color: var(--tinta);
+    letter-spacing: -0.01em;
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+.card-badge.active-badge { display: none; }   /* "Activo" en todas no informaba nada */
+.card-body { padding: 0 22px 22px 90px; }
+.card-description { font-size: 0.9rem; color: var(--tinta-3); }
+.card-footer {
+    position: absolute;
+    top: 22px;
+    right: 18px;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+.card-arrow {
+    opacity: 0.35;
+    transform: none;
+    color: var(--tinta-3);
+    font-size: 0.95rem;
+}
+.menu-card.active:hover .card-arrow { opacity: 1; color: var(--rojo); transform: translateX(2px); }
+
+@media (max-width: 600px) {
+    .menu-principal-container { padding: 22px 16px 32px; }
+    .welcome-text { font-size: 1.45rem; }
+    .premium-grid { grid-template-columns: 1fr; gap: 12px; }
+    .menu-card .card-header { padding: 16px 16px 6px; }
+    .card-body { padding: 0 16px 16px 84px; }
+    .card-footer { top: 18px; right: 14px; }
+}
+
+/* -----------------------------------------------------------------------------
+   NOVEDADES (modal de la campanita)
+   ----------------------------------------------------------------------------- */
+.novedades-content { max-width: 520px; border-radius: 16px; box-shadow: var(--sombra-3); }
+.novedades-content .gestor-header {
+    background: #fff;
+    color: var(--tinta);
+    border-bottom: 1px solid var(--linea);
+    padding: 16px 20px;
+}
+.novedades-content .gestor-header h3 { color: var(--tinta); font-size: 1.05rem; font-weight: 650; }
+.novedades-content .gestor-header h3 i { color: var(--rojo); }
+.novedades-content .gestor-close {
+    background: #f3f4f6;
+    color: var(--tinta-3);
+    border: 0;
+}
+.novedades-content .gestor-close:hover { background: #e5e7eb; color: var(--tinta); }
+.novedades-content .gestor-body { padding: 4px 20px; gap: 0; }
+.novedad { padding: 18px 0; border-bottom: 1px solid #f0f1f3; }
+.novedad:last-child { border-bottom: 0; }
+.novedad-cabecera { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.novedad-version {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--tinta-2);
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 2px 7px;
+}
+.novedad-fecha { font-size: 0.78rem; color: var(--tinta-3); }
+.novedad-pill {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--rojo);
+    background: var(--rojo-suave);
+    border-radius: 999px;
+    padding: 2px 9px;
+}
+.novedad-titulo {
+    font-size: 1rem;
+    font-weight: 650;
+    color: var(--tinta);
+    border: 0;
+    padding: 0;
+    margin: 0 0 6px;
+}
+.novedad-items { margin: 0; padding-left: 18px; color: var(--tinta-2); font-size: 0.9rem; line-height: 1.55; }
+.novedad-items li + li { margin-top: 3px; }
+.novedad:not(.novedad-nueva) .novedad-titulo,
+.novedad:not(.novedad-nueva) .novedad-items { color: var(--tinta-3); }
+.novedades-pie {
+    padding: 14px 20px;
+    border-top: 1px solid var(--linea);
+    display: flex;
+    justify-content: flex-end;
+}
+.novedades-pie .btn-primary {
+    width: auto;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   AVISO DE VERSIÓN NUEVA (offline.js; solo aparece con la sesión abierta)
+   ----------------------------------------------------------------------------- */
+.aviso-version {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 99999;
+    max-width: min(560px, calc(100vw - 32px));
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 12px 12px 18px;
+    background: var(--tinta);
+    color: #fff;
+    border-radius: 12px;
+    box-shadow: var(--sombra-3);
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+.aviso-version-boton {
+    flex-shrink: 0;
+    background: #fff;
+    color: var(--tinta);
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.aviso-version-boton:hover { background: #f3f4f6; }
+.aviso-version-cerrar {
+    flex-shrink: 0;
+    background: none;
+    border: 0;
+    color: #9ca3af;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.aviso-version-cerrar:hover { color: #fff; }
